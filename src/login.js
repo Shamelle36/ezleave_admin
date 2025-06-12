@@ -3,8 +3,16 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import './App.css';
 import { FcGoogle } from 'react-icons/fc';
+import { useNavigate } from 'react-router-dom';
 
 function Login() {
+
+  const navigate = useNavigate();
+
+  const goToDashboard = () => {
+    navigate('/dashboard');
+  };
+
   return (
     <div className="container">
       <div className="wrapper">
@@ -21,10 +29,10 @@ function Login() {
           <form>
             <input type="text" placeholder="Enter email address" required />
             <input type="password" placeholder="Enter password" required />
-            <button type="submit">Sign In</button>
+            <button type="submit" onClick={goToDashboard}>Sign In</button>
           </form>
 
-          <p className="forgot-password"><a href="#">Forgot password?</a></p>
+          <p className="forgot-password"><Link to="">Forgot password?</Link></p>
 
           <div className='lines'>
             <div className='line'></div>
@@ -42,6 +50,7 @@ function Login() {
           <div className='signup'>
             <p>Don't have an account? <Link to="/signup">Sign Up</Link></p>
           </div>
+
         </div>
       </div>
     </div>
