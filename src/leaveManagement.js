@@ -37,74 +37,84 @@ import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
 import { BiBorderRight } from 'react-icons/bi';
 import { faUpload } from '@fortawesome/free-solid-svg-icons/faUpload';
 
-function Attendance() {
+function LeaveManagement() {
 
-    const [date, setDate] = useState(new Date());
+const [date, setDate] = useState(new Date());
 
-  const [employees, setEmployees] = useState([
+  const [leaveRecords, setLeaveRecords] = useState([
     {
       name: 'Reyland S. Tanglao',
-      id: '123456789',
-      timeIn: '8:00 AM',
-      timeOut: '5:00 PM',
-      duration: '8h 56m',
-      status: 'Present',
-      date: 'May 3, 2025',
+      department: 'Human Resource Management Division',
+      leaveType: 'Vacation Leave',
+      entitled: 15,
+      used: 5,
+      remaining: 10,
+      status: 'Approved',
+      approvedBy: 'Marites D. Lopez',
+      dateFiled: 'May 1, 2025',
+      range: { from: 'May 3, 2025', to: 'May 5, 2025' },
     },
     {
       name: 'Raven P. Quijano',
-      id: '0123456789',
-      timeIn: null,
-      timeOut: null,
-      duration: null,
-      status: 'Absent',
-      date: 'May 3, 2025',
+      department: 'Office of the Municipal Mayor',
+      leaveType: 'Sick Leave',
+      entitled: 10,
+      used: 2,
+      remaining: 8,
+      status: 'Pending',
+      approvedBy: '—',
+      dateFiled: 'May 2, 2025',
+      range: { from: 'May 4, 2025', to: 'May 4, 2025' },
     },
     {
       name: 'Angel Love B. Salgado',
-      id: '234567891',
-      timeIn: '8:00 AM',
-      timeOut: '5:00 PM',
-      duration: '8h 56m',
-      status: 'Present',
-      date: 'May 3, 2025',
+      department: 'Municipal Health Office',
+      leaveType: 'Maternity Leave',
+      entitled: 105,
+      used: 20,
+      remaining: 85,
+      status: 'Approved',
+      approvedBy: 'Dr. Eliza R. Santos',
+      dateFiled: 'April 15, 2025',
+      range: { from: 'May 3, 2025', to: 'August 15, 2025' },
     },
     {
-      name: 'Jambie Q. Malimbam',
-      id: '789123456',
-      timeIn: null,
-      timeOut: null,
-      duration: null,
-      status: 'On-Leave',
-      date: 'May 3, 2025',
+      name: 'Angel Love B. Salgado',
+      department: 'Municipal Health Office',
+      leaveType: 'Maternity Leave',
+      entitled: 105,
+      used: 20,
+      remaining: 85,
+      status: 'Approved',
+      approvedBy: 'Dr. Eliza R. Santos',
+      dateFiled: 'April 15, 2025',
+      range: { from: 'May 3, 2025', to: 'August 15, 2025' },
     },
     {
-      name: 'Jambie Q. Malimbam',
-      id: '789123456',
-      timeIn: null,
-      timeOut: null,
-      duration: null,
-      status: 'On-Leave',
-      date: 'May 3, 2025',
+      name: 'Reyland S. Tanglao',
+      department: 'Human Resource Management Division',
+      leaveType: 'Vacation Leave',
+      entitled: 15,
+      used: 5,
+      remaining: 10,
+      status: 'Approved',
+      approvedBy: 'Marites D. Lopez',
+      dateFiled: 'May 1, 2025',
+      range: { from: 'May 3, 2025', to: 'May 5, 2025' },
     },
     {
-      name: 'Jambie Q. Malimbam',
-      id: '789123456',
-      timeIn: null,
-      timeOut: null,
-      duration: null,
-      status: 'On-Leave',
-      date: 'May 3, 2025',
+      name: 'Raven P. Quijano',
+      department: 'Office of the Municipal Mayor',
+      leaveType: 'Sick Leave',
+      entitled: 10,
+      used: 2,
+      remaining: 8,
+      status: 'Pending',
+      approvedBy: '—',
+      dateFiled: 'May 2, 2025',
+      range: { from: 'May 4, 2025', to: 'May 4, 2025' },
     },
-    {
-      name: 'Jambie Q. Malimbam',
-      id: '789123456',
-      timeIn: null,
-      timeOut: null,
-      duration: null,
-      status: 'On-Leave',
-      date: 'May 3, 2025',
-    },
+    
   ]);
 
   const formatDate = (date) =>
@@ -122,19 +132,6 @@ function Attendance() {
     setDate(next);
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'Present':
-        return <FontAwesomeIcon icon={faCheckCircle} style={{ color: 'green' }} />;
-      case 'Absent':
-        return <FontAwesomeIcon icon={faTimesCircle} style={{ color: 'red' }} />;
-      case 'On-Leave':
-        return <FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#f5c518' }} />;
-      default:
-        return null;
-    }
-  };
-
     const handlePrint = () => {
         window.print();
     };
@@ -142,6 +139,8 @@ function Attendance() {
     const handleRefresh = () => {
         window.location.reload(); 
     };
+
+    
   
   return (
     <div style={styles.dashboardContainer}>
@@ -156,9 +155,9 @@ function Attendance() {
             <ul style={styles.sidebarList}>
                 <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
                 <li><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-                <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
+                <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-                <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
+                <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
@@ -169,8 +168,14 @@ function Attendance() {
 
         <div style={styles.content}>
 
+            <div style={styles.buttons}>
+                <button style={styles.btnLeave}>Leave Summary</button>
+                <button style={styles.btnLeave}>Leave Calendar</button>
+                <button style={styles.btnLeave}>Employee Requests</button>
+            </div>
+
             <div style={styles.header1}>
-                <h1>Attendance </h1>
+                <h3>Overview</h3>
                 <div style={styles.line}></div>
 
                  <div style={styles.dateNav}>
@@ -185,90 +190,56 @@ function Attendance() {
 
             </div>
 
-            <div style={styles.summaryCards}>
-                
-                <div style={styles.card}>
-                    <p style={styles.txtSum}>Present Summary</p>
+                <div style={styles.summaryCards}>
 
-                    <div style={styles.cardContent}>
-                        <div style={styles.cardData}>
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Total Present</p>
-                                <p style={styles.txtData}>110</p>
+                    <div style={styles.card}>
+                        <div style={styles.cardContent}>
+                            <div style={styles.cardData}>
+                                <div style={styles.data1}>
+                                <p style={styles.txtlabel}>Total Requests</p>
+                                <p style={styles.txtData}>{leaveRecords.length}</p>
                             </div>
-                            
-                            <div style={styles.divider}></div>
-
-                             <div style={styles.data1}>
-                                <p style={styles.txtlabel}>On-Time</p>
-                                <p style={styles.txtData}>{employees.filter(e => e.status === 'Present').length}</p>
-                            </div>
-
-                            <div style={styles.divider}></div>
-
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Early clock-in</p>
-                                <p style={styles.txtData}>100</p>
-                            </div>
-
-                            <div style={styles.divider}></div>
-
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Late clock-in</p>
-                                <p style={styles.txtData}>10</p>
-                            </div>
-
+                        </div>
                         </div>
                     </div>
-                </div>
-                <div style={styles.card}>
-                    <p style={styles.txtSum}>Absent Summary</p>
 
-                    <div style={styles.cardContent}>
-                        <div style={styles.cardData}>
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Total Absent</p>
-                                <p style={styles.txtData}>{employees.filter(e => e.status === 'Absent').length}</p>
-                            </div>
-                            
-                            <div style={styles.divider}></div>
+                    <div style={styles.card1}>
+                        <div style={styles.cardContent}>
+                            <div style={styles.cardData}>
+                                <div style={styles.data1}>
+                                    <p style={styles.txtlabel}>Approved Leaves</p>
+                                    <p style={styles.txtData}>{leaveRecords.filter(l => l.status === 'Approved').length}</p>
+                                </div>
+                        </div>
+                        </div>
+                    </div>
 
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>No clock-in</p>
-                                <p style={styles.txtData}>10</p>
-                            </div>
-                            
-                            <div style={styles.divider}></div>
+                    <div style={styles.card2}>
+                        <div style={styles.cardContent}>
+                            <div style={styles.cardData}>
 
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>No clock-out</p>
-                                <p style={styles.txtData}>10</p>
+                                <div style={styles.data1}>
+                                    <p style={styles.txtlabel}>Pending Leaves</p>
+                                    <p style={styles.txtData}>{leaveRecords.filter(l => l.status === 'Pending').length}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div style={styles.card}>
-                    <p style={styles.txtSum}>Leave Summary</p>
 
-                    <div style={styles.cardContent}>
-                        <div style={styles.cardData}>
-
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Total on-leave</p>
-                                <p style={styles.txtData}>{employees.filter(e => e.status === 'On-Leave').length}</p>
-                            </div>
-
-                            <div style={styles.divider}></div>
-
-                            <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Day Off</p>
-                                <p style={styles.txtData}>{employees.filter(e => e.status === 'Day-off').length}</p>
+                     <div style={styles.card3}>
+                        <div style={styles.cardContent}>
+                            <div style={styles.cardData}>
+                                <div style={styles.data1}>
+                                    <p style={styles.txtlabel}>Rejected Leaves</p>
+                                    <p style={styles.txtData}>{leaveRecords.filter(l => l.status === 'Rejected').length}</p>
+                                </div>
                             </div>
                         </div>
-                        
                     </div>
+
+
+                    
                 </div>
-            </div>
 
             <div style={styles.inputs}>
 
@@ -280,9 +251,9 @@ function Attendance() {
 
                     <div style={styles.firstRow}>
                         <select style={styles.filter}>
-                            <option disabled selected>Status</option>
-                            <option>Present</option>
-                            <option>Late</option>
+                            <option disabled selected>Leave Type</option>
+                            <option>Sick Leave</option>
+                            <option>Vacation Leave</option>
                             <option>Absent</option>
                             <option>On-Leave</option>
                         </select>
@@ -333,49 +304,34 @@ function Attendance() {
             <table style={styles.table}>
                 <thead>
                 <tr>
-                    <th style={styles.th}>
-                        <FontAwesomeIcon icon={faUser} style={{ marginRight: '6px' }} />
-                            Employee Name
-                    </th>
-
-                    <th style={styles.th}>
-                        <FontAwesomeIcon icon={faClock} style={{ marginRight: '6px' }} />
-                            Clock in & Out
-                    </th>
-
-                    <th style={styles.th}>
-                        <FontAwesomeIcon icon={faUser} style={{ marginRight: '6px' }} />
-                            Status
-                        </th>
-                    <th style={styles.th}>Date</th>
-                    <th style={styles.th}>Remarks</th>
+                    <th style={styles.th}>No.</th>
+                    <th style={styles.th}>Employee Name</th>
+                    <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Leave Type</th>
+                    <th style={styles.th}>Entitled</th>
+                    <th style={styles.th}>Used</th>
+                    <th style={styles.th}>Remaining</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Approved By</th>
+                    <th style={styles.th}>Date Filed</th>
+                    <th style={styles.th}>Range</th>
                 </tr>
                 </thead>
                 <tbody>
-                {employees.map((emp, index) => (
+                {leaveRecords.map((record, index) => (
                     <tr key={index}>
-                    <td style={styles.td}>{emp.name}<br />{emp.id}</td>
-                    <td style={styles.td}>
-                       {emp.timeIn ? (
-                            <div style={styles.timeTrack}>
-                                <div style={styles.time}>{emp.timeIn}</div>
-                                    <div style={styles.trackLine}>
-                                        <div style={styles.dot}></div>
-                                        <div style={styles.lineTable}></div>
-                                        <div style={styles.duration}>{emp.duration}</div>
-                                        <div style={styles.lineTable}></div>
-                                        <div style={styles.dot}></div>
-                                    </div>
-                                <div style={styles.time}>{emp.timeOut}</div>
-                            </div>
-                        ) : (
-                            '—'
-                        )}
-                        </td>
-                    <td style={styles.td}>{getStatusIcon(emp.status)} {emp.status}</td>
-                    <td style={styles.td}>{emp.date}</td>
-                    <td style={styles.td}>—</td>
-                    </tr>
+                    <td style={styles.td}>{index + 1}</td>
+                    <td style={styles.td}>{record.name}</td>
+                    <td style={styles.td}>{record.department}</td>
+                    <td style={styles.td}>{record.leaveType}</td>
+                    <td style={styles.td}>{record.entitled}</td>
+                    <td style={styles.td}>{record.used}</td>
+                    <td style={styles.td}>{record.remaining}</td>
+                    <td style={styles.td}>{record.status}</td>
+                    <td style={styles.td}>{record.approvedBy}</td>
+                    <td style={styles.td}>{record.dateFiled}</td>
+                    <td style={styles.td}>{record.range.from} - {record.range.to}</td>
+                </tr>
                 ))}
                 </tbody>
             </table>
@@ -497,11 +453,36 @@ const styles = {
         marginTop: '20px',
     },
     card: {
-        backgroundColor: '#fff',
+        backgroundColor: '#C5DEF2',
         padding: '20px',
         borderRadius: '10px',
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
         justifyContent: 'space-between',
+        width: '300px'
+    },
+    card1: {
+        backgroundColor: '#F2C6DF',
+        padding: '20px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        justifyContent: 'space-between',
+        width: '300px'
+    },
+    card2: {
+        backgroundColor: '#DBCDF0',
+        padding: '20px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        justifyContent: 'space-between',
+        width: '300px'
+    },
+    card3: {
+        backgroundColor: '#F8D9C4',
+        padding: '20px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        justifyContent: 'space-between',
+        width: '300px'
     },
     cardContent: {
         display: 'flex',
@@ -526,6 +507,10 @@ const styles = {
     txtlabel: {
         fontSize: '14px',
     },
+    txtSum: {
+        fontSize: '16px',
+        fontWeight: '600'
+    },
     divider: {
         width: '1px',
         height: '35px',
@@ -539,7 +524,8 @@ const styles = {
         borderRadius: '10px',
         boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
         marginTop: '20px',
-        marginBottom: '20px'
+        marginBottom: '20px',
+        minWidth: '3000px'
     },
     tableCon:{
         overflow: 'auto',
@@ -671,9 +657,24 @@ const styles = {
         color: 'white',
         fontSize: '12px',
         margin: '5px 5px 0'
+    },
+    buttons: {
+        display: 'flex',
+        flexDirection: 'row',
+        gap: '20px',
+        marginBottom: '10px',
+    },
+    btnLeave: {
+        border: 'none',
+        borderRadius: '5px',
+        backgroundColor: 'none',
+        alignItems: 'center',
+        backgroundColor: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+        padding: '5px 10px'
     }
 
 
 };
 
-export default Attendance;
+export default LeaveManagement;
