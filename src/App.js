@@ -7,6 +7,7 @@ import Employees from './employee';
 import Attendance from './attendance';
 import LeaveManagement from './leaveManagement';
 import Messages from './messages';
+import Announcement from './announcement';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/leaveManagement" element={<LeaveManagement />} />
         <Route path="/messages" element={<Messages />} />
+        <Route path="/announcement" element={<Announcement />} />
       </Routes>
     </Router>
   );

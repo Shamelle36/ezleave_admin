@@ -37,11 +37,11 @@ function Employees() {
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
           <ul style={styles.sidebarList}>
             <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-            <li><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
+            <li style={styles.btnActive}><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
             <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
             <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
             <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-            <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
+            <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
@@ -93,6 +93,52 @@ const styles = {
   icon: {
     color: '#fff',
   },
+  search: {
+    padding: '10px',
+    width: '300px',
+    borderRadius: '5px',
+    border: '1px solid #ccc',
+    marginRight: '20px', 
+  },
+  iconBell: {
+    color: '#fff',
+    fontSize: '24px',
+    cursor: 'pointer',
+  },
+  header: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end', 
+    padding: '10px',
+    backgroundColor: '#009205',
+    position: 'fixed',
+    top: '0',
+    left: '280px', 
+    width: 'calc(100% - 280px)', 
+    zIndex: 1000, 
+    boxSizing: 'border-box',
+  },
+  content: {
+    marginLeft: '300px', 
+    padding: '20px',
+    backgroundColor: '#F8F8F8',
+    marginTop: '60px', 
+    overflow: 'hidden'
+  },
+  header1: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: '20px',
+    gap: '20px',
+    justifyContent: 'flex-start',
+  },
+  btnActive: {
+    backgroundColor: '#A8FC0080',
+    borderRadius: '5px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+}
 };
 
 export default Employees;
