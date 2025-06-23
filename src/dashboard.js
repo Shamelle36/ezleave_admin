@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -23,9 +23,23 @@ import { useState } from 'react';
 import './dashboardCalendar.css';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
+import { signOut } from 'firebase/auth';
+import { auth } from './firebase';
 
 function Dashboard() {
   const [date, setDate] = useState(new Date());
+  const navigate = useNavigate();
+
+  const handleLogout = async (e) => {
+    try {
+      await signOut(auth);
+      console.log("User logged out successfully.");
+      navigate("/");
+    } 
+    catch (error) {
+      console.error("Logout error:", error.message);
+    }
+  }
 
   const cardsData = [
   {
@@ -180,7 +194,7 @@ function Dashboard() {
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
-            <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
+            <li><Link style={styles.sb} to="#" onClick={handleLogout}><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
           </ul>
       </div>
 
