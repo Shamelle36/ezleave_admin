@@ -151,3 +151,33 @@
   margin-top: 20px;
   font-size: 12px;
 }
+
+.popupMessage {
+  background-color: #009205;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.msgIcon{
+  position: absolute;
+  color: #ffc800;
+  background-color: white;
+  border-radius: 100%;
+  width: 20px;
+  height: auto;
+  padding: 5px;
+}
+
+.txtMessage {
+  padding-left: 40px;
+  color: #fff;
+}
+
+.blurred {
+  filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+
+

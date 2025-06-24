@@ -8,6 +8,7 @@ import Attendance from './attendance';
 import LeaveManagement from './leaveManagement';
 import Messages from './messages';
 import Announcement from './announcement';
+import ForgotPassword from './forgotPassword';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route path="/leaveManagement" element={<LeaveManagement />} />
         <Route path="/messages" element={<Messages />} />
         <Route path="/announcement" element={<Announcement />} />
+        <Route path='/forgotPassword' element={<ForgotPassword/>} />
       </Routes>
     </Router>
   );

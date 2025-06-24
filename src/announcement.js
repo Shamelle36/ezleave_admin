@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -22,44 +22,86 @@ import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import { width } from '@fortawesome/free-solid-svg-icons/fa0';
 import { useState } from 'react';
+import { db } from './firebase';
+import {
+  collection, addDoc, getDocs, onSnapshot, serverTimestamp,
+  deleteDoc, doc, updateDoc
+} from 'firebase/firestore';
+
 
 function Announcement() {
-    const [announcements, setAnnouncements] = useState([
-    {
-      id: 1,
-      title: 'System Maintenance',
-      status: 'Active',
-      dateAdded: '2025-06-17',
-      lastUpdated: '2025-06-17',
-      checked: false,
-    },
-    {
-      id: 2,
-      title: 'New Policy Update',
-      status: 'Inactive',
-      dateAdded: '2025-06-15',
-      lastUpdated: '2025-06-16',
-      checked: false,
-    },
-  ]);
-
+ const [announcements, setAnnouncements] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newMessage, setNewMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editId, setEditId] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'announcements'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), checked: false }));
+      setAnnouncements(data);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleSelectAll = () => {
     const newSelectAll = !selectAll;
     setSelectAll(newSelectAll);
-    setAnnouncements(prev =>
-      prev.map(item => ({ ...item, checked: newSelectAll }))
-    );
+    setAnnouncements(prev => prev.map(item => ({ ...item, checked: newSelectAll })));
   };
 
   const handleCheckboxChange = (id) => {
     setAnnouncements(prev =>
-      prev.map(item =>
-        item.id === id ? { ...item, checked: !item.checked } : item
-      )
+      prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)
     );
   };
+
+  const handlePostAnnouncement = async () => {
+    if (!newTitle.trim() || !newMessage.trim()) return;
+
+    if (editId) {
+      const docRef = doc(db, 'announcements', editId);
+      await updateDoc(docRef, {
+        title: newTitle,
+        message: newMessage,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await addDoc(collection(db, 'announcements'), {
+        title: newTitle,
+        message: newMessage,
+        status: 'Active',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    setShowModal(false);
+    setNewTitle('');
+    setNewMessage('');
+    setEditId(null);
+  };
+
+  const handleDelete = async () => {
+    const selected = announcements.filter(item => item.checked);
+    for (let item of selected) {
+      await deleteDoc(doc(db, 'announcements', item.id));
+    }
+  };
+
+  const handleEdit = (item) => {
+    setEditId(item.id);
+    setNewTitle(item.title);
+    setNewMessage(item.message);
+    setShowModal(true);
+  };
+
+  const filteredAnnouncements = announcements.filter(item =>
+    item.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
 
   return (
     <div style={styles.dashboardContainer}>
@@ -98,7 +140,11 @@ function Announcement() {
                         </div>
 
                         <div style={styles.btnAddDel}>
-                            <input style={styles.searchInput} placeholder='Search'/>
+                            <input style={styles.searchInput} 
+                            placeholder='Search'
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                             
                             <button style={styles.btnAdd}>
                                         Search
@@ -112,11 +158,11 @@ function Announcement() {
 
                     <div style={styles.row1}>
                         <div style={styles.btnAddDel}>
-                            <button style={styles.btnAdd}>
+                            <button style={styles.btnAdd} onClick={() => setShowModal(true)}>
                                     <FontAwesomeIcon icon={faAdd} style={styles.iconAdd} />
                                         Add Announcement
                             </button>
-                            <button style={styles.btnDel}>
+                            <button style={styles.btnDel}  onClick={handleDelete}>
                                     <FontAwesomeIcon icon={faTrash} style={styles.iconAdd} />
                                         Delete
                             </button>
@@ -125,51 +171,78 @@ function Announcement() {
 
             </div>
 
-<table style={styles.table}>
-  <thead>
-    <tr>
-      <th style={styles.th}>
-        <input
-          type="checkbox"
-          checked={selectAll}
-          onChange={handleSelectAll}
-        />
-      </th>
-      <th style={styles.th}>Title</th>
-      <th style={styles.th}>Status</th>
-      <th style={styles.th}>Date Added</th>
-      <th style={styles.th}>Last Updated</th>
-      <th style={styles.th}>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    {announcements.map(item => (
-      <tr key={item.id}>
-        <td style={styles.td}>
-          <input
-            type="checkbox"
-            checked={item.checked}
-            onChange={() => handleCheckboxChange(item.id)}
-          />
-        </td>
-        <td style={styles.td}>{item.title}</td>
-        <td style={styles.td}>{item.status}</td>
-        <td style={styles.td}>{item.dateAdded}</td>
-        <td style={styles.td}>{item.lastUpdated}</td>
-        <td style={styles.td}>
-          <button style={styles.actionBtn1}>
-            <FontAwesomeIcon icon={faPen} style={{fontSize: '12px'}}/>  Edit</button>
-          <button style={styles.actionBtn}>
-            <FontAwesomeIcon icon={faSearch} style={{fontSize: '12px'}}/>  View</button>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-</table>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>
+                  <input
+                    type="checkbox"
+                    checked={selectAll}
+                    onChange={handleSelectAll}
+                  />
+                </th>
+                <th style={styles.th}>Title</th>
+                <th style={styles.th}>Status</th>
+                <th style={styles.th}>Created</th>
+                <th style={styles.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {announcements.map(item => (
+                <tr key={item.id}>
+                  <td style={styles.td}>
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={() => handleCheckboxChange(item.id)}
+                    />
+                  </td>
+                  <td style={styles.td}>{item.title}</td>
+                  <td style={styles.td}>{item.status}</td>
+                  <td style={styles.td}>{item.createdAt?.toDate().toLocaleDateString() || '-'}</td>
+                  <td style={styles.td}>
+                    <button style={styles.actionBtn1} onClick={() => handleEdit(item)}>
+                      <FontAwesomeIcon icon={faPen} style={{fontSize: '12px'}}/>  Edit</button>
+                    <button style={styles.actionBtn} onClick={() => alert(item.message)}>
+                      <FontAwesomeIcon icon={faSearch} style={{fontSize: '12px'}}/>  View</button>
+                  </td>
+                </tr>
+              ))}
 
-      </div>
+            </tbody>
+          </table>
+            
+        {showModal && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center'
+          }}>
+            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '400px' }}>
+              <h2>Add Announcement</h2>
+              <input
+                type="text"
+                placeholder="Title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+              />
+              <textarea
+                placeholder="Message"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                rows="4"
+                style={{ width: '100%', padding: '10px' }}
+              ></textarea>
+              <div style={{ textAlign: 'right', marginTop: '10px' }}>
+                <button onClick={() => setShowModal(false)} style={{ marginRight: '10px' }}>Cancel</button>
+                <button onClick={handlePostAnnouncement} style={{ backgroundColor: '#0088FF', color: '#fff' }}>Post</button>
+              </div>
+            </div>
+          </div>
+        )}
 
-      
+
+          </div>
       </div>
   );
 }

@@ -1,108 +1,116 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import './images/logo_ez.png';
 import { Link, useNavigate } from 'react-router-dom';
-import { FcGoogle } from 'react-icons/fc';
 import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
-import { auth, googleProvider } from './firebase';
-import { signInWithPopup } from 'firebase/auth';
+import { auth } from './firebase';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEnvelopeCircleCheck } from '@fortawesome/free-solid-svg-icons';
 
 function Signup() {
-
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [position, setPosition] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
 
-   const handleSignup = async (e) => {
-      e.preventDefault();
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
+  useEffect(() => {
+  if (message) {
+    const timer = setTimeout(() => setMessage(''), 5000);
+    return () => clearTimeout(timer);
+  }
+}, [message]);
 
-        await updateProfile(user, {
-          displayName: fullName
-        });
+  const handleSignup = async (e) => {
+    e.preventDefault();
 
-        await sendEmailVerification(user);
-        setMessage("We've sent a confirmation email to your address. Please verify your email to activate your account.");
+    if (password !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
 
-        const checkEmailVerified = setInterval(async () => {
-          await user.reload();
-          if (user.emailVerified) {
-            clearInterval(checkEmailVerified);
-            setMessage("Email Verified. Redirecting to sign in...");
-            setTimeout(() => navigate("/"), 3000);
-          }
-        }, 3000);
-
-      } catch (error) {
-        setMessage(error.message);
-      }
-    };
-
-  const handleGoogleLogin = async () => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      console.log('Google sign-in success:', user);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      if (user.emailVerified) {
-        navigate("/dashboard"); 
-      }
+      await updateProfile(user, {
+        displayName: fullName
+      });
+
+      await sendEmailVerification(user);
+      setMessage("We've sent a confirmation email to your address. Please verify your email to activate your account.");
+
+      const checkEmailVerified = setInterval(async () => {
+        await user.reload();
+        if (user.emailVerified) {
+          clearInterval(checkEmailVerified);
+          setMessage("Email Verified. Redirecting to sign in...");
+          setTimeout(() => navigate("/"), 3000);
+        }
+      }, 3000);
 
     } catch (error) {
-      console.error("Google sign-in error:", error.message);
+      setMessage(error.message);
     }
   };
 
   return (
     <div className="container">
 
-      <div className="wrapper">
+          {message && (
+              <div className='popupMessage'>
+              <FontAwesomeIcon icon={faEnvelopeCircleCheck} className='msgIcon'/>       
+                <p className='txtMessage'>{message}</p>
+              </div>
+          )}
+
+      <div className={`wrapper ${message ? 'blurred' : ''} `}>
 
         <div className='col1'>
-
           <div className='circle'>
             <div className='circle-inner'>
               <img src={require('./images/logo_ez.png')} alt="Logo" />
             </div>
           </div>
-          
         </div>
 
         <div className='col2'>
           <h2>Sign Up</h2>
           <form onSubmit={handleSignup}>
-            <input type="email" placeholder="Enter email address" required value={email} onChange={(e) => setEmail(e.target.value)}  />
-            <input type="text" placeholder="Full Name" required value={fullName} onChange={(e) => setFullName(e.target.value)}/>
-            <input type="text" placeholder="Position" required value={position} onChange={(e) => setPosition(e.target.value)} />
-            <input type="password" placeholder="Enter password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input 
+              type="email" 
+              placeholder="Enter email address" 
+              required 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)}  
+            />
+            <input 
+              type="text" 
+              placeholder="Full Name" 
+              required 
+              value={fullName} 
+              onChange={(e) => setFullName(e.target.value)}
+            />
+            <input 
+              type="password" 
+              placeholder="Enter password" 
+              required 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+            />
+            <input 
+              type="password" 
+              placeholder="Confirm password" 
+              required 
+              value={confirmPassword} 
+              onChange={(e) => setConfirmPassword(e.target.value)} 
+            />
             <button type="submit">Sign Up</button>
           </form>
 
-          {message && <p style={{ color: '#333', marginTop: '1rem' }}>{message}</p>}
-
-
-          <div className='lines'>
-            <div className='line'></div>
-            <div className='or'>
-              <p>Or</p>
-            </div>
-            <div className='line'></div>
-          </div>
-
-          <div className='social-login'>
-            <button className='google' onClick={handleGoogleLogin}>
-                <FcGoogle style={{ marginRight: '10px', fontSize: '20px' }} />
-                Continue with Google
-                </button>
-          </div>
-
           <div className='signup'>
-            <p>Don't have an account? <Link to="/">Sign In</Link></p>
+            <p>Already have an account? <Link to="/">Sign In</Link></p>
           </div>
         </div>
       </div>

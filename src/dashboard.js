@@ -104,9 +104,9 @@ function Dashboard() {
   ];
 
   const notifications = [
-    { id: 1, message: 'Shamelle Tadeja\'s leave request approved.', type: 'Leave_Approval' },
+    { id: 1, message: 'Shamelle Tadejas leave request approved.', type: 'Leave_Approval' },
     { id: 2, message: 'New employee onboarded in HR department.', type: 'New_Hire' },
-    { id: 3, message: 'Reyland Tanglao\'s attendance marked as late today.', type: 'Attendance_Alert' },
+    { id: 3, message: 'Reyland Tanglaos attendance marked as late today.', type: 'Attendance_Alert' },
     { id: 4, message: 'System update scheduled for 11 PM tonight.', type: 'System_Notice' },
   ];
 
