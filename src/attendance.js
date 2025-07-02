@@ -288,7 +288,7 @@ function Attendance() {
                         </select>
 
                         <select style={styles.filter}>
-                            <option disabled selected>Department</option>
+                            <option disabled selected hidden>Department</option>
                             <option>Office of the Municipal Mayor</option>
                             <option>Human Resource Management Division</option>
                             <option>Business Permit and Licensing Division</option>
