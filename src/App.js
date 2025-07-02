@@ -9,6 +9,8 @@ import LeaveManagement from './leaveManagement';
 import Messages from './messages';
 import Announcement from './announcement';
 import ForgotPassword from './forgotPassword';
+import AuditLogs from './audit_logs';
+import LeaveCalendar from './leaveCalendar';
 
 function App() {
   return (
@@ -23,6 +25,8 @@ function App() {
         <Route path="/messages" element={<Messages />} />
         <Route path="/announcement" element={<Announcement />} />
         <Route path='/forgotPassword' element={<ForgotPassword/>} />
+        <Route path='/audit_logs' element={<AuditLogs/>} />
+        <Route path='/leaveCalendar' element={<LeaveCalendar/>} />
       </Routes>
     </Router>
   );

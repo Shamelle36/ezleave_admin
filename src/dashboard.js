@@ -29,6 +29,28 @@ import { auth } from './firebase';
 function Dashboard() {
   const [date, setDate] = useState(new Date());
   const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
+  const [selected, setSelected] = useState("Leave Type");
+
+  const options = [
+    "Vacation",
+    "Sick",
+    "Mandatory",
+    "Maternity",
+    "Privilege",
+    "Solo Parent",
+    "Study",
+    "VAWC",
+    "Rehabilitation",
+    "Women",
+    "Emergency"
+  ];
+
+  const handleSelect = (option) => {
+    setSelected(option);
+    setIsOpen(false);
+  };
+
 
   const handleLogout = async (e) => {
     try {
@@ -191,7 +213,7 @@ function Dashboard() {
             <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
             <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
             <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-            <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
+            <li><Link style={styles.sb} to="/audit_logs"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
             <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
             <li><Link style={styles.sb} to="#" onClick={handleLogout}><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
@@ -323,15 +345,43 @@ function Dashboard() {
           </div>
 
           <div style={styles.cardBar}>
+
             <div style={styles.header5}>
               <h3 style={styles.title}>Monthly Leaves Filed</h3>
-              <select style={styles.dropdown}>
-                <option>Leave Type</option>
-                <option>Vacation</option>
-                <option>Sick</option>
-                <option>Emergency</option>
-              </select>
+
+                <div style={{ width: '200px', position: 'relative' }}>
+                  <div
+                    onClick={() => setIsOpen(!isOpen)}
+                    style={styles.dropdown}
+                  >
+                    {selected}
+                  </div>
+
+                  {isOpen && (
+                    <div
+                      style={styles.openDropdown}
+                    >
+                      {options.map((option, index) => (
+                        <div
+                          key={index}
+                          onClick={() => handleSelect(option)}
+                          style={{
+                            padding: '10px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #eee',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                        >
+                          {option}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
             </div>
+
             <div style={{ width: '330px' }}>
               <ResponsiveContainer width={"100%"} height={165}>
                 <BarChart data={dataBar}>
@@ -628,7 +678,22 @@ const styles = {
     color: '#000',
     fontWeight: '600',
     cursor: 'pointer',
+    fontSize: '15px',
   },
+  openDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    width: '100%',
+    maxHeight: '160px', // 4 items * 40px
+    overflowY: 'auto',
+    border: '1px solid #000',
+    borderTop: 'none',
+    background: '#fff',
+    zIndex: 10,
+    
+  },
+
   notificationContainer: {
     borderRadius: '12px',
     flex: '1 1 350px',
