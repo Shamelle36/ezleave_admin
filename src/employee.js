@@ -18,11 +18,12 @@ import {
   faEye,
   faArrowLeft,
   faArrowRight,
+  faUser,
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
-import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
-import { BiBorderBottom } from 'react-icons/bi';
+import { useEffect } from 'react';
+
 
 function Employees() {
 
@@ -48,6 +49,165 @@ function Employees() {
       salary: '$1200.00'
     }
   ])
+
+  const [provinces, setProvinces] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [barangays, setBarangays] = useState([]);
+
+  const [selectedProvinceCode, setSelectedProvinceCode] = useState('');
+  const [selectedCityCode, setSelectedCityCode] = useState('');
+  const [selectedBarangayCode, setSelectedBarangayCode] = useState('');
+
+  // Fetch provinces on component mount
+  useEffect(() => {
+    fetch('https://psgc.gitlab.io/api/provinces/')
+      .then(res => res.json())
+      .then(data => setProvinces(data));
+  }, []);
+
+  // Fetch cities when province changes
+  useEffect(() => {
+    if (selectedProvinceCode) {
+      fetch(`https://psgc.gitlab.io/api/provinces/${selectedProvinceCode}/cities-municipalities/`)
+        .then(res => res.json())
+        .then(data => setCities(data));
+    }
+  }, [selectedProvinceCode]);
+
+  // Fetch barangays when city changes
+  useEffect(() => {
+    if (selectedCityCode) {
+      fetch(`https://psgc.gitlab.io/api/cities-municipalities/${selectedCityCode}/barangays/`)
+        .then(res => res.json())
+        .then(data => setBarangays(data));
+    }
+  }, [selectedCityCode]);
+
+
+
+
+  //Modal Integration
+
+  const [showModal, setShowModal] = useState(false);
+
+  const Modal = ({ onClose }) => (
+  <div style={styles.overlay}>
+    <div style={styles.modal}>
+      {/* <button style={styles.closeButton} onClick={onClose}>X</button> */}
+      
+      <div style={styles.modalTab}>
+        <div style={styles.tabs}>
+          <button style={styles.tabAdd}>Add Manually</button>
+          <button style={styles.tabImport}>Import</button>
+        </div>
+      </div>
+
+      <div style={styles.employeeForm}>
+          <details open>
+            <summary style={styles.txtSummary}><FontAwesomeIcon icon={faUser} style={styles.iconTab}/>Personal Information</summary>
+
+            <form style={styles.form}>
+              <div style={styles.inputRow}>
+
+                <label style={styles.lblInputs} for='fullName'>Full Name</label>
+                <input type='text' style={styles.input} placeholder='Full Name' name='fullName'/>
+
+                <label style={styles.lblInputs} for='emailAddress'>Email Address</label>
+                <input type='email' style={styles.input} placeholder='Email Address' name='emailAddress'/>
+
+                <label style={styles.lblInputs} for='phoneNumber'>Phone Number</label>
+                <input type='text' style={styles.input} placeholder='Phone Number' name='phoneNumber'/>
+
+                <label style={styles.lblInputs} for='dateOfBirth'>Date of Birth</label>
+                <input style={styles.input} type='date' name='dateOfBirth'/>
+
+                <label style={styles.lblInputs} for='age'>Age</label>
+                <input type='number' style={styles.input} placeholder='Age' name='age'/>
+              </div>
+          
+              <div style={styles.inputRow}>
+                <label  style={styles.lblInputs}>Gender</label>
+                <div style={styles.radioButton}>
+
+                  <div style={styles.radioGroup}>
+                    <input type='radio' name='options' value='male'/>
+                    <label for='options'>Male</label>
+                  </div>
+                  
+                  <div style={styles.radioGroup}>
+                    <input type='radio' name='options' value='female'/>
+                    <label for='options'>Female</label>
+                  </div>
+                </div>
+
+                <label style={styles.lblInputs} for='civilStatus'>Civil Status</label>
+                <select style={styles.input}>
+                  <option disabled selected hidden>Select Civil Status</option>
+                  <option>Single</option>
+                  <option>Married</option>
+                  <option>Widowed</option>
+                  <option>Annulled</option>
+                  <option>Separated</option>
+                </select>
+
+                <label style={styles.lblInputs}>Permanent Address</label>
+                <input style={styles.input} type='text' placeholder='Street/House No.'/>
+
+                {/* Province/City */}
+                <select
+                  style={styles.input}
+                  value={selectedProvinceCode}
+                  onChange={(e) => {
+                    setSelectedProvinceCode(e.target.value);
+                    setSelectedCityCode('');
+                    setBarangays([]);
+                  }}
+                >
+                  <option value="" disabled hidden>Select Province</option>
+                  {provinces.map(p => (
+                    <option key={p.code} value={p.code}>{p.name}</option>
+                  ))}
+                </select>
+
+                {/* Municipality */}
+                <select
+                  style={styles.input}
+                  value={selectedCityCode}
+                  onChange={(e) => setSelectedCityCode(e.target.value)}
+                >
+                  <option value="" disabled hidden>Select City/Municipality</option>
+                  {cities.map(c => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+
+                {/* Barangay */}
+                <select
+                  style={styles.input}
+                  value={barangays.find(b => b.code === selectedBarangayCode)?.code || ""}
+                  onChange={(e) => setSelectedBarangayCode(e.target.value)}
+                >
+                  <option value="" disabled hidden>Select Barangay</option>
+                  {barangays.map(b => (
+                    <option key={b.code} value={b.code}>{b.name}</option>
+                  ))}
+                </select>
+                                
+        
+              </div>
+            </form>
+
+          </details>
+
+          <details>
+            <summary></summary>
+            
+          </details>
+      </div>
+
+    </div>
+  </div>
+);
 
   return (
     <div style={styles.dashboardContainer}>
@@ -84,7 +244,7 @@ function Employees() {
 
                 <div style={styles.firstRow}>
                     <p>List of Employee</p>
-                    <button style={styles.btnAddEmployee}><FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd}/>Add Employee</button>
+                    <button style={styles.btnAddEmployee} onClick={() => setShowModal(true)}><FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd}/>Add Employee</button>
                 </div>
 
                 <div style={styles.secondRow}>
@@ -197,8 +357,9 @@ function Employees() {
                 
             </div>
 
-
         </div>
+
+        {showModal && <Modal onClose={() => setShowModal(false)} />}
       
       </div>
   );
@@ -442,10 +603,99 @@ const styles = {
   btnIconNext: {
     fontSize: '12px'
   },
-  numberPage: {
-
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  modal: {
+    backgroundColor: '#fff',
+    borderRadius: '10px',
+    width: '800px',
+    boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+    position: 'relative',
+  },
+  
+  tabs: {
+    padding: '20px 20px 0 30px',
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '10px',
+  },
+  tabAdd: {
+    borderTop: '1px solid rgba(124, 124, 124, 0)',
+    borderLeft: '1px solid rgba(124, 124, 124, 0)',  
+    borderRight: '1px solid rgba(124, 124, 124, 0)', 
+    borderBottom: 'none',
+    backgroundColor: '#6FCB5C',
+    padding: '2px 5px',
+    borderTopRightRadius: '5px',
+    borderTopLeftRadius: '5px'
+  },
+  tabImport: {
+    borderTop: '1px solid rgb(124, 124, 124)',
+    borderLeft: '1px solid rgb(124, 124, 124)',  
+    borderRight: '1px solid rgb(124, 124, 124)', 
+    borderBottom: 'none',
+    backgroundColor: '#fff',
+    padding: '2px 5px',
+    borderTopRightRadius: '5px',
+    borderTopLeftRadius: '5px'
+  },
+  employeeForm: {
+    border: '1px solid rgb(225, 225, 225)',
+    borderRadius: '10px',
+    padding: '10px',
+    margin: '0 10px 10px 10px',
+  },
+  input: {
+    padding: '2px 5px',
+    borderRadius: '5px',
+    border: '1px solid rgb(213, 213, 213)',
+    width: '300px',
+    marginBottom: '10px'
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: '10px'
+  },
+  inputRow: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  radioButton: {
+    display: 'flex',
+    flexDirection: 'row',
+    marginBottom: '10px',
+    gap: '15px'
+  },
+  radioGroup: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '5px',
+    fontSize: '13px'
+  },
+  iconTab: {
+    fontSize: '12px',
+    marginRight: '5px'
+  },
+  txtSummary: {
+    fontSize: '14px'
+  },
+  lblInputs: {
+    fontSize: '13px'
   }
-
+  
+  
 };
 
 export default Employees;
