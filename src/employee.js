@@ -19,6 +19,7 @@ import {
   faArrowLeft,
   faArrowRight,
   faUser,
+  faFolderClosed,
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -83,7 +84,12 @@ function Employees() {
     }
   }, [selectedCityCode]);
 
+  const [employmentType, setEmploymentType] = useState('');
+  const [workDays, setWorkDays] = useState([]);
 
+  const daysOfWeek = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
 
 
   //Modal Integration
@@ -103,10 +109,11 @@ function Employees() {
       </div>
 
       <div style={styles.employeeForm}>
-          <details open>
+          <details>
             <summary style={styles.txtSummary}><FontAwesomeIcon icon={faUser} style={styles.iconTab}/>Personal Information</summary>
 
             <form style={styles.form}>
+
               <div style={styles.inputRow}>
 
                 <label style={styles.lblInputs} for='fullName'>Full Name</label>
@@ -121,35 +128,8 @@ function Employees() {
                 <label style={styles.lblInputs} for='dateOfBirth'>Date of Birth</label>
                 <input style={styles.input} type='date' name='dateOfBirth'/>
 
-                <label style={styles.lblInputs} for='age'>Age</label>
-                <input type='number' style={styles.input} placeholder='Age' name='age'/>
-              </div>
-          
-              <div style={styles.inputRow}>
-                <label  style={styles.lblInputs}>Gender</label>
-                <div style={styles.radioButton}>
-
-                  <div style={styles.radioGroup}>
-                    <input type='radio' name='options' value='male'/>
-                    <label for='options'>Male</label>
-                  </div>
-                  
-                  <div style={styles.radioGroup}>
-                    <input type='radio' name='options' value='female'/>
-                    <label for='options'>Female</label>
-                  </div>
-                </div>
-
-                <label style={styles.lblInputs} for='civilStatus'>Civil Status</label>
-                <select style={styles.input}>
-                  <option disabled selected hidden>Select Civil Status</option>
-                  <option>Single</option>
-                  <option>Married</option>
-                  <option>Widowed</option>
-                  <option>Annulled</option>
-                  <option>Separated</option>
-                </select>
-
+                
+                {/* Address */}
                 <label style={styles.lblInputs}>Permanent Address</label>
                 <input style={styles.input} type='text' placeholder='Street/House No.'/>
 
@@ -193,16 +173,208 @@ function Employees() {
                   ))}
                 </select>
                                 
-        
+
+              </div>
+          
+              <div style={styles.inputRow}>
+                <label  style={styles.lblInputs}>Gender</label>
+                <div style={styles.radioButton}>
+
+                  <div style={styles.radioGroup}>
+                    <input type='radio' name='options' value='male'/>
+                    <label for='options'>Male</label>
+                  </div>
+                  
+                  <div style={styles.radioGroup}>
+                    <input type='radio' name='options' value='female'/>
+                    <label for='options'>Female</label>
+                  </div>
+                </div>
+
+
+                <label style={styles.lblInputs} for='age'>Age</label>
+                <input type='number' style={styles.input} placeholder='Age' name='age'/>
+              
+                <label style={styles.lblInputs} for='civilStatus'>Civil Status</label>
+                <select style={styles.input}>
+                  <option disabled selected hidden>Select Civil Status</option>
+                  <option>Single</option>
+                  <option>Married</option>
+                  <option>Widowed</option>
+                  <option>Annulled</option>
+                  <option>Separated</option>
+                </select>
+
+
+                {/* Current Address */}
+                    <label style={styles.currentAddress}>Current Address</label>
+                    <input style={styles.input} type='text' placeholder='Street/House No.'/>
+
+                    {/* Province/City */}
+                    <select
+                      style={styles.input}
+                      value={selectedProvinceCode}
+                      onChange={(e) => {
+                        setSelectedProvinceCode(e.target.value);
+                        setSelectedCityCode('');
+                        setBarangays([]);
+                      }}
+                    >
+                      <option value="" disabled hidden>Select Province</option>
+                      {provinces.map(p => (
+                        <option key={p.code} value={p.code}>{p.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Municipality */}
+                    <select
+                      style={styles.input}
+                      value={selectedCityCode}
+                      onChange={(e) => setSelectedCityCode(e.target.value)}
+                    >
+                      <option value="" disabled hidden>Select City/Municipality</option>
+                      {cities.map(c => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Barangay */}
+                    <select
+                      style={styles.input}
+                      value={barangays.find(b => b.code === selectedBarangayCode)?.code || ""}
+                      onChange={(e) => setSelectedBarangayCode(e.target.value)}
+                    >
+                      <option value="" disabled hidden>Select Barangay</option>
+                      {barangays.map(b => (
+                        <option key={b.code} value={b.code}>{b.name}</option>
+                      ))}
+                    </select>
+                                    
+                    <div style={styles.checkbox}>
+                      <input type='checkbox' name='chck1'/>
+                      <label style={styles.lbl2} for='chck1'>Same as Permanent Address</label>
+                    </div>                
+
               </div>
             </form>
 
           </details>
 
-          <details>
-            <summary></summary>
-            
+
+          <details open>
+            <summary style={styles.txtSummary}>
+              <FontAwesomeIcon icon={faUserCog} style={styles.iconTab}/>Employment Details
+            </summary>
+
+            <form style={styles.form2}>
+              
+              <div style={styles.rows}>
+                  <div style={styles.inputRow}>
+                    <label>Employee ID</label>
+                    <input type="text" style={styles.input} placeholder="E.g. 00123" />
+
+                    <label>Position</label>
+                    <input type="text" style={styles.input} placeholder="E.g. Admin Officer" />
+
+                    <label>Department</label>
+                    <select style={styles.input}>
+                      <option hidden>Select Department</option>
+                      <option>HR</option>
+                      <option>Finance</option>
+                    </select>
+
+                    <label>Employment Type</label>
+                    <select style={styles.input}
+                    value={employmentType}
+                    onChange={(e) => setEmploymentType(e.target.value)}>
+                      <option hidden>Select Type</option>
+                      <option>Permanent</option>
+                      <option>Contractual</option>
+                      <option>Casual</option>
+                      <option>Job Order</option>
+                    </select>
+                    
+                    {employmentType === 'Contractual' && (
+                      <>
+                        <label>Contract Start Date</label>
+                        <input type='date' style={styles.input}/>
+
+                        <label>Contract End Date</label>
+                        <input type='date' style={styles.input}/>
+                      </>
+                    )}
+
+                    <label>Status</label>
+                    <select style={styles.input}>
+                      <option hidden>Select Status</option>
+                      <option>Active</option>
+                      <option>Inactive</option>
+                      <option>Retired</option>
+                      <option>End of Contract</option>
+                      <option>Resigned</option>
+                    </select>
+
+                    <label>Date Hired</label>
+                    <input type="date" style={styles.input} />
+
+                  </div>
+
+                  
+
+                  <div style={styles.inputRow}>
+                    <label>Salary</label>
+                    <input type="text" style={styles.input} placeholder="E.g. ₱25,000.00" />
+
+                    <label>Salary Grade</label>
+                    <input type="text" style={styles.input} placeholder="E.g. SG-11 Step 2" />
+
+                    <label>Payroll Type</label>
+                    <select style={styles.input}>
+                      <option hidden>Select Payroll Type</option>
+                      <option>Bank Transfer</option>
+                      <option>Check</option>
+                    </select>
+
+                    <label>Bank Name</label>
+                    <input type="text" style={styles.input} placeholder="E.g. LandBank" />
+
+                    <label>Bank Account No.</label>
+                    <input type="text" style={styles.input} placeholder="1234-5678-9012" />
+
+                  </div>
+              </div>
+
+                <label style={styles.lblInputs}>Work Days</label>
+                  <div style={styles.dayToggleContainer}>
+                    {daysOfWeek.map((day) => {
+                      const isSelected = workDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (isSelected) {
+                              setWorkDays(workDays.filter(d => d !== day));
+                            } else {
+                              setWorkDays([...workDays, day]);
+                            }
+                          }}
+                          style={{
+                            ...styles.dayButton,
+                            ...(isSelected ? styles.dayButtonSelected : {})
+                          }}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+          </form>
+
           </details>
+
       </div>
 
     </div>
@@ -621,6 +793,9 @@ const styles = {
     width: '800px',
     boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
     position: 'relative',
+    maxHeight: '800px',
+    height: '500px',
+    overflowY: 'scroll'
   },
   
   tabs: {
@@ -693,7 +868,50 @@ const styles = {
   },
   lblInputs: {
     fontSize: '13px'
-  }
+  },
+  lbl2: {
+    fontSize: '12px',
+  },
+  checkbox: {
+    display: 'flex',
+    gap: '5px'
+  },
+  currentAddress: {
+    marginTop: '63px',
+    fontSize: '13px'
+  },
+  dayToggleContainer: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+    marginBottom: '15px',
+  },
+
+  dayButton: {
+    padding: '8px 14px',
+    borderRadius: '8px',
+    border: '1px solid #ccc',
+    backgroundColor: '#f9f9f9',
+    cursor: 'pointer',
+    fontWeight: '500',
+    transition: 'all 0.2s ease',
+  },
+
+  dayButtonSelected: {
+    backgroundColor: '#6FCB5C',
+    color: '#fff',
+    borderColor: '#6FCB5C',
+  },
+  form2: {
+    padding: '10px'
+  },
+  rows: {
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: '10px'
+  },
+
   
   
 };
