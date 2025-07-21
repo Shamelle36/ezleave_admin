@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import './images/logo_ez.png';
 import { Link, useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
-import { auth } from './firebase';
+import { supabase } from './lib/supabase';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelopeCircleCheck } from '@fortawesome/free-solid-svg-icons';
 
@@ -16,14 +14,15 @@ function Signup() {
   const navigate = useNavigate();
 
   useEffect(() => {
-  if (message) {
-    const timer = setTimeout(() => setMessage(''), 5000);
-    return () => clearTimeout(timer);
-  }
-}, [message]);
+    if (message) {
+      const timer = setTimeout(() => setMessage(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    setMessage('');
 
     if (password !== confirmPassword) {
       setMessage("Passwords do not match.");
@@ -31,42 +30,69 @@ function Signup() {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      await updateProfile(user, {
-        displayName: fullName
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
       });
 
-      await sendEmailVerification(user);
-      setMessage("We've sent a confirmation email to your address. Please verify your email to activate your account.");
+      if (authError) {
+        throw authError;
+      }
 
-      const checkEmailVerified = setInterval(async () => {
-        await user.reload();
-        if (user.emailVerified) {
-          clearInterval(checkEmailVerified);
-          setMessage("Email Verified. Redirecting to sign in...");
-          setTimeout(() => navigate("/"), 3000);
+      if (authData.user) {
+        const newUserId = authData.user.id;
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: newUserId,
+              full_name: fullName,
+              email: email,
+              is_admin: true,
+              gender: null,
+              department: null,
+              position: null,
+              employee_type: null,
+              employment_start_date: null,
+            },
+          ]);
+
+        if (profileError) {
+          console.error('Error creating profile entry:', profileError.message);
+          setMessage('Account created, but failed to set up profile. Please contact support.');
+          return;
         }
-      }, 3000);
+
+        setMessage("Admin account created! We've sent a confirmation email. Please verify to activate your account.");
+        setTimeout(() => navigate("/"), 5000);
+      } else {
+        setMessage('Signup initiated. Please check your email for a verification link.');
+        setTimeout(() => navigate("/"), 5000);
+      }
 
     } catch (error) {
       setMessage(error.message);
+      console.error('Signup error:', error);
     }
   };
 
   return (
     <div className="container">
 
-          {message && (
-              <div className='popupMessage'>
-              <FontAwesomeIcon icon={faEnvelopeCircleCheck} className='msgIcon'/>       
-                <p className='txtMessage'>{message}</p>
-              </div>
-          )}
+      {message && (
+        <div className='popupMessage'>
+          <FontAwesomeIcon icon={faEnvelopeCircleCheck} className='msgIcon' />
+          <p className='txtMessage'>{message}</p>
+        </div>
+      )}
 
       <div className={`wrapper ${message ? 'blurred' : ''} `}>
-
         <div className='col1'>
           <div className='circle'>
             <div className='circle-inner'>
@@ -76,35 +102,35 @@ function Signup() {
         </div>
 
         <div className='col2'>
-          <h2>Sign Up</h2>
+          <h2>Sign Up (Admin)</h2>
           <form onSubmit={handleSignup}>
-            <input 
-              type="email" 
-              placeholder="Enter email address" 
-              required 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)}  
+            <input
+              type="email"
+              placeholder="Enter email address"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-            <input 
-              type="text" 
-              placeholder="Full Name" 
-              required 
-              value={fullName} 
+            <input
+              type="text"
+              placeholder="Full Name"
+              required
+              value={fullName}
               onChange={(e) => setFullName(e.target.value)}
             />
-            <input 
-              type="password" 
-              placeholder="Enter password" 
-              required 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
+            <input
+              type="password"
+              placeholder="Enter password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
-            <input 
-              type="password" 
-              placeholder="Confirm password" 
-              required 
-              value={confirmPassword} 
-              onChange={(e) => setConfirmPassword(e.target.value)} 
+            <input
+              type="password"
+              placeholder="Confirm password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
             />
             <button type="submit">Sign Up</button>
           </form>

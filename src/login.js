@@ -1,9 +1,9 @@
+// Login.jsx (Revised for Admin Check)
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './App.css';
 import { FcGoogle } from 'react-icons/fc';
-import { auth, googleProvider } from './firebase';
-import { signInWithEmailAndPassword, signInWithPopup, onAuthStateChanged } from 'firebase/auth';
+import { supabase } from './lib/supabase';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -11,47 +11,89 @@ function Login() {
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
 
-  // 🔒 Redirect if already logged in
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && user.emailVerified) {
-        navigate('/dashboard');
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          // Check if the logged-in user is an admin
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('is_admin')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error) {
+            console.error('Error fetching profile:', error.message);
+            setMessage('Failed to load user profile. Please try again.');
+            supabase.auth.signOut(); // Log out if profile check fails
+            return;
+          }
+
+          if (profile?.is_admin) {
+            setMessage('Login successful! Redirecting to admin dashboard...');
+            setTimeout(() => navigate("/dashboard"), 500);
+          } else {
+            setMessage('You do not have administrative access. Logging out.');
+            supabase.auth.signOut(); // Log out non-admin users
+          }
+        }
       }
-    });
-    return () => unsubscribe();
+    );
+
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Perform the same admin check on initial session load
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error || !profile?.is_admin) {
+          console.error('Existing session is not admin or profile error:', error?.message);
+          setMessage('You are not authorized for this area. Logging out.');
+          supabase.auth.signOut(); // Log out non-admin users
+          return;
+        }
+
+        setMessage('Already logged in as admin! Redirecting...');
+        setTimeout(() => navigate("/dashboard"), 500);
+      }
+    }
+    checkSession();
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setMessage('');
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
 
-      if (user.emailVerified) {
-        setMessage('Login successful! Redirecting...');
-        setTimeout(() => navigate("/dashboard"), 2000); 
-      } else {
-        setMessage('Please verify your email before logging in.');
-        auth.signOut(); 
+      if (error) {
+        setMessage(error.message);
+        console.error('Login error:', error.message);
+        return;
+      }
+      // If login is successful, the onAuthStateChange listener above will handle the admin check and navigation
+      if (data.user) {
+        setMessage('Attempting to log in...'); // Message while admin status is checked
       }
 
     } catch (error) {
-      setMessage(error.message);
+      setMessage('An unexpected error occurred: ' + error.message);
+      console.error('Unexpected login error:', error);
     }
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      console.log("Google user:", user);
-      navigate("/dashboard");
-
-    } catch (error) {
-      setMessage(error.message);
-    }
-  };
+ 
 
   return (
     <div className="container">
@@ -65,14 +107,14 @@ function Login() {
         </div>
 
         <div className='col2'>
-          <h2>Log In</h2>
+          <h2>Admin Log In</h2> {/* Added (Admin) to title */}
           <form onSubmit={handleLogin}>
             <input type="email" placeholder="Enter email address" required value={email} onChange={(e) => setEmail(e.target.value)} />
             <input type="password" placeholder="Enter password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             <button type="submit">Sign In</button>
           </form>
 
-          {message && <p style={{ marginTop: '1rem' }}>{message}</p>}
+          {message && <p style={{ marginTop: '1rem', color: message.includes('successful') || message.includes('Attempting') ? 'green' : 'red' }}>{message}</p>}
 
           <p className="forgot-password"><Link to="/forgotPassword">Forgot password?</Link></p>
 
@@ -83,7 +125,7 @@ function Login() {
           </div>
 
           <div className='social-login'>
-            <button className='google' onClick={handleGoogleLogin}>
+            <button className='google'>
               <FcGoogle style={{ marginRight: '10px', fontSize: '25px' }} />
               Continue with Google
             </button>
