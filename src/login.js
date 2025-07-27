@@ -1,4 +1,3 @@
-// Login.jsx (Revised for Admin Check)
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './App.css';
@@ -9,41 +8,15 @@ function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          // Check if the logged-in user is an admin
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('is_admin')
-            .eq('id', session.user.id)
-            .single();
-
-          if (error) {
-            console.error('Error fetching profile:', error.message);
-            setMessage('Failed to load user profile. Please try again.');
-            supabase.auth.signOut(); // Log out if profile check fails
-            return;
-          }
-
-          if (profile?.is_admin) {
-            setMessage('Login successful! Redirecting to admin dashboard...');
-            setTimeout(() => navigate("/dashboard"), 500);
-          } else {
-            setMessage('You do not have administrative access. Logging out.');
-            supabase.auth.signOut(); // Log out non-admin users
-          }
-        }
-      }
-    );
-
     async function checkSession() {
+      setLoading(true); // begin loading state
       const { data: { session } } = await supabase.auth.getSession();
+
       if (session?.user) {
-        // Perform the same admin check on initial session load
         const { data: profile, error } = await supabase
           .from('profiles')
           .select('is_admin')
@@ -51,49 +24,64 @@ function Login() {
           .single();
 
         if (error || !profile?.is_admin) {
-          console.error('Existing session is not admin or profile error:', error?.message);
+          console.error('Session admin check failed:', error?.message);
           setMessage('You are not authorized for this area. Logging out.');
-          supabase.auth.signOut(); // Log out non-admin users
+          await supabase.auth.signOut();
+          setLoading(false);
           return;
         }
 
         setMessage('Already logged in as admin! Redirecting...');
+        setLoading(false);
         setTimeout(() => navigate("/dashboard"), 500);
+      } else {
+        setLoading(false); // no session, reset loading
       }
     }
-    checkSession();
 
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+    checkSession();
   }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setMessage('');
+    setLoading(true);
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
+        email,
+        password,
       });
 
-      if (error) {
-        setMessage(error.message);
-        console.error('Login error:', error.message);
+      if (error || !data?.user) {
+        setMessage(error?.message || 'Login failed.');
+        setLoading(false);
         return;
       }
-      // If login is successful, the onAuthStateChange listener above will handle the admin check and navigation
-      if (data.user) {
-        setMessage('Attempting to log in...'); // Message while admin status is checked
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || !profile?.is_admin) {
+        setMessage('You do not have administrative access. Logging out.');
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
       }
 
-    } catch (error) {
-      setMessage('An unexpected error occurred: ' + error.message);
-      console.error('Unexpected login error:', error);
+      setMessage('Login successful! Redirecting to admin dashboard...');
+      setLoading(false);
+      setTimeout(() => navigate("/dashboard"), 500);
+
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setMessage('An unexpected error occurred: ' + err.message);
+      setLoading(false);
     }
   };
-
- 
 
   return (
     <div className="container">
@@ -107,14 +95,31 @@ function Login() {
         </div>
 
         <div className='col2'>
-          <h2>Admin Log In</h2> {/* Added (Admin) to title */}
+          <h2>Admin Log In</h2>
           <form onSubmit={handleLogin}>
-            <input type="email" placeholder="Enter email address" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input type="password" placeholder="Enter password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              type="email"
+              placeholder="Enter email address"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Enter password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
             <button type="submit">Sign In</button>
           </form>
 
-          {message && <p style={{ marginTop: '1rem', color: message.includes('successful') || message.includes('Attempting') ? 'green' : 'red' }}>{message}</p>}
+          {loading && <p style={{ marginTop: '1rem', color: 'blue' }}>Checking admin status...</p>}
+          {message && (
+            <p style={{ marginTop: '1rem', color: message.includes('successful') || message.includes('Attempting') ? 'green' : 'red' }}>
+              {message}
+            </p>
+          )}
 
           <p className="forgot-password"><Link to="/forgotPassword">Forgot password?</Link></p>
 
@@ -134,7 +139,6 @@ function Login() {
           <div className='signup'>
             <p>Don't have an account? <Link to="/signup">Sign Up</Link></p>
           </div>
-
         </div>
       </div>
     </div>

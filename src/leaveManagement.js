@@ -37,9 +37,13 @@ import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
 import { BiBorderRight } from 'react-icons/bi';
 import { faUpload } from '@fortawesome/free-solid-svg-icons/faUpload';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from './lib/supabase';
+import Papa from 'papaparse';
 
 function LeaveManagement() {
     const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState('summary');
+    const [csvData, setCsvData] = useState([]);
 
 const [date, setDate] = useState(new Date());
 
@@ -146,6 +150,42 @@ const [date, setDate] = useState(new Date());
         navigate('/leaveCalendar');
     }
     
+    const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const parsed = results.data;
+        setCsvData(parsed);
+
+        // Optional: Validate id_number exists
+        for (let row of parsed) {
+          const { data, error } = await supabase
+            .from('employees')
+            .select('id_number')
+            .eq('id_number', row.id_number)
+            .single();
+
+          if (!data) {
+            alert(`Employee with ID ${row.id_number} not found`);
+            return;
+          }
+        }
+
+        // Upload to leave_balances
+        const { error } = await supabase
+          .from('leave_balances')
+          .upsert(parsed, { onConflict: ['id_number', 'leave_type'] });
+
+        if (error) {
+          alert('Upload failed: ' + error.message);
+        } else {
+          alert('Leave balances uploaded successfully!');
+        }
+      }
+    });
+  };
   
   return (
     <div style={styles.dashboardContainer}>
@@ -173,11 +213,33 @@ const [date, setDate] = useState(new Date());
 
         <div style={styles.content}>
 
-            <div style={styles.buttons}>
-                <button style={styles.btnLeave}>Leave Summary</button>
-                <button style={styles.btnLeave} onClick={goToLeaveCalendar}>Leave Calendar</button>
-                <button style={styles.btnLeave}>Employee Requests</button>
-            </div>
+            <div style={styles.tabContainer}>
+                <button
+                    style={activeTab === 'summary' ? styles.activeTab : styles.tab}
+                    onClick={() => setActiveTab('summary')}
+                >
+                    Leave Summary
+                </button>
+                <button
+                    style={activeTab === 'calendar' ? styles.activeTab : styles.tab}
+                    onClick={() => setActiveTab('calendar')}
+                >
+                    Leave Calendar
+                </button>
+                <button
+                    style={activeTab === 'requests' ? styles.activeTab : styles.tab}
+                    onClick={() => setActiveTab('requests')}
+                >
+                    Leave Requests
+                </button>
+                <button
+                    style={activeTab === 'upload' ? styles.activeTab : styles.tab}
+                    onClick={() => setActiveTab('upload')}
+                >
+                    Upload Balances
+                </button>
+                </div>
+
 
             <div style={styles.header1}>
                 <h3>Overview</h3>
@@ -341,7 +403,26 @@ const [date, setDate] = useState(new Date());
                 </tbody>
             </table>
             </div>
-        </div>
+
+            {activeTab === 'upload' && (
+                <div style={styles.uploadContainer}>
+                    <h2>Upload Leave Balances</h2>
+                    <p>You can upload a CSV file containing leave balances for all employees.</p>
+
+                    <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    style={styles.fileInput}
+                    />
+
+                    <p style={styles.note}>
+                    Format must include headers: <br />
+                    <code>ID Number, Vacation Entitled, Vacation Used, Sick Entitled, Sick Used</code>
+                    </p>
+                </div>
+                )}
+             </div>
       
       </div>
   );
