@@ -796,6 +796,7 @@ import Papa from 'papaparse';
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
+
             <select style={styles.filterStatus2}>
               <option value="">Filter by Department</option>
               {departments.map(dept => (
@@ -819,7 +820,7 @@ import Papa from 'papaparse';
                 <div
                   key={emp.id}
                   style={{ ...styles.card, cursor: 'pointer' }}
-                  onClick={() => navigate(`/employeeProfile/${emp.id}`)}
+                  onClick={() => navigate(`/employeeProfile/${emp.id_number}`)}
                 >
                   <div style={styles.avatarContainer}>
                     {emp.profile_url ? (

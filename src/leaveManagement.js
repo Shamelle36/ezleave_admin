@@ -30,7 +30,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './dashboardCalendar.css';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
@@ -39,13 +39,17 @@ import { faUpload } from '@fortawesome/free-solid-svg-icons/faUpload';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import Papa from 'papaparse';
+import { useParams } from 'react-router-dom';
 
 function LeaveManagement() {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('summary');
     const [csvData, setCsvData] = useState([]);
+    const [leaveBalances, setLeaveBalances] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const { id } = useParams();
 
-const [date, setDate] = useState(new Date());
+    const [date, setDate] = useState(new Date());
 
   const [leaveRecords, setLeaveRecords] = useState([
     {
@@ -59,66 +63,6 @@ const [date, setDate] = useState(new Date());
       approvedBy: 'Marites D. Lopez',
       dateFiled: 'May 1, 2025',
       range: { from: 'May 3, 2025', to: 'May 5, 2025' },
-    },
-    {
-      name: 'Raven P. Quijano',
-      department: 'Office of the Municipal Mayor',
-      leaveType: 'Sick Leave',
-      entitled: 10,
-      used: 2,
-      remaining: 8,
-      status: 'Pending',
-      approvedBy: '—',
-      dateFiled: 'May 2, 2025',
-      range: { from: 'May 4, 2025', to: 'May 4, 2025' },
-    },
-    {
-      name: 'Angel Love B. Salgado',
-      department: 'Municipal Health Office',
-      leaveType: 'Maternity Leave',
-      entitled: 105,
-      used: 20,
-      remaining: 85,
-      status: 'Approved',
-      approvedBy: 'Dr. Eliza R. Santos',
-      dateFiled: 'April 15, 2025',
-      range: { from: 'May 3, 2025', to: 'August 15, 2025' },
-    },
-    {
-      name: 'Angel Love B. Salgado',
-      department: 'Municipal Health Office',
-      leaveType: 'Maternity Leave',
-      entitled: 105,
-      used: 20,
-      remaining: 85,
-      status: 'Approved',
-      approvedBy: 'Dr. Eliza R. Santos',
-      dateFiled: 'April 15, 2025',
-      range: { from: 'May 3, 2025', to: 'August 15, 2025' },
-    },
-    {
-      name: 'Reyland S. Tanglao',
-      department: 'Human Resource Management Division',
-      leaveType: 'Vacation Leave',
-      entitled: 15,
-      used: 5,
-      remaining: 10,
-      status: 'Approved',
-      approvedBy: 'Marites D. Lopez',
-      dateFiled: 'May 1, 2025',
-      range: { from: 'May 3, 2025', to: 'May 5, 2025' },
-    },
-    {
-      name: 'Raven P. Quijano',
-      department: 'Office of the Municipal Mayor',
-      leaveType: 'Sick Leave',
-      entitled: 10,
-      used: 2,
-      remaining: 8,
-      status: 'Pending',
-      approvedBy: '—',
-      dateFiled: 'May 2, 2025',
-      range: { from: 'May 4, 2025', to: 'May 4, 2025' },
     },
     
   ]);
@@ -186,6 +130,34 @@ const [date, setDate] = useState(new Date());
       }
     });
   };
+
+  const fetchLeaveBalances = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+        .from ('leave_balances')
+        .select(
+            `id,
+            id_number,
+            leave_type, 
+            entitled,
+            used,
+            employees(
+                full_name
+            )
+        `)
+        .order('id_number', {ascending: true});
+
+        if (error) {
+        console.error('Error fetching leave balances:', error);
+        } else {
+        setLeaveBalances(data);
+        }
+        setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchLeaveBalances();
+  }, []);
   
   return (
     <div style={styles.dashboardContainer}>
@@ -215,32 +187,35 @@ const [date, setDate] = useState(new Date());
 
             <div style={styles.tabContainer}>
                 <button
-                    style={activeTab === 'summary' ? styles.activeTab : styles.tab}
-                    onClick={() => setActiveTab('summary')}
+                    style={tabButtonStyle(activeTab === 'summary')}
+                     onClick={() => setActiveTab('summary')}
                 >
                     Leave Summary
                 </button>
                 <button
-                    style={activeTab === 'calendar' ? styles.activeTab : styles.tab}
+                    style={tabButtonStyle(activeTab === 'calendar')}
                     onClick={() => setActiveTab('calendar')}
                 >
                     Leave Calendar
                 </button>
                 <button
-                    style={activeTab === 'requests' ? styles.activeTab : styles.tab}
+                    style={tabButtonStyle(activeTab === 'requests')}
                     onClick={() => setActiveTab('requests')}
                 >
                     Leave Requests
                 </button>
+                
                 <button
-                    style={activeTab === 'upload' ? styles.activeTab : styles.tab}
-                    onClick={() => setActiveTab('upload')}
+                    style={tabButtonStyle(activeTab === 'leave_balances')}
+                    onClick={() => setActiveTab('leave_balances')}
                 >
-                    Upload Balances
+                    Leave Balances
                 </button>
-                </div>
+            </div>
 
 
+            {activeTab === 'summary' && (
+            <>
             <div style={styles.header1}>
                 <h3>Overview</h3>
                 <div style={styles.line}></div>
@@ -254,11 +229,9 @@ const [date, setDate] = useState(new Date());
                         <FontAwesomeIcon icon={faChevronRight} />
                         </button>
                 </div>
-
             </div>
 
                 <div style={styles.summaryCards}>
-
                     <div style={styles.card}>
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
@@ -303,9 +276,6 @@ const [date, setDate] = useState(new Date());
                             </div>
                         </div>
                     </div>
-
-
-                    
                 </div>
 
             <div style={styles.inputs}>
@@ -363,70 +333,154 @@ const [date, setDate] = useState(new Date());
                         Refresh
                     </button>
                 </div>
-
             </div>
+        
 
             <div style={styles.tableCon}>
-            
-            <table style={styles.table}>
-                <thead>
-                <tr>
-                    <th style={styles.th}>No.</th>
-                    <th style={styles.th}>Employee Name</th>
-                    <th style={styles.th}>Department</th>
-                    <th style={styles.th}>Leave Type</th>
-                    <th style={styles.th}>Entitled</th>
-                    <th style={styles.th}>Used</th>
-                    <th style={styles.th}>Remaining</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Approved By</th>
-                    <th style={styles.th}>Date Filed</th>
-                    <th style={styles.th}>Range</th>
-                </tr>
-                </thead>
-                <tbody>
-                {leaveRecords.map((record, index) => (
-                    <tr key={index}>
-                    <td style={styles.td}>{index + 1}</td>
-                    <td style={styles.td}>{record.name}</td>
-                    <td style={styles.td}>{record.department}</td>
-                    <td style={styles.td}>{record.leaveType}</td>
-                    <td style={styles.td}>{record.entitled}</td>
-                    <td style={styles.td}>{record.used}</td>
-                    <td style={styles.td}>{record.remaining}</td>
-                    <td style={styles.td}>{record.status}</td>
-                    <td style={styles.td}>{record.approvedBy}</td>
-                    <td style={styles.td}>{record.dateFiled}</td>
-                    <td style={styles.td}>{record.range.from} - {record.range.to}</td>
-                </tr>
-                ))}
-                </tbody>
-            </table>
+                <table style={styles.table}>
+                    <thead>
+                    <tr>
+                        <th style={styles.th}>No.</th>
+                        <th style={styles.th}>Employee Name</th>
+                        <th style={styles.th}>Department</th>
+                        <th style={styles.th}>Leave Type</th>
+                        <th style={styles.th}>Entitled</th>
+                        <th style={styles.th}>Used</th>
+                        <th style={styles.th}>Remaining</th>
+                        <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Approved By</th>
+                        <th style={styles.th}>Date Filed</th>
+                        <th style={styles.th}>Range</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {leaveRecords.map((record, index) => (
+                        <tr key={index}>
+                        <td style={styles.td}>{index + 1}</td>
+                        <td style={styles.td}>{record.name}</td>
+                        <td style={styles.td}>{record.department}</td>
+                        <td style={styles.td}>{record.leaveType}</td>
+                        <td style={styles.td}>{record.entitled}</td>
+                        <td style={styles.td}>{record.used}</td>
+                        <td style={styles.td}>{record.remaining}</td>
+                        <td style={styles.td}>{record.status}</td>
+                        <td style={styles.td}>{record.approvedBy}</td>
+                        <td style={styles.td}>{record.dateFiled}</td>
+                        <td style={styles.td}>{record.range.from} - {record.range.to}</td>
+                    </tr>
+                    ))}
+                    </tbody>
+                </table>
             </div>
+            </>
+            )}
 
-            {activeTab === 'upload' && (
-                <div style={styles.uploadContainer}>
-                    <h2>Upload Leave Balances</h2>
-                    <p>You can upload a CSV file containing leave balances for all employees.</p>
+            
 
-                    <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileUpload}
-                    style={styles.fileInput}
-                    />
+            {activeTab === 'leave_balances' && (
+                <div style={styles.leaveBalance}>
+                    <button
+                    style={styles.uploadButton}
+                    onClick={() => setActiveTab('upload')}
+                    onMouseEnter={(e) => Object.assign(e.target.style, styles.uploadButtonHover)}
+                    onMouseLeave={(e) => Object.assign(e.target.style, styles.uploadButton)}
+                    >
+                    Upload Balances
+                    </button>
 
-                    <p style={styles.note}>
-                    Format must include headers: <br />
-                    <code>ID Number, Vacation Entitled, Vacation Used, Sick Entitled, Sick Used</code>
-                    </p>
+                    {loading ? (
+                    <p style={styles.loadingText}>Loading...</p>
+                    ) : (
+                    <table style={styles.table2}>
+                        <thead>
+                        <tr>
+                            <th style={styles.thNew}>Employee</th>
+                            <th style={styles.thNew}>ID Number</th>
+                            <th style={styles.thNew}>Leave Type</th>
+                            <th style={styles.thNew}>Entitled</th>
+                            <th style={styles.thNew}>Used</th>
+                            <th style={styles.thNew}>Remaining</th>
+                            <th style={styles.thNew}>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {leaveBalances.map((leave) => (
+                            <tr 
+                            key={leave.id}
+                            onMouseEnter={(e) => e.target.parentNode.style.backgroundColor = '#F9FAFB'}
+                            onMouseLeave={(e) => e.target.parentNode.style.backgroundColor = 'transparent'}
+                            >
+                            <td style={styles.tdNew}>
+                                <div style={styles.employeeCell}>
+                                <img
+                                    src={leave.employees?.profile_url || '/default-avatar.png'}
+                                    alt="Profile"
+                                    style={styles.employeeImage}
+                                />
+                                <div>
+                                    <div style={styles.employeeName}>{leave.employees?.full_name || 'N/A'}</div>
+                                    <div style={styles.employeeId}>{leave.id_number}</div>
+                                </div>
+                                </div>
+                            </td>
+                            <td style={{...styles.tdNew, ...styles.fontMono}}>{leave.id_number}</td>
+                            <td style={styles.tdNew}>
+                                <span style={{
+                                ...styles.leaveTypeBadge,
+                                ...(leave.leave_type === 'Annual' ? styles.annualLeave :
+                                    leave.leave_type === 'Sick' ? styles.sickLeave :
+                                    leave.leave_type === 'Personal' ? styles.personalLeave :
+                                    styles.maternityLeave)
+                                }}>
+                                {leave.leave_type}
+                                </span>
+                            </td>
+                            <td style={styles.tdNew}>{leave.entitled}</td>
+                            <td style={styles.tdNew}>{leave.used}</td>
+                            <td style={styles.tdNew}>
+                                {(leave.entitled ?? 0) - (leave.used ?? 0)}
+                            </td>
+                            <td style={styles.td}>
+                            <button onClick={() => {
+                                console.log('Leave ID Number:', leave.id_number);
+                                navigate(`/employeeProfile/${leave.id_number}`)}} 
+                                style={styles.viewButton}>
+                                View Details
+                            </button>
+                            </td>                            
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                    )}
                 </div>
-                )}
+            )}
+
              </div>
-      
       </div>
   );
 }
+
+const tabButtonStyle = (active) => ({
+  backgroundColor: active ? '#5ab049ff' : '#ffffffff',
+  color: active ? '#fefcf5' : 'black',
+  border: 'none',
+  borderBottom: active ? 'none' : 'none',
+  cursor: 'pointer',
+  fontWeight: active ? '600' : 'normal',
+  borderRadius: '5px',
+  padding: '10px 16px',
+  fontSize: '14px',
+  height: '40px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  whiteSpace: 'nowrap',
+  boxShadow: active
+    ? 'inset 1px 1px 2px rgba(44, 44, 44, 0.44)'
+    : '0 2px 4px rgba(0, 0, 0, 0.1)',
+});
+
 
 const styles = {
   dashboardContainer: {
@@ -492,6 +546,14 @@ const styles = {
     width: 'calc(100% - 280px)', 
     zIndex: 1000, 
     boxSizing: 'border-box',
+  },
+  tabContainer: {
+    display: 'flex',
+    gap: '10px',
+    padding: '10px 0 20px',
+    borderBottom: '1px solid #e0e0e0',
+    marginBottom: '10px',
+    flexWrap: 'wrap',
   },
   content: {
     marginLeft: '300px', // Adjusted to account for the sidebar width
@@ -759,10 +821,111 @@ const styles = {
         padding: '5px 10px'
     },
     btnActive: {
-    backgroundColor: '#A8FC0080',
-    borderRadius: '5px',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-}
+        backgroundColor: '#A8FC0080',
+        borderRadius: '5px',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+    },
+
+    leaveBalance: {
+        padding: 24,
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        margin: '16px 0',
+    },
+
+    uploadButton: {
+        backgroundColor: '#3B82F6',
+        color: '#ffffff',
+        border: 'none',
+        borderRadius: 8,
+        padding: '12px 24px',
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: 'pointer',
+        marginBottom: 24,
+        transition: 'all 0.2s ease-in-out',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+    },
+
+    uploadButtonHover: {
+        backgroundColor: '#2563EB',
+        transform: 'translateY(-1px)',
+        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+    },
+
+    loadingText: {
+        textAlign: 'center',
+        padding: 40,
+        fontSize: 16,
+        color: '#6B7280',
+        fontStyle: 'italic',
+    },
+
+    table2: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        backgroundColor: '#ffffff',
+        borderRadius: 8,
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    },
+
+    thNew: {
+        backgroundColor: '#F9FAFB',
+        padding: '16px 20px',
+        textAlign: 'left',
+        fontSize: 12,
+        fontWeight: 600,
+        color: '#374151',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        borderBottom: '1px solid #E5E7EB',
+    },
+
+    tdNew: {
+        padding: '16px 20px',
+        borderBottom: '1px solid #F3F4F6',
+        fontSize: 14,
+        color: '#1F2937',
+        verticalAlign: 'middle',
+    },
+
+    employeeCell: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+    },
+
+    employeeImage: {
+        width: 40,
+        height: 40,
+        borderRadius: '50%',
+        objectFit: 'cover',
+        border: '2px solid #E5E7EB',
+        backgroundColor: '#F3F4F6',
+    },
+
+    employeeName: {
+        fontSize: 14,
+        fontWeight: 600,
+        color: '#1F2937',
+        marginBottom: 2,
+    },
+
+    employeeId: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontFamily: 'monospace',
+    },
+
+    tableRowHover: {
+        backgroundColor: '#F9FAFB',
+        transition: 'background-color 0.15s ease-in-out',
+    },
+
 
 
 };

@@ -23,23 +23,37 @@ import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
 function EmployeeProfile() {
   const { id } = useParams();
   const [employee, setEmployee] = useState(null);
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState('overview');
   const [departments, setDepartments] = useState([]);
+  const [leaveBalances, setLeaveBalances] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-  const fetchEmployeeAndDepartments = async () => {
-    const [{ data: employeeData, error: employeeError }, { data: departmentData, error: departmentError }] = await Promise.all([
-      supabase.from('employees').select('*').eq('id', id).single(),
-      supabase.from('departments').select('id, name')
-    ]);
+    const fetchEmployeeAndDepartments = async () => {
+      const [{ data: employeeData, error: employeeError }, { data: departmentData, error: departmentError }] = await Promise.all([
+        supabase.from('employees').select('*').eq('id_number', id).single(),
+        supabase.from('departments').select('id, name')
+      ]);
 
-    if (!employeeError) setEmployee(employeeData);
-    if (!departmentError) setDepartments(departmentData);
-  };
+      if (!employeeError) setEmployee(employeeData);
+      if (!departmentError) setDepartments(departmentData);
+    };
 
-  fetchEmployeeAndDepartments();
-}, [id]);
+    fetchEmployeeAndDepartments();
+  }, [id]);
+
+    useEffect(() => {
+    const fetchLeaveBalances = async () => {
+      const { data, error } = await supabase
+        .from('leave_balances')
+        .select(`id, id_number, leave_type, entitled, used, remaining`)
+        .eq('id_number', employee?.id_number);
+
+      if (!error && data) setLeaveBalances(data);
+    };
+
+    if (employee?.id_number) fetchLeaveBalances();
+  }, [employee]);
 
   return (
     <div style={styles.dashboardContainer}>
@@ -82,8 +96,6 @@ function EmployeeProfile() {
           <div>
 
             <div style={styles.tabContainer}>
-                
-
                 <button
                     style={tabButtonStyle(activeTab === 'overview')}
                     onClick={() => setActiveTab('overview')}
@@ -140,32 +152,27 @@ function EmployeeProfile() {
 
                     <div style={styles.lvlCrdt}>
                       <p style={styles.leaveCreditsLbl}>Leave Credits</p>
-
-                        <div style={styles.lvType}>
-
+                      {leaveBalances.map((leave, idx) => (
+                        <div key={idx} style={styles.lvType}>
                           <div style={styles.lblLeave}>
-                            <p>Sick Leave</p>
+                            <p>{leave.leave_type}</p>
                           </div>
-
                           <div style={styles.lvlBal}>
-
                             <div style={styles.sickL}>
-                              <p style={styles.lblEn}>15</p>
+                              <p style={styles.lblEn}>{leave.entitled}</p>
                               <p style={styles.lblName}>Entitled</p>
                             </div>
-
                             <div style={styles.sickL}>
-                              <p style={styles.lblUs}>0</p>
+                              <p style={styles.lblUs}>{leave.used}</p>
                               <p style={styles.lblName}>Used</p>
                             </div>
-
                             <div style={styles.sickL}>
-                              <p style={styles.lblRe}>15</p>
+                              <p style={styles.lblRe}>{leave.remaining}</p>
                               <p style={styles.lblName}>Remaining</p>
                             </div>
-
                           </div>
                         </div>
+                      ))}
                     </div>
 
                 </div>
