@@ -27,6 +27,7 @@ import {
   faFileExport,
   faExpandArrowsAlt,
   faRefresh,
+  faFilter,
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -395,7 +396,6 @@ function LeaveManagement() {
                         <thead>
                         <tr>
                             <th style={styles.thNew}>Employee</th>
-                            <th style={styles.thNew}>ID Number</th>
                             <th style={styles.thNew}>Leave Type</th>
                             <th style={styles.thNew}>Entitled</th>
                             <th style={styles.thNew}>Used</th>
@@ -407,7 +407,7 @@ function LeaveManagement() {
                         {leaveBalances.map((leave) => (
                             <tr 
                             key={leave.id}
-                            onMouseEnter={(e) => e.target.parentNode.style.backgroundColor = '#F9FAFB'}
+                            onMouseEnter={(e) => e.target.parentNode.style.backgroundColor = 'rgba(207, 255, 112, 0.5)'}
                             onMouseLeave={(e) => e.target.parentNode.style.backgroundColor = 'transparent'}
                             >
                             <td style={styles.tdNew}>
@@ -423,7 +423,6 @@ function LeaveManagement() {
                                 </div>
                                 </div>
                             </td>
-                            <td style={{...styles.tdNew, ...styles.fontMono}}>{leave.id_number}</td>
                             <td style={styles.tdNew}>
                                 <span style={{
                                 ...styles.leaveTypeBadge,
@@ -455,6 +454,169 @@ function LeaveManagement() {
                     )}
                 </div>
             )}
+
+            {activeTab === 'calendar' && (
+                <div style={styles.leaveCalendar}>
+                    <div style={styles.calendarContent}>
+                        <div style={styles.calendarRow1}>
+                            <button style={styles.calendarButton}>
+                                <FontAwesomeIcon icon={faCalendarAlt} style={styles.calendarIcon}/>
+                                April 2025
+                            </button>
+                            <input
+                                type="text"
+                                placeholder="Search by employee name, department"
+                                style={styles.calendarSearch}
+                            />
+                            <button style={styles.calendarFilter}>
+                                <FontAwesomeIcon icon={faFilter} style={styles.filterIcon}/>
+                                Filter
+                            </button>
+                        </div>
+
+                    <table style={styles.calendarTable}>
+                        <thead>
+                            <tr>
+                                <th style={styles.thCalendar}>Employees</th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>02</p>
+                                        <p style={styles.calendarDay}>Sun</p>
+                                    </div>
+                                </th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>03</p>
+                                        <p style={styles.calendarDay}>Mon</p>
+                                    </div>
+                                </th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>04</p>
+                                        <p style={styles.calendarDay}>Tue</p>
+                                    </div>
+                                </th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>05</p>
+                                        <p style={styles.calendarDay}>Wed</p>
+                                    </div>
+                                </th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>06</p>
+                                        <p style={styles.calendarDay}>Thu</p>
+                                    </div>
+                                </th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>07</p>
+                                        <p style={styles.calendarDay}>Fri</p>
+                                    </div>
+                                </th>
+                                <th style={styles.thCalendar}>
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <p>08</p>
+                                        <p style={styles.calendarDay}>Sat</p>
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {[...Array(6)].map((_, idx) => (
+                            <tr key={idx}>
+                                <td style={styles.tdCalendar}>
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                    <img src="https://via.placeholder.com/32" alt="avatar" style={styles.calendarPic} />
+                                    <div>
+                                    <div style={{ fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap' }}>Renz Retuya</div>
+                                    <div style={{ fontSize: 12, color: '#888' }}>Officer 1</div>
+                                    <div style={{ fontSize: 11, color: '#aaa' }}>123456789</div>
+                                    </div>
+                                </div>
+                                </td>
+                                <td style={styles.tdCalendar}/>
+                                <td style={styles.tdCalendar}/>
+                                <td style={styles.tdCalendar}/>
+                                <td style={styles.tdCalendar}/>
+                                <td style={styles.tdCalendar}/>
+                                <td style={styles.tdCalendar}/>
+                                <td style={styles.tdCalendar}/>
+                            </tr>
+                            ))}
+                        </tbody>
+                        </table>
+                    </div>
+
+                    <div style={styles.calendarBox}>
+                        <div style={styles.calendarLeave}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                                <span>Leave Types</span>
+                                <select style={styles.selectCalendar}>
+                                    <option>This Month</option>
+                                    <option>This Year</option>
+                                </select>
+                            </div>
+                            <div style={{ marginTop: 12 }}>
+                                {[
+                                    { label: 'SL', name: 'Sick Leave', color: '#f44336', value: 5 },
+                                    { label: 'VL', name: 'Vacation Leave', color: '#3f51b5', value: 2 },
+                                    { label: 'MFL', name: 'Mandatory/Forced Leave', color: '#4caf50', value: 0 },
+                                    { label: 'ML', name: 'Maternity Leave', color: '#ff9800', value: 0 },
+                                    { label: 'PL', name: 'Paternity Leave', color: '#8bc34a', value: 0 },
+                                    { label: 'SPL', name: 'Solo Parent Leave', color: '#e91e63', value: 0 },
+                                ].map((type) => (
+                                    <div key={type.label} style={{ marginBottom: 8 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <div style={{ width: 20, height: 20, backgroundColor: type.color, borderRadius: 4 }} />
+                                            <div style={{ fontSize: 12, fontWeight: 500 }}>{type.label} - {type.name}</div>
+                                        </div>
+                                        <div style={{ height: 6, backgroundColor: '#eee', borderRadius: 4, marginTop: 4 }}>
+                                            <div style={{
+                                            width: `${type.value * 10}%`,
+                                            height: '100%',
+                                            backgroundColor: type.color,
+                                            borderRadius: 4
+                                            }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                    </div>
+
+                    <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                        <span>Unnotified Leave</span>
+                        <select style={styles.selectCalendar}>
+                            <option>This Month</option>
+                            <option>This Year</option>
+                        </select>
+                        </div>
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <img src="https://via.placeholder.com/40" alt="avatar" style={{ width: '30px', height: '30px' }} />
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600 }}>Renz Retuya</div>
+                            <div style={{ fontSize: 12, color: '#777' }}>Officer 1</div>
+                            <div style={{ fontSize: 12, marginTop: 4 }}>Duration: <strong>02–03 May 2025</strong></div>
+                            <div style={{ fontSize: 12 }}>No. of Days: <strong>02</strong></div>
+                        </div>
+                        <div style={{
+                            background: '#fbd103',
+                            color: '#000',
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: 8,
+                            fontSize: 12,
+                        }}>
+                            Pending
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                )}
+
 
              </div>
       </div>
@@ -772,7 +934,6 @@ const styles = {
     },
     btn1: {
         padding: '5px 10px',
-        border: 'none',
         borderRadius: '5px',
         fontWeight: '600',
         backgroundColor: 'white',
@@ -835,13 +996,13 @@ const styles = {
     },
 
     uploadButton: {
-        backgroundColor: '#3B82F6',
+        backgroundColor: '#4b83deff',
         color: '#ffffff',
         border: 'none',
         borderRadius: 8,
-        padding: '12px 24px',
-        fontSize: 14,
-        fontWeight: 600,
+        padding: '8px 10px',
+        fontSize: '14px',
+        fontWeight: 500,
         cursor: 'pointer',
         marginBottom: 24,
         transition: 'all 0.2s ease-in-out',
@@ -851,9 +1012,9 @@ const styles = {
     },
 
     uploadButtonHover: {
-        backgroundColor: '#2563EB',
+        backgroundColor: '#0134a2ff',
         transform: 'translateY(-1px)',
-        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+        boxShadow: '0 2px 5px rgba(59, 131, 246, 0.22)',
     },
 
     loadingText: {
@@ -883,6 +1044,7 @@ const styles = {
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
         borderBottom: '1px solid #E5E7EB',
+        width: '250px'
     },
 
     tdNew: {
@@ -925,6 +1087,123 @@ const styles = {
         backgroundColor: '#F9FAFB',
         transition: 'background-color 0.15s ease-in-out',
     },
+
+    viewButton: {
+        backgroundColor: '#ffe056ff',
+        border: 'none',
+        padding: '5px 10px',
+        borderRadius: '5px',
+        fontWeight: '500',
+        fontSize: '14px'
+    },
+
+    leaveCalendar: {
+        display: 'flex',
+        gap: '24px'
+    },
+
+    calendarContent: {
+        flex: 2,
+    },
+
+    calendarRow1: {
+        display: 'flex', 
+        alignItems: 'center', 
+        marginBottom: 12
+    },
+
+    calendarButton: {
+        background: '#D9D9D9', 
+        border: 'none', 
+        borderRadius: 6, 
+        padding: '8px 12px',
+        fontWeight: 500,
+    },
+
+    calendarIcon: {
+        marginRight: '10px'
+    },
+
+    calendarSearch: {
+        marginLeft: 'auto',
+        padding: '8px 12px',
+        borderRadius: 6,
+        border: '1px solid #ccc',
+        width: 300,
+    },
+
+    calendarFilter: {
+        marginLeft: 8, 
+        background: '#5ab049', 
+        color: '#fff', 
+        border: 'none', 
+        borderRadius: 6, 
+        padding: '8px 12px'
+    },
+
+    filterIcon: {
+        marginRight: '10px'
+    },
+
+    calendarTable: {
+        width: '100%', 
+        borderCollapse: 'separate', 
+        textAlign: 'left',
+        backgroundColor: '#ffffffff',
+        borderRadius: '10px',
+        border: '1px solid #000',
+        borderSpacing: '0',
+        overflow: 'hidden',
+    },
+
+    thCalendar: {
+        width: '200px',
+        fontSize: '14px',
+        padding: '10px',
+        fontWeight: '600',
+        border: '1px solid #ddd',
+        borderTopRadius: '10px'
+    },
+
+    calendarDay: {
+        color: '#9c9c9cff'
+    },
+
+    tdCalendar: {
+        border: '1px solid #ddd', 
+        padding: '8px',
+    },
+
+    calendarPic: {
+        borderRadius: '50%',
+        width: '50px',
+        height: '50px'
+    },
+
+    calendarBox: {
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: 16,
+        marginTop: '50px'
+    },
+
+    calendarLeave: {
+        background: '#fff', 
+        padding: 16, 
+        borderRadius: 12, 
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+    },
+
+    selectCalendar: {
+        backgroundColor: '#b5ffb4ff',
+        border: 'none',
+        borderRadius: '5px',
+        boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.37)',
+        padding: '0 5px',
+        fontSize: '12px'
+    }
+    
 
 
 
