@@ -13,43 +13,22 @@ import {
   faCog,
   faSignOutAlt,
   faBell,
-  faCheckCircle,
-  faUserPlus,
-  faClock,
 } from '@fortawesome/free-solid-svg-icons';
-import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './dashboardCalendar.css';
-import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
 
 function AuditLogs() {
 
-const auditLogs = [
-  {
-    datetime: '2025-06-30 09:45:22',
-    user: 'John Doe',
-    role: 'Admin',
-    activity: 'Login',
-    details: 'Successful login from 192.168.1.10',
-  },
-  {
-    datetime: '2025-06-30 09:48:05',
-    user: 'Jane Smith',
-    role: 'Employee',
-    activity: 'Viewed Leave Records',
-    details: 'Accessed leave records for May 2025',
-  },
-  {
-    datetime: '2025-06-30 10:05:17',
-    user: 'Mark Rivera',
-    role: 'Manager',
-    activity: 'Approved Leave',
-    details: 'Approved vacation leave for Jane Smith',
-  },
-  // Add more entries as needed
-];
+const [auditLogs, setAuditLogs] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:5000/api/audit-logs")
+      .then((res) => res.json())
+      .then((data) => setAuditLogs(data))
+      .catch((err) => console.error("Error fetching logs:", err));
+  }, []);
+
 
   return (
     <div style={styles.dashboardContainer}>
@@ -86,16 +65,18 @@ const auditLogs = [
           <th style={styles.thStyle}>Role</th>
           <th style={styles.thStyle}>Activity</th>
           <th style={styles.thStyle}>Details</th>
+          <th style={styles.thStyle}>IP</th>
         </tr>
       </thead>
       <tbody>
-        {auditLogs.map((log, index) => (
-          <tr key={index} style={{ borderBottom: '1px solid #ddd' }}>
-            <td style={styles.tdStyle}>{log.datetime}</td>
-            <td style={styles.tdStyle}>{log.user}</td>
+        {auditLogs.map((log) => (
+          <tr key={log.id} style={{ borderBottom: '1px solid #ddd' }}>
+            <td style={styles.tdStyle}>{log.created_at}</td>
+            <td style={styles.tdStyle}>{log.full_name}</td>
             <td style={styles.tdStyle}>{log.role}</td>
             <td style={styles.tdStyle}>{log.activity}</td>
             <td style={styles.tdStyle}>{log.details}</td>
+            <td style={styles.tdStyle}>{log.ip_address}</td>
           </tr>
         ))}
       </tbody>

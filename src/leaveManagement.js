@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -28,28 +28,21 @@ import {
   faExpandArrowsAlt,
   faRefresh,
   faFilter,
+  faUpload,
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { useState, useEffect } from 'react';
 import './dashboardCalendar.css';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
-import { BiBorderRight } from 'react-icons/bi';
-import { faUpload } from '@fortawesome/free-solid-svg-icons/faUpload';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
 import Papa from 'papaparse';
-import { useParams } from 'react-router-dom';
 
 function LeaveManagement() {
     const navigate = useNavigate();
+    const { id } = useParams();
     const [activeTab, setActiveTab] = useState('summary');
     const [csvData, setCsvData] = useState([]);
     const [leaveBalances, setLeaveBalances] = useState([]);
     const [loading, setLoading] = useState(true);
-    const { id } = useParams();
-
     const [date, setDate] = useState(new Date());
 
   const [leaveRecords, setLeaveRecords] = useState([
@@ -95,66 +88,49 @@ function LeaveManagement() {
         navigate('/leaveCalendar');
     }
     
-    const handleFileUpload = (e) => {
+const handleFileUpload = (e) => {
     const file = e.target.files[0];
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: async (results) => {
+      complete: (results) => {
         const parsed = results.data;
         setCsvData(parsed);
 
-        // Optional: Validate id_number exists
-        for (let row of parsed) {
-          const { data, error } = await supabase
-            .from('employees')
-            .select('id_number')
-            .eq('id_number', row.id_number)
-            .single();
+        // ✅ Instead of saving to DB, merge into local state
+        setLeaveBalances((prev) => [...prev, ...parsed]);
 
-          if (!data) {
-            alert(`Employee with ID ${row.id_number} not found`);
-            return;
-          }
-        }
-
-        // Upload to leave_balances
-        const { error } = await supabase
-          .from('leave_balances')
-          .upsert(parsed, { onConflict: ['id_number', 'leave_type'] });
-
-        if (error) {
-          alert('Upload failed: ' + error.message);
-        } else {
-          alert('Leave balances uploaded successfully!');
-        }
-      }
+        alert('CSV uploaded and merged into leave balances (frontend only).');
+      },
     });
   };
 
-  const fetchLeaveBalances = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-        .from ('leave_balances')
-        .select(
-            `id,
-            id_number,
-            leave_type, 
-            entitled,
-            used,
-            employees(
-                full_name
-            )
-        `)
-        .order('id_number', {ascending: true});
 
-        if (error) {
-        console.error('Error fetching leave balances:', error);
-        } else {
-        setLeaveBalances(data);
-        }
-        setLoading(false);
-  }
+  const fetchLeaveBalances = () => {
+    // ✅ Demo/mock leave balances instead of Supabase fetch
+    setLoading(true);
+    setTimeout(() => {
+      setLeaveBalances([
+        {
+          id: 1,
+          id_number: '20230001',
+          leave_type: 'Vacation Leave',
+          entitled: 15,
+          used: 5,
+          employees: { full_name: 'Juan Dela Cruz' },
+        },
+        {
+          id: 2,
+          id_number: '20230002',
+          leave_type: 'Sick Leave',
+          entitled: 10,
+          used: 2,
+          employees: { full_name: 'Maria Santos' },
+        },
+      ]);
+      setLoading(false);
+    }, 800); // simulate async
+  };
 
   useEffect(() => {
     fetchLeaveBalances();

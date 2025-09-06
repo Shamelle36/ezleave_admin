@@ -14,7 +14,6 @@ import {
   faSignOutAlt,
   faBell,
   faCheckCircle,
-  faUserPlus,
   faClock,
   faTimesCircle,
   faChevronLeft,
@@ -22,20 +21,12 @@ import {
   faUser,
   faSearch,
   faPrint,
-  faDownLeftAndUpRightToCenter,
-  faUpDown,
-  faFileExport,
-  faExpandArrowsAlt,
   faRefresh,
+  faUpload
 } from '@fortawesome/free-solid-svg-icons';
-import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { useState } from 'react';
 import './dashboardCalendar.css';
-import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
-import { BiBorderRight } from 'react-icons/bi';
-import { faUpload } from '@fortawesome/free-solid-svg-icons/faUpload';
 
 function Attendance() {
 
@@ -160,7 +151,7 @@ function Attendance() {
                 <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
                 <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
                 <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-                <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
+                <li><Link style={styles.sb} to="/audit_logs"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
                 <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>

@@ -23,295 +23,177 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
-import { supabase } from './lib/supabase';
 import Papa from 'papaparse';
 
   function Employees() {
-    const [employeeRecord, setEmployeeRecords] = useState([]);
-    const [departments, setDepartments] = useState([]);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [employeesToUpload, setEmployeesToUpload] = useState([]);
-    const [employeeToDelete, setEmployeeToDelete] = useState(null);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [selectedEmployee, setSelectedEmployee] = useState(null);
-    const [showViewModal, setShowViewModal] = useState(false);
-    const [employeesToEdit, setEmployeesToEdit] = useState([]);
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [view, setView] = useState('list'); // 'list' or 'directory'
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 8;
-    const fileInputRef = React.useRef(null);
-    const navigate = useNavigate();
+ const [employeeRecord, setEmployeeRecords] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [employeesToUpload, setEmployeesToUpload] = useState([]);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [employeesToEdit, setEmployeesToEdit] = useState([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [view, setView] = useState('list');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const fileInputRef = React.useRef(null);
+  const navigate = useNavigate();
 
-    const [newEmployee, setNewEmployee] = useState({
-      full_name: '',
-      email: '',
-      position: '',
-      department_id: '',
-      employment_status: '',
-      gender: '',
-      status: 'active',
-      date_hired: '',
-      id_number: '',
-      contact_number: '',
-      civil_status: '',
-    });
+  const [newEmployee, setNewEmployee] = useState({
+    full_name: '',
+    email: '',
+    position: '',
+    department_id: '',
+    employment_status: '',
+    gender: '',
+    status: 'active',
+    date_hired: '',
+    id_number: '',
+    contact_number: '',
+    civil_status: '',
+  });
 
-    // Fetch employees and departments on mount
-    useEffect(() => {
-      fetchEmployees();
-      fetchDepartments();
-    }, []);
+  // Mock: Load employees and departments
+  useEffect(() => {
+    fetchEmployees();
+    fetchDepartments();
+  }, []);
 
-    // Fetch employees and departments
-    const fetchEmployees = async () => {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-        if (!error) {
-          setEmployeeRecords(data)
-        }
-        else {
-          console.error('Error fetching employees:', error.message);
-        };
-    };
+  const fetchEmployees = async () => {
+    // Replace with API call later
+    setEmployeeRecords([
+      {
+        id: 1,
+        id_number: '20230001',
+        full_name: 'John Doe',
+        email: 'john@example.com',
+        position: 'Developer',
+        department_id: 1,
+        employment_status: 'permanent',
+        gender: 'Male',
+        civil_status: 'Single',
+        status: 'active',
+        contact_number: '09171234567',
+        date_hired: '2023-01-01',
+      },
+    ]);
+  };
 
-    // Fetch departments
-    const fetchDepartments = async () => {
-      const { data, error } = await supabase.from('departments').select('*');
-      if (!error) setDepartments(data);
-    };
+  const fetchDepartments = async () => {
+    // Replace with API call later
+    setDepartments([
+      { id: 1, name: 'IT' },
+      { id: 2, name: 'HR' },
+    ]);
+  };
 
-    // Handle file input click
-    const handleButtonClick = () => {
-      fileInputRef.current.click();
-    }
+  const handleButtonClick = () => {
+    fileInputRef.current.click();
+  };
 
-    // Handle CSV upload and parse
-    const handleCSVUpload = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+  const handleCSVUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-      // Fetch department data
-      const { data: departments, error: deptError } = await supabase
-        .from("departments")
-        .select("id, name");
+    Papa.parse(file, {
+      header: true,
+      complete: (results) => {
+        const employeesRaw = results.data.map((row) => ({
+          full_name: row.full_name?.trim(),
+          email: row.email?.trim(),
+          position: row.position?.trim(),
+          employment_status: row.employment_status?.trim(),
+          department_id: 1, // default mock
+          gender: row.gender?.trim(),
+          date_hired:
+            row.date_hired?.trim() ||
+            new Date().toISOString().split('T')[0],
+          civil_status: row.civil_status?.trim(),
+        }));
 
-      if (deptError) {
-        alert("Error fetching departments: " + deptError.message);
-        return;
-      }
-
-      // Map department names to IDs
-      const departmentMap = Object.fromEntries(
-        departments.map((d) => [d.name.trim(), d.id])
-      );
-
-      // Parse CSV and validate
-      Papa.parse(file, {
-        header: true,
-        complete: async (results) => {
-          const employeesRaw = results.data.map((row) => {
-            const deptId = departmentMap[row.department?.trim()];
-            return deptId
-              ? {
-                  full_name: row.full_name?.trim(),
-                  email: row.email?.trim(),
-                  position: row.position?.trim(),
-                  employment_status: row.employment_status?.trim(),
-                  department_id: deptId,
-                  gender: row.gender?.trim(),
-                  date_hired: row.date_hired?.trim() || new Date().toISOString().split('T')[0],
-                  civil_status: row.civil_status?.trim(),
-                }
-              : null;
-          });
-
-          //  Final validation
-          const isValid = (emp) =>
-            emp &&
+        const validEmployees = employeesRaw.filter(
+          (emp) =>
             emp.full_name &&
             emp.email &&
             emp.position &&
-            emp.employment_status &&
             emp.department_id &&
-            emp.gender &&
-            emp.date_hired &&
-            emp.civil_status;
+            emp.gender
+        );
 
-
-          const validEmployees = employeesRaw.filter(isValid);
-
-          if (validEmployees.length === 0) {
-            alert(
-              "No valid employees to upload. Please check your CSV for correct formatting and department names."
-            );
-            return;
-          }
-
-          setEmployeesToUpload(validEmployees);
-          setShowConfirmModal(true);
-        },
-      });
-    };
-
-    // Confirm upload of employees
-    const confirmUpload = async () => {
-      setShowConfirmModal(false);
-
-      try {
-        const { error } = await supabase
-          .from("employees")
-          .insert(employeesToUpload);
-
-        if (error) {
-          console.error("Supabase insert error:", error);
-          employeesToUpload.forEach((emp, i) =>
-            console.log(`Employee ${i + 1}:`, emp)
-          );
-          alert("Error uploading employees: " + error.message);
-        } else {
-          alert("Employees imported successfully!");
-          fetchEmployees();
+        if (validEmployees.length === 0) {
+          alert('No valid employees in CSV.');
+          return;
         }
-      } catch (err) {
-        console.error("Unexpected error:", err);
-        alert("Unexpected error: " + err.message);
-      }
+
+        setEmployeesToUpload(validEmployees);
+        setShowConfirmModal(true);
+      },
+    });
+  };
+
+  const confirmUpload = async () => {
+    setShowConfirmModal(false);
+    setEmployeeRecords((prev) => [...employeesToUpload, ...prev]);
+    alert('Employees imported successfully!');
+  };
+
+  const handleDeleteClick = (employee) => {
+    setEmployeeToDelete(employee);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    setEmployeeRecords((prev) =>
+      prev.filter((emp) => emp.id !== employeeToDelete.id)
+    );
+    setShowDeleteModal(false);
+    setEmployeeToDelete(null);
+    alert('Employee deleted successfully!');
+  };
+
+  const handleLogout = () => {
+    // Replace with your auth logout
+    window.location.href = '/';
+  };
+
+  const handleAddEmployee = () => {
+    const newEmp = {
+      ...newEmployee,
+      id: Date.now(),
     };
+    setEmployeeRecords((prev) => [newEmp, ...prev]);
+    setShowAddModal(false);
+    alert('Employee added successfully!');
+  };
 
-    // Handle delete button click
-    const handleDeleteClick = (employee) => {
-      setEmployeeToDelete(employee);
-      setShowDeleteModal(true);
-    };
+  const handleViewClick = (employee) => {
+    setSelectedEmployee(employee);
+    setShowViewModal(true);
+  };
 
-    // Confirm delete action
-    const confirmDelete = async () => {
-      if (!employeeToDelete) return;
+  const handleEditClick = (employee) => {
+    setEmployeesToEdit(employee);
+    setShowEditModal(true);
+  };
 
-      const { error } = await supabase
-        .from('employees')
-        .delete()
-        .eq('id', employeeToDelete.id);
+  const handleEditSave = () => {
+    setEmployeeRecords((prev) =>
+      prev.map((emp) =>
+        emp.id === employeesToEdit.id ? employeesToEdit : emp
+      )
+    );
+    setShowEditModal(false);
+    alert('Employee updated successfully!');
+  };
 
-      if (error) {
-        alert('Error deleting employee: ' + error.message);
-      } else {
-        alert('Employee deleted successfully!');
-        fetchEmployees(); // Refresh list
-      }
-
-      setShowDeleteModal(false);
-      setEmployeeToDelete(null);
-    };
-
-    // Handle logout
-    const handleLogout = async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        alert('Error signing out: ' + error.message);
-      } else {
-        window.location.href = '/';
-      }
-    };
-
-    // Handle adding a new employee
-    const handleAddEmployee = async () => {
-      const { full_name, email, position, department_id, employment_status, gender, status, id_number, contact_number, civil_status } = newEmployee;
-
-      // Basic validation
-      if (!full_name || !email || !position || !department_id || !employment_status || !gender || !status || !id_number || !contact_number || !civil_status ) {
-        alert('Please fill in all required fields.');
-        return;
-      }
-
-      const { error } = await supabase.from('employees').insert([
-        {
-          full_name,
-          email,
-          id_number,
-          position,
-          department_id,
-          employment_status,
-          gender,
-          status,
-          contact_number,
-          is_admin: false, // Assuming new employees are not admins by default
-          date_hired: newEmployee.date_hired || new Date().toISOString().split('T')[0], // Default to today if not provided
-          civil_status,
-        }
-      ]);
-
-      if (error) {
-        console.error('Error adding employee:', error.message);
-        alert('Error adding employee: ' + error.message);
-      } else {
-        alert('Employee added successfully!');
-        setShowAddModal(false);
-        setNewEmployee({
-          full_name: '',
-          email: '',
-          id_number: '',
-          contact_number: '',
-          position: '',
-          department_id: '',
-          employment_status: '',
-          gender: '',
-          status: 'active',
-          date_hired: '',
-          civil_status,
-        });
-        fetchEmployees();
-      }
-    };
-
-    // Handle view button click
-    const handleViewClick = (employee) => {
-      setSelectedEmployee(employee);
-      setShowViewModal(true);
-    }
-
-    // Handle edit button click
-    const handleEditClick = (employee) => {
-      setEmployeesToEdit({
-          id: employee.id,
-          full_name: employee.full_name,
-          position: employee.position,
-          department_id: employee.department_id,
-          id_number: employee.id_number || '', // Make sure this is included
-          contact_number: employee.contact_number || '',
-          employment_status: employee.employment_status,
-          date_hired: employee.date_hired,
-          civil_status: employee.civil_status,
-        });
-
-      setShowEditModal(true);
-    }
-
-    // Handle saving edits
-    const handleEditSave = async () => {
-      
-      const { id, ...updates } = employeesToEdit;
-
-      const { error } = await supabase
-        .from('employees')
-        .update(updates)
-        .eq('id', id);
-      
-      if (error) {
-        console.error('Error updating employee:', error.message);
-        alert('Error updating employee: ' + error.message);
-      } else {
-        alert('Employee updated successfully!');
-        setShowEditModal(false);
-        fetchEmployees();
-      }
-    };
-
+  const handleBulkInvite = () => {
+    const emails = employeeRecord.map((e) => e.email).filter(Boolean);
+    alert(`Invites sent to: ${emails.join(', ')}`);
+  };
 
   return (
     <div style={styles.dashboardContainer}>
@@ -363,6 +245,7 @@ import Papa from 'papaparse';
             <div style={styles.firstRow}>
               <p>List of Employee</p>
               <div>
+                <button style={styles.importBtn} onClick={handleBulkInvite}>Invite Employee</button>
                 <button style={styles.importBtn} onClick={handleButtonClick}>
                   <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
                   Import CSV
@@ -722,7 +605,7 @@ import Papa from 'papaparse';
 
                       <select
                         style={styles.modalInputs}
-                        value={employeesToEdit.civil_status}
+                        value={newEmployee.civil_status}
                         onChange={(e) => setNewEmployee({...newEmployee, civil_status: e.target.value})}  
                       >
                         <option value="" disabled>Select Civil Status</option>

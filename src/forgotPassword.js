@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from './firebase';
 
 function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -10,10 +8,21 @@ function ForgotPassword() {
     e.preventDefault();
 
     try {
-      await sendPasswordResetEmail(auth, email);
-      setMessage('Reset email sent! Please check your inbox.');
+      // Example: call your backend API for password reset
+      const response = await fetch("http://localhost:5000/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        setMessage('Reset email sent! Please check your inbox.');
+      } else {
+        const data = await response.json();
+        setMessage(data.error || "Something went wrong. Try again.");
+      }
     } catch (error) {
-      setMessage(error.message);
+      setMessage("Network error. Please try again later.");
     }
   };
 

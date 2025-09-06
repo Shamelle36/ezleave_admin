@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import React, { useEffect, useState } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faTachometerAlt,
   faUsers,
@@ -13,173 +13,256 @@ import {
   faCog,
   faSignOutAlt,
   faBell,
-  faArrowLeft
-} from '@fortawesome/free-solid-svg-icons';
-import 'react-calendar/dist/Calendar.css';
-import { supabase } from './lib/supabase'; // Ensure this import is valid
-import './dashboardCalendar.css';
-import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
+  faArrowLeft,
+} from "@fortawesome/free-solid-svg-icons";
+import "react-calendar/dist/Calendar.css";
+import "./dashboardCalendar.css";
 
 function EmployeeProfile() {
   const { id } = useParams();
   const [employee, setEmployee] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState("overview");
   const [departments, setDepartments] = useState([]);
   const [leaveBalances, setLeaveBalances] = useState([]);
   const navigate = useNavigate();
 
+  // Load dummy employee + departments + leave balances
   useEffect(() => {
-    const fetchEmployeeAndDepartments = async () => {
-      const [{ data: employeeData, error: employeeError }, { data: departmentData, error: departmentError }] = await Promise.all([
-        supabase.from('employees').select('*').eq('id_number', id).single(),
-        supabase.from('departments').select('id, name')
-      ]);
+    // Simulated employee list
+    const dummyEmployees = [
+      {
+        id_number: "20230001",
+        full_name: "Juan Dela Cruz",
+        contact_number: "09171234567",
+        position: "Software Engineer",
+        employment_status: "Permanent",
+        department_id: 1,
+        profile_url: "",
+      },
+      {
+        id_number: "20230002",
+        full_name: "Maria Clara",
+        contact_number: "09987654321",
+        position: "HR Officer",
+        employment_status: "Contractual",
+        department_id: 2,
+        profile_url: "",
+      },
+    ];
 
-      if (!employeeError) setEmployee(employeeData);
-      if (!departmentError) setDepartments(departmentData);
-    };
+    const dummyDepartments = [
+      { id: 1, name: "IT Department" },
+      { id: 2, name: "HR Department" },
+    ];
 
-    fetchEmployeeAndDepartments();
+    const dummyLeaveBalances = [
+      {
+        id: 1,
+        id_number: "20230001",
+        leave_type: "Vacation Leave",
+        entitled: 15,
+        used: 5,
+        remaining: 10,
+      },
+      {
+        id: 2,
+        id_number: "20230001",
+        leave_type: "Sick Leave",
+        entitled: 10,
+        used: 2,
+        remaining: 8,
+      },
+    ];
+
+    const emp = dummyEmployees.find((e) => e.id_number === id);
+    setEmployee(emp || null);
+    setDepartments(dummyDepartments);
+    setLeaveBalances(
+      dummyLeaveBalances.filter((leave) => leave.id_number === id)
+    );
   }, [id]);
-
-    useEffect(() => {
-    const fetchLeaveBalances = async () => {
-      const { data, error } = await supabase
-        .from('leave_balances')
-        .select(`id, id_number, leave_type, entitled, used, remaining`)
-        .eq('id_number', employee?.id_number);
-
-      if (!error && data) setLeaveBalances(data);
-    };
-
-    if (employee?.id_number) fetchLeaveBalances();
-  }, [employee]);
 
   return (
     <div style={styles.dashboardContainer}>
+
+    
       <div style={styles.header}>
         <div>
-            <button
-                onClick={() => navigate(-1)}
-                style={styles.backBtn}
-                >
-                <FontAwesomeIcon icon={faArrowLeft} style={{ marginRight: '8px' }} />
-            </button>
+          <button onClick={() => navigate(-1)} style={styles.backBtn}>
+            <FontAwesomeIcon icon={faArrowLeft} style={{ marginRight: "8px" }} />
+          </button>
         </div>
 
         <div>
-            <input type="text" placeholder="Search..." style={styles.search} />
-            <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+          <input type="text" placeholder="Search..." style={styles.search} />
+          <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
         </div>
       </div>
 
       <div style={styles.sidebar}>
-        <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
+        <img
+          src={require("./images/logo_ez.png")}
+          alt="logo"
+          style={styles.logo}
+        />
         <ul style={styles.sidebarList}>
-          <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-          <li style={styles.btnActive}><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-          <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
-          <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-          <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-          <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
+          <li>
+            <Link style={styles.sb} to="/dashboard">
+              <FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} />{" "}
+              Dashboard
+            </Link>
+          </li>
+          <li style={styles.btnActive}>
+            <Link style={styles.sb} to="/employee">
+              <FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="/attendance">
+              <FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} />{" "}
+              Attendance
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="/leaveManagement">
+              <FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave
+              Management
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="/messages">
+              <FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="/announcement">
+              <FontAwesomeIcon icon={faBullhorn} style={styles.icon} />{" "}
+              Announcement
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="#">
+              <FontAwesomeIcon icon={faClipboardList} style={styles.icon} />{" "}
+              Audit Logs
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="#">
+              <FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User
+              Management
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="#">
+              <FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings
+            </Link>
+          </li>
+          <li>
+            <Link style={styles.sb} to="#">
+              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+            </Link>
+          </li>
         </ul>
       </div>
 
       <div style={styles.content1}>
         {!employee ? (
-          <p>Loading...</p>
+          <p>Employee not found.</p>
         ) : (
           <div>
-
+            {/* Tabs */}
             <div style={styles.tabContainer}>
-                <button
-                    style={tabButtonStyle(activeTab === 'overview')}
-                    onClick={() => setActiveTab('overview')}
-                >
-                    Overview
-                </button>
+              <button
+                style={tabButtonStyle(activeTab === "overview")}
+                onClick={() => setActiveTab("overview")}
+              >
+                Overview
+              </button>
 
-                <button
-                    style={tabButtonStyle(activeTab === 'attendance')}
-                    onClick={() => setActiveTab('attendance')}
-                >
-                    Attendance Record
-                </button>
+              <button
+                style={tabButtonStyle(activeTab === "attendance")}
+                onClick={() => setActiveTab("attendance")}
+              >
+                Attendance Record
+              </button>
             </div>
 
-            {activeTab === 'overview' && (
+            {/* Overview Tab */}
+            {activeTab === "overview" && (
               <div style={styles.overviewCon}>
-                  <div style={styles.profileInfo}>
-                      <div style={styles.profileContainer}>
-                        <div style={styles.imageWrapper}>
-                            {employee.profile_url ? (
-                              <img src={employee.profile_url} alt="Profile" style={styles.profileImage} />
-                            ) : (
-                              <div style={styles.initialsPlaceholder}>
-                                {employee.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                              </div>
-                            )}
-                            </div>
-                        <p style={styles.fname}>{employee.full_name}</p>
-                      </div>
-
-                        
-                          <div style={styles.info}>
-                            <label style={styles.lbl}>ID Number</label>
-                            <p>{employee.id_number}</p>
-                          </div>
-                          
-                          <div style={styles.info}>
-                            <label style={styles.lbl}>Contact Number</label>
-                            <p>{employee.contact_number}</p>
-                          </div>
-
-                          <div style={styles.info}>
-                            <label style={styles.lbl}>Position</label>
-                            <p>{employee.position}</p>
-                          </div>
-
-                          <div style={styles.info}>
-                            <label style={styles.lbl}>Status</label>
-                            <p>{employee.employment_status}</p>
-                          </div>
-
-                    </div>
-
-                    <div style={styles.lvlCrdt}>
-                      <p style={styles.leaveCreditsLbl}>Leave Credits</p>
-                      {leaveBalances.map((leave, idx) => (
-                        <div key={idx} style={styles.lvType}>
-                          <div style={styles.lblLeave}>
-                            <p>{leave.leave_type}</p>
-                          </div>
-                          <div style={styles.lvlBal}>
-                            <div style={styles.sickL}>
-                              <p style={styles.lblEn}>{leave.entitled}</p>
-                              <p style={styles.lblName}>Entitled</p>
-                            </div>
-                            <div style={styles.sickL}>
-                              <p style={styles.lblUs}>{leave.used}</p>
-                              <p style={styles.lblName}>Used</p>
-                            </div>
-                            <div style={styles.sickL}>
-                              <p style={styles.lblRe}>{leave.remaining}</p>
-                              <p style={styles.lblName}>Remaining</p>
-                            </div>
-                          </div>
+                <div style={styles.profileInfo}>
+                  <div style={styles.profileContainer}>
+                    <div style={styles.imageWrapper}>
+                      {employee.profile_url ? (
+                        <img
+                          src={employee.profile_url}
+                          alt="Profile"
+                          style={styles.profileImage}
+                        />
+                      ) : (
+                        <div style={styles.initialsPlaceholder}>
+                          {employee.full_name
+                            ?.split(" ")
+                            .map((w) => w[0])
+                            .join("")
+                            .slice(0, 2)}
                         </div>
-                      ))}
+                      )}
                     </div>
+                    <p style={styles.fname}>{employee.full_name}</p>
+                  </div>
 
+                  <div style={styles.info}>
+                    <label style={styles.lbl}>ID Number</label>
+                    <p>{employee.id_number}</p>
+                  </div>
+
+                  <div style={styles.info}>
+                    <label style={styles.lbl}>Contact Number</label>
+                    <p>{employee.contact_number}</p>
+                  </div>
+
+                  <div style={styles.info}>
+                    <label style={styles.lbl}>Position</label>
+                    <p>{employee.position}</p>
+                  </div>
+
+                  <div style={styles.info}>
+                    <label style={styles.lbl}>Status</label>
+                    <p>{employee.employment_status}</p>
+                  </div>
                 </div>
+
+                {/* Leave Credits */}
+                <div style={styles.lvlCrdt}>
+                  <p style={styles.leaveCreditsLbl}>Leave Credits</p>
+                  {leaveBalances.map((leave, idx) => (
+                    <div key={idx} style={styles.lvType}>
+                      <div style={styles.lblLeave}>
+                        <p>{leave.leave_type}</p>
+                      </div>
+                      <div style={styles.lvlBal}>
+                        <div style={styles.sickL}>
+                          <p style={styles.lblEn}>{leave.entitled}</p>
+                          <p style={styles.lblName}>Entitled</p>
+                        </div>
+                        <div style={styles.sickL}>
+                          <p style={styles.lblUs}>{leave.used}</p>
+                          <p style={styles.lblName}>Used</p>
+                        </div>
+                        <div style={styles.sickL}>
+                          <p style={styles.lblRe}>{leave.remaining}</p>
+                          <p style={styles.lblName}>Remaining</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
-
-            {activeTab === 'attendance' && (
+            {/* Attendance Tab */}
+            {activeTab === "attendance" && (
               <div>
                 <p>Attendance record details will go here...</p>
               </div>
@@ -190,6 +273,7 @@ function EmployeeProfile() {
     </div>
   );
 }
+
 
 const tabButtonStyle = (active) => ({
   backgroundColor: active ? '#5ab049ff' : '#ffffffff',

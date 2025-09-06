@@ -1,84 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import './App.css';
-import { FcGoogle } from 'react-icons/fc';
-import { supabase } from './lib/supabase';
+// src/Login.js
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import "./App.css";
+import { FcGoogle } from "react-icons/fc";
 
 function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Auto-check session
   useEffect(() => {
-    async function checkSession() {
-      setLoading(true); // begin loading state
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', session.user.id)
-          .single();
-
-        if (error || !profile?.is_admin) {
-          console.error('Session admin check failed:', error?.message);
-          setMessage('You are not authorized for this area. Logging out.');
-          await supabase.auth.signOut();
-          setLoading(false);
-          return;
-        }
-
-        setMessage('Already logged in as admin! Redirecting...');
-        setLoading(false);
-        setTimeout(() => navigate("/dashboard"), 500);
-      } else {
-        setLoading(false); // no session, reset loading
-      }
+    const savedUser = localStorage.getItem("admin");
+    if (savedUser) {
+      navigate("/dashboard"); // already logged in
     }
-
-    checkSession();
   }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setMessage('');
+    setMessage("");
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const res = await axios.post("http://localhost:5000/api/auth/login", {
         email,
         password,
       });
 
-      if (error || !data?.user) {
-        setMessage(error?.message || 'Login failed.');
+      if (res.status === 200) {
+        setMessage("Login successful! Redirecting to admin dashboard...");
+        localStorage.setItem("admin", JSON.stringify(res.data.user)); // Save session
         setLoading(false);
-        return;
+
+        setTimeout(() => navigate("/dashboard"), 1000);
       }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError || !profile?.is_admin) {
-        setMessage('You do not have administrative access. Logging out.');
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
-      }
-
-      setMessage('Login successful! Redirecting to admin dashboard...');
-      setLoading(false);
-      setTimeout(() => navigate("/dashboard"), 500);
-
     } catch (err) {
-      console.error('Unexpected error:', err);
-      setMessage('An unexpected error occurred: ' + err.message);
+      console.error(err);
+      setMessage(err.response?.data?.message || "Login failed");
       setLoading(false);
     }
   };
@@ -86,15 +48,15 @@ function Login() {
   return (
     <div className="container">
       <div className="wrapper">
-        <div className='col1'>
-          <div className='circle'>
-            <div className='circle-inner'>
-              <img src={require('./images/logo_ez.png')} alt="Logo" />
+        <div className="col1">
+          <div className="circle">
+            <div className="circle-inner">
+              <img src={require("./images/logo_ez.png")} alt="Logo" />
             </div>
           </div>
         </div>
 
-        <div className='col2'>
+        <div className="col2">
           <h2>Admin Log In</h2>
           <form onSubmit={handleLogin}>
             <input
@@ -111,33 +73,51 @@ function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <button type="submit">Sign In</button>
+            <button type="submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
           </form>
 
-          {loading && <p style={{ marginTop: '1rem', color: 'blue' }}>Checking admin status...</p>}
+          {loading && (
+            <p style={{ marginTop: "1rem", color: "blue" }}>
+              Checking credentials...
+            </p>
+          )}
           {message && (
-            <p style={{ marginTop: '1rem', color: message.includes('successful') || message.includes('Attempting') ? 'green' : 'red' }}>
+            <p
+              style={{
+                marginTop: "1rem",
+                color: message.includes("successful") ? "green" : "red",
+              }}
+            >
               {message}
             </p>
           )}
 
-          <p className="forgot-password"><Link to="/forgotPassword">Forgot password?</Link></p>
+          <p className="forgot-password">
+            <Link to="/forgotPassword">Forgot password?</Link>
+          </p>
 
-          <div className='lines'>
-            <div className='line'></div>
-            <div className='or'><p>Or</p></div>
-            <div className='line'></div>
+          <div className="lines">
+            <div className="line"></div>
+            <div className="or">
+              <p>Or</p>
+            </div>
+            <div className="line"></div>
           </div>
 
-          <div className='social-login'>
-            <button className='google'>
-              <FcGoogle style={{ marginRight: '10px', fontSize: '25px' }} />
+          <div className="social-login">
+            <button className="google">
+              <FcGoogle style={{ marginRight: "10px", fontSize: "25px" }} />
               Continue with Google
             </button>
           </div>
 
-          <div className='signup'>
-            <p>Don't have an account? <Link to="/signup">Sign Up</Link></p>
+          {/* ❌ Remove this if you only want admin login */}
+          <div className="signup">
+            <p>
+              Don't have an account? <Link to="/signup">Sign Up</Link>
+            </p>
           </div>
         </div>
       </div>
