@@ -19,56 +19,54 @@ import './dashboardCalendar.css';
 
 function Announcement() {
   const [showModal, setShowModal] = useState(false);
-
-  const [announcements, setAnnouncements] = useState(() => {
-    // load from localStorage if available
-    const saved = localStorage.getItem('announcements');
-    return saved
-      ? JSON.parse(saved)
-      : [
-          {
-            title: 'Power Interruption',
-            details: 'There will be a scheduled power interruption in the municipal hall.',
-            priority: 'Urgent',
-            posted_on: '2025-07-28',
-            posted_by: 'Admin User',
-            position: 'System Admin',
-          },
-        ];
-  });
-
+  const [announcements, setAnnouncements] = useState([]);
   const [newAnnouncement, setNewAnnouncement] = useState({
-    title: '',
-    details: '',
-    priority: 'Normal',
+    title: "",
+    details: "",
+    priority: "Normal",
   });
 
-  // save announcements to localStorage
   useEffect(() => {
-    localStorage.setItem('announcements', JSON.stringify(announcements));
-  }, [announcements]);
+    fetch("http://localhost:5000/api/announcements")
+      .then((res) => res.json())
+      .then((data) => {
+        setAnnouncements(Array.isArray(data) ? data : data.data || []);
+      })
+      .catch((err) => console.error("Error fetching announcements:", err));
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setNewAnnouncement((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setNewAnnouncement((prev) => ({ ...prev, [name]: value }));
   };
 
-  const addAnnouncement = () => {
-    const today = new Date().toISOString().split('T')[0];
+  const addAnnouncement = async () => {
     const newPost = {
-      ...newAnnouncement,
-      posted_on: today,
-      posted_by: 'Admin User',
-      position: 'System Admin',
+      title: newAnnouncement.title,
+      details: newAnnouncement.details,
+      priority: newAnnouncement.priority,
+      created_by: 1,
     };
 
-    setAnnouncements([newPost, ...announcements]);
-    setNewAnnouncement({ title: '', details: '', priority: 'Normal' });
-    setShowModal(false);
+    try {
+      const res = await fetch("http://localhost:5000/api/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPost),
+      });
+
+      if (!res.ok) throw new Error("Failed to post announcement");
+
+      const savedAnnouncement = await res.json();
+      setAnnouncements([savedAnnouncement, ...announcements]);
+      setNewAnnouncement({ title: "", details: "", priority: "Normal" });
+      setShowModal(false);
+    } catch (error) {
+      console.error("Error posting announcement:", error);
+    }
   };
+
+  
 
   return (
     <div style={styles.dashboardContainer}>
@@ -169,7 +167,6 @@ function Announcement() {
                         value={newAnnouncement.priority}
                         onChange={handleInputChange}
                       >
-                        <option value="High">High</option>
                         <option value="Normal">Normal</option>
                         <option value="Urgent">Urgent</option>
                       </select>
@@ -216,7 +213,6 @@ function Announcement() {
 // Priority colors
 const getPriorityColor = (priority) => {
   switch (priority) {
-    case 'High': return '#FF5C5C';
     case 'Normal': return '#F5A623';
     case 'Urgent': return '#D0021B';
     default: return '#4A90E2';
