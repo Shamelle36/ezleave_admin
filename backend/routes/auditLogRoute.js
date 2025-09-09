@@ -1,6 +1,5 @@
-// routes/auditLogRoutes.js
 import express from "express";
-import sql from "../config/db.js"; // ✅ use default export, not { sql }
+import sql from "../config/db.js";
 
 const router = express.Router();
 
@@ -14,7 +13,21 @@ router.get("/", async (req, res) => {
       ORDER BY a.created_at DESC
     `;
 
-    res.json(result); // postgres.js already returns rows
+    // Convert created_at to PH date + 12-hour time
+    const formatted = result.map((log) => ({
+      ...log,
+      created_at: new Date(log.created_at).toLocaleString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: true,
+        timeZone: "Asia/Manila",
+      }),
+    }));
+
+    res.json(formatted);
   } catch (err) {
     console.error("Error fetching logs:", err);
     res.status(500).json({ error: "Error fetching logs" });

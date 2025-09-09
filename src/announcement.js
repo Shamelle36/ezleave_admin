@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -16,6 +16,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
+import { FaEllipsisV } from "react-icons/fa";
 
 function Announcement() {
   const [showModal, setShowModal] = useState(false);
@@ -23,9 +24,25 @@ function Announcement() {
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: "",
     details: "",
-    priority: "Normal",
+    priority: "",
   });
 
+
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+
+  const [files, setFiles] = useState([]);  
+  const [images, setImages] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+  const toggleExpand = () => setExpanded(!expanded);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  
   useEffect(() => {
     fetch("http://localhost:5000/api/announcements")
       .then((res) => res.json())
@@ -35,24 +52,58 @@ function Announcement() {
       .catch((err) => console.error("Error fetching announcements:", err));
   }, []);
 
+  useEffect(() => {
+    if (previewImage) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+
+    // Cleanup when component unmounts
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [previewImage]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setNewAnnouncement((prev) => ({ ...prev, [name]: value }));
   };
 
+ const handleFileClick = () => fileInputRef.current.click();
+  const handleImageClick = () => imageInputRef.current.click();
+
+  const handleFileChange = (e) => {
+    // Merge new files with existing files
+    setFiles((prev) => [...prev, ...Array.from(e.target.files)]);
+  };
+
+  const handleImageChange = (e) => {
+    // Merge new images with existing images
+    setImages((prev) => [...prev, ...Array.from(e.target.files)]);
+  };
+
   const addAnnouncement = async () => {
-    const newPost = {
-      title: newAnnouncement.title,
-      details: newAnnouncement.details,
-      priority: newAnnouncement.priority,
-      created_by: 1,
-    };
+    const formData = new FormData();
+    formData.append("title", newAnnouncement.title);
+    formData.append("details", newAnnouncement.details);
+    formData.append("priority", newAnnouncement.priority);
+    formData.append("created_by", 1);
+
+    // Append documents
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+
+    // Append images
+    images.forEach((img) => {
+      formData.append("images", img);
+    });
 
     try {
       const res = await fetch("http://localhost:5000/api/announcements", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPost),
+        body: formData,
       });
 
       if (!res.ok) throw new Error("Failed to post announcement");
@@ -60,12 +111,81 @@ function Announcement() {
       const savedAnnouncement = await res.json();
       setAnnouncements([savedAnnouncement, ...announcements]);
       setNewAnnouncement({ title: "", details: "", priority: "Normal" });
+      setFiles([]);
+      setImages([]);
       setShowModal(false);
     } catch (error) {
       console.error("Error posting announcement:", error);
     }
   };
 
+  const editAnnouncement = (id) => {
+    const announcementToEdit = announcements.find(a => a.id === id);
+    setNewAnnouncement({
+      title: announcementToEdit.title,
+      details: announcementToEdit.details,
+      priority: announcementToEdit.priority,
+    });
+    setFiles([]);   // optionally reset files (or load existing ones if you want)
+    setImages([]);
+    setEditingAnnouncement(announcementToEdit);
+    setIsEditMode(true); // open modal in edit mode
+    setShowModal(true);
+  };
+
+
+
+  const deleteAnnouncement = (id) => {
+    const announcementToDelete = announcements.find(a => a.id === id);
+    setEditingAnnouncement(announcementToDelete);
+    setShowDeleteModal(true);
+  };
+
+  const saveEditedAnnouncement = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("title", newAnnouncement.title);
+      formData.append("details", newAnnouncement.details);
+      formData.append("priority", newAnnouncement.priority);
+      
+      // Append new files/images if any
+      files.forEach((file) => formData.append("files", file));
+      images.forEach((img) => formData.append("images", img));
+
+      const res = await fetch(`http://localhost:5000/api/announcements/${editingAnnouncement.id}`, {
+        method: "PUT",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Failed to save changes");
+      const updated = await res.json();
+
+      setAnnouncements(announcements.map(a => a.id === updated.id ? updated : a));
+      setShowModal(false);
+      setIsEditMode(false);
+      setEditingAnnouncement(null);
+      setNewAnnouncement({ title: "", details: "", priority: "" });
+      setFiles([]);
+      setImages([]);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+
+  const confirmDeleteAnnouncement = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/announcements/${editingAnnouncement.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to delete announcement");
+      setAnnouncements(announcements.filter(a => a.id !== editingAnnouncement.id));
+      setShowDeleteModal(false);
+      setEditingAnnouncement(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
   
 
   return (
@@ -99,8 +219,7 @@ function Announcement() {
             <div style={styles.announcementLeft}>
               <input style={styles.searchInput} placeholder="Search" />
               <select style={styles.filterBtn}>
-                <option>Priority</option>
-                <option>High</option>
+                <option selected disabled>Priority</option>
                 <option>Normal</option>
                 <option>Urgent</option>
               </select>
@@ -114,39 +233,184 @@ function Announcement() {
             </div>
           </div>
 
-          {announcements.map((announcement, index) => (
-            <div
-              key={index}
-              style={{
-                ...styles.announcementCardContent,
-                borderLeft: `10px solid ${getPriorityColor(announcement.priority)}`,
-              }}
-            >
-              <div style={styles.announcementRow1}>
-                <div style={styles.announcementSender}>
-                  <div style={styles.announcementProfile}></div>
-                  <div style={styles.announcementName}>
-                    <p style={styles.lblName}>{announcement.posted_by}</p>
-                    <p style={styles.lblPosition}>{announcement.position}</p>
+          {announcements.length === 0 ? (
+              <p style={styles.noAnnouncementText}>
+                No announcements have been posted yet.
+              </p>
+            ) : (
+              announcements.map((announcement, index) => (
+                <div
+                  key={index}
+                  style={{
+                    ...styles.announcementCardContent,
+                    borderLeft: `10px solid ${getPriorityColor(announcement.priority)}`,
+                  }}
+                >
+                  <div style={styles.announcementRow1}>
+                    <div style={styles.announcementSender}>
+                      <div style={styles.announcementProfile}></div>
+                      <div style={styles.announcementName}>
+                        <p style={styles.lblName}>{announcement.posted_by}</p>
+                        <p style={styles.lblPosition}>{announcement.position}</p>
+                      </div>
+                    </div>
+                    <div style={styles.announcementDate}>
+                      <p style={styles.lblDate}>{announcement.created_at}</p>
+                      <p style={styles.lblPriority}>{announcement.priority}</p>
+                      <button onClick={() => setMenuOpen(!menuOpen)}>
+                        <FaEllipsisV />
+                      </button>
+                      {menuOpen && (
+                        <div style={styles.menu}>
+                          <button onClick={() => editAnnouncement(announcement.id)}>Edit</button>
+                          <button onClick={() => deleteAnnouncement(announcement.id)}>Delete</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div style={styles.announcementDate}>
-                  <p style={styles.lblDate}>{announcement.posted_on}</p>
-                  <p style={styles.lblPriority}>{announcement.priority}</p>
-                </div>
-              </div>
 
-              <div style={styles.announcementDetails}>
-                <div style={styles.announcementText}>
-                  <p style={styles.lblTitle}>{announcement.title}</p>
-                  <p style={styles.lblDetails}>{announcement.details}</p>
+                  <div style={styles.announcementDetails}>
+                    <div style={styles.announcementText}>
+                      <p style={styles.lblTitle}>{announcement.title}</p>
+                      <p style={{
+                        ...styles.lblDetails,
+                        textAlign: "justify",
+                        display: "-webkit-box",
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        WebkitLineClamp: expanded ? "unset" : 2, // 2 lines when collapsed
+                      }}>
+                      {announcement.details}
+                      </p>
+
+                      
+
+                      {/* Show images if any */}
+                      {announcement.images && announcement.images.length > 0 && (
+                        <div style={{ marginTop: "10px" }}>
+                          {announcement.images.map((img, i) => (
+                            <img
+                              key={i}
+                              src={`http://localhost:5000${img}`} // serve from backend uploads
+                              alt={`attachment-${i}`}
+                              style={{ 
+                                maxWidth: "120px",
+                                maxHeight: "120px",
+                                marginRight: "10px",
+                                marginBottom: "10px",
+                                cursor: "pointer",
+                                borderRadius: "6px",
+                                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                              }}
+                              onClick={() =>
+                                setPreviewImage(`http://localhost:5000${img}`)
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Files */}
+                        {announcement.files && announcement.files.length > 0 && (
+                          <div style={{ marginTop: "10px" }}>
+                            {announcement.files.map((file, i) => {
+                              const fileName = file.split("/").pop(); // get actual file name
+                              return (
+                                <a
+                                  key={i}
+                                  href={`http://localhost:5000${file}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: "inline-block",
+                                    padding: "8px 14px",
+                                    margin: "5px",
+                                    borderRadius: "6px",
+                                    backgroundColor: "#ffffffff",
+                                    color: "#000",
+                                    fontSize: "14px",
+                                    fontWeight: "500",
+                                    textDecoration: "none",
+                                    transition: "0.2s",
+                                    boxShadow: '1px 2px 1px rgba(34, 34, 34, 0.16)'
+                                  }}
+                                  onMouseEnter={(e) => (e.target.style.backgroundColor = "#f0f0f0ff")}
+                                  onMouseLeave={(e) => (e.target.style.backgroundColor = "#ffffffff")}
+                                >
+                                 {fileName}
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                    </div>
+
+                    
+
+                    
+                  </div>
+
+                  <div style={styles.announcementRead}>
+                        {announcement.details.length > 100 && ( 
+                                  <button onClick={toggleExpand} style={styles.readBtn}>
+                                    {expanded ? "Show Less" : "Read More"}
+                                  </button>
+                                )}                    
+                      </div>
+
                 </div>
-                <div style={styles.announcementRead}>
-                  <button style={styles.readBtn}>Read More</button>
-                </div>
+              ))
+            )}
+
+            {previewImage && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0,0,0,0.7)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000,
+                }}
+                onClick={() => setPreviewImage(null)} // close on click
+              >
+                <img
+                  src={previewImage}
+                  alt="preview"
+                  style={{
+                    maxWidth: "90%",
+                    maxHeight: "90%",
+                    borderRadius: "8px",
+                    boxShadow: "0 0 20px rgba(0,0,0,0.5)",
+                  }}
+                />
+
+                <button
+                  onClick={() => setPreviewImage(null)}
+                  style={{
+                    position: "absolute",
+                    background: "red",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: "30px",
+                    height: "30px",
+                    fontSize: "18px",
+                    cursor: "pointer",
+                    top: 10,
+                    right: 100,
+                    marginRight: '10px'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
-            </div>
-          ))}
+            )}
 
           {showModal && (
             <div style={styles.modalOverlay}>
@@ -167,6 +431,7 @@ function Announcement() {
                         value={newAnnouncement.priority}
                         onChange={handleInputChange}
                       >
+                        <option value="" disabled selected>Select Priority</option>
                         <option value="Normal">Normal</option>
                         <option value="Urgent">Urgent</option>
                       </select>
@@ -192,19 +457,94 @@ function Announcement() {
                       style={styles.txtArea}
                     />
                   </div>
+
+                   {files.length > 0 && (
+                          <ul>
+                            {files.map((f, i) => (
+                              <li key={i}>{f.name}</li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {images.length > 0 && (
+                          <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                            {images.map((img, i) => (
+                              <img
+                                key={i}
+                                src={URL.createObjectURL(img)}
+                                alt="preview"
+                                width="80"
+                                height="80"
+                                style={{ borderRadius: "5px", objectFit: "cover" }}
+                              />
+                            ))}
+                          </div>
+                        )}
+
                   <div style={styles.btnUploads}>
-                    <button style={styles.btnFile}>Upload File</button>
-                    <button style={styles.btnImage}>Upload Image</button>
+                    <button style={styles.btnFile} onClick={handleFileClick}>Upload File</button>
+                    <button style={styles.btnImage} onClick={handleImageClick}>Upload Image</button>
                   </div>
+
+                  {/* Hidden Input */}
+                        <input
+                          type="file"
+                          multiple
+                          ref={fileInputRef}
+                          style={{ display: "none" }}
+                          onChange={handleFileChange}
+                        />
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          ref={imageInputRef}
+                          style={{ display: "none" }}
+                          onChange={handleImageChange}
+                        />                       
+
                 </div>
                 <div style={styles.btnBottom}>
-                  <button style={styles.btnPost} onClick={addAnnouncement}>Post</button>
-                  <button style={styles.btnCancel} onClick={() => setShowModal(false)}>Cancel</button>
+                  <button
+                    style={styles.btnPost}
+                    onClick={isEditMode ? saveEditedAnnouncement : addAnnouncement}
+                  >
+                    {isEditMode ? "Save Changes" : "Post"}
+                  </button>
+                  <button
+                    style={styles.btnCancel}
+                    onClick={() => {
+                      setShowModal(false);
+                      setIsEditMode(false);
+                      setEditingAnnouncement(null);
+                      setNewAnnouncement({ title: "", details: "", priority: "" });
+                      setFiles([]);
+                      setImages([]);
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
+
               </div>
             </div>
           )}
         </div>
+
+
+      {showDeleteModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContainer}>
+            <p>Are you sure you want to delete this announcement?</p>
+            <div>
+              <button onClick={confirmDeleteAnnouncement}>Yes, Delete</button>
+              <button onClick={() => setShowDeleteModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       </div>
     </div>
   );
@@ -334,7 +674,8 @@ const styles = {
     borderRadius: '5px',
     border: 'none',
     backgroundColor: '#A8FC0080',
-    boxShadow: '2px 2px 2px rgba(0, 0, 0, 0.16)'
+    boxShadow: '2px 2px 2px rgba(0, 0, 0, 0.16)',
+    fontWeight: 500
   },
 
   announcementCardContent: {
@@ -538,6 +879,11 @@ const styles = {
     borderBottom: '1px solid #dcdcdcff',
     fontSize: '20px',
     fontWeight: '500'
+  },
+  noAnnouncementText: {
+    textAlign: "center", 
+    marginTop: "50px",
+    color: "#777",
   }
 };
 

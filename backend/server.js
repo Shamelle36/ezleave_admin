@@ -19,6 +19,8 @@ app.use(express.json());
 app.use("/api/auth", authRoute);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/announcements", announcementRoute);
+app.use("/uploads", express.static("uploads"));
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
