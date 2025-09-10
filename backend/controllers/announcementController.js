@@ -1,6 +1,7 @@
 // backend/controllers/announcementController.js
 import sql from "../config/db.js";
 import fs from "fs";
+import { formatPHDateTime } from "../utils/dateFormatter.js"
 
 export const getAnnouncements = async (req, res) => {
   try {
@@ -13,43 +14,11 @@ export const getAnnouncements = async (req, res) => {
       ORDER BY a.created_at DESC
     `;
 
-    // Convert created_at and updated_at to PH date + 12-hour time with divider
-    const formatted = result.map(a => {
-      const createdDate = new Date(a.created_at);
-      const updatedDate = a.updated_at ? new Date(a.updated_at) : null;
-
-      const formattedCreated = `${createdDate.toLocaleDateString("en-PH", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        timeZone: "Asia/Manila"
-      })} | ${createdDate.toLocaleTimeString("en-PH", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-        timeZone: "Asia/Manila"
-      })}`;
-
-      const formattedUpdated = updatedDate
-        ? `${updatedDate.toLocaleDateString("en-PH", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            timeZone: "Asia/Manila"
-          })} | ${updatedDate.toLocaleTimeString("en-PH", {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-            timeZone: "Asia/Manila"
-          })}`
-        : null;
-
-      return {
-        ...a,
-        created_at: formattedCreated,
-        updated_at: formattedUpdated
-      };
-    });
+    const formatted = result.map(a => ({
+      ...a,
+      created_at: formatPHDateTime(a.created_at),
+      updated_at: formatPHDateTime(a.updated_at),
+    }));
 
     res.json(formatted);
 
@@ -109,7 +78,14 @@ export const createAnnouncement = async (req, res) => {
       WHERE a.id = ${announcementId}
     `;
 
-    res.status(201).json(fullAnnouncement[0]);
+    const announcementData = fullAnnouncement[0];
+
+    res.status(200).json({
+      ...announcementData,
+      created_at: formatPHDateTime(announcementData.created_at),
+      updated_at: formatPHDateTime(announcementData.updated_at),
+    });
+
   } catch (err) {
     console.error("Error creating announcement:", err);
     res.status(500).json({ error: "Failed to create announcement" });
@@ -131,7 +107,7 @@ export const updateAnnouncement = async (req, res) => {
     `;
     if (!current[0]) return res.status(404).json({ error: "Announcement not found" });
 
-    const updatedAnnouncement = await sql`
+    await sql`
       UPDATE announcements
       SET
         title = ${title ?? current[0].title},
@@ -141,7 +117,16 @@ export const updateAnnouncement = async (req, res) => {
         images = ${imagePaths ?? current[0].images},
         updated_at = NOW()
       WHERE id = ${id}
-      RETURNING id, title, details, priority, files, images, created_by, created_at
+    `;
+
+    // Fetch full announcement info with user details
+    const updatedAnnouncement = await sql`
+      SELECT a.id, a.title, a.details, a.priority, a.created_at, a.updated_at,
+             a.files, a.images,
+             u.full_name AS posted_by, u.role AS position
+      FROM announcements a
+      JOIN userAdmin u ON a.created_by = u.id
+      WHERE a.id = ${id}
     `;
 
     const announcementData = updatedAnnouncement[0];
@@ -153,7 +138,7 @@ export const updateAnnouncement = async (req, res) => {
     await sql`
       INSERT INTO audit_logs (user_id, role, activity, details, ip_address, created_at)
       VALUES (
-        ${created_by ?? 1}, 
+        ${created_by ?? current[0].created_by}, 
         ${userRole},
         'UPDATE ANNOUNCEMENT',
         ${`Updated announcement: "${title ?? announcementData.title}"`},
@@ -162,7 +147,12 @@ export const updateAnnouncement = async (req, res) => {
       )
     `;
 
-    res.status(200).json(announcementData);
+    res.status(200).json({
+      ...announcementData,
+      created_at: formatPHDateTime(announcementData.created_at),
+      updated_at: formatPHDateTime(announcementData.updated_at),
+    });
+
   } catch (err) {
     console.error("Error updating announcement:", err);
     res.status(500).json({ error: "Failed to update announcement" });

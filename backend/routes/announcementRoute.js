@@ -22,8 +22,8 @@ router.get("/", getAnnouncements);
 router.post(
   "/",
   upload.fields([
-    { name: "files", maxCount: 5 },   // e.g., PDF, DOCX, etc.
-    { name: "images", maxCount: 5 },  // e.g., JPG, PNG, etc.
+    { name: "files", maxCount: 10 },   // e.g., PDF, DOCX, etc.
+    { name: "images", maxCount: 10 },  // e.g., JPG, PNG, etc.
   ]),
   createAnnouncement
 );

@@ -36,7 +36,7 @@ function Announcement() {
   const [previewImage, setPreviewImage] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const toggleExpand = () => setExpanded(!expanded);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(null);
 
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -82,6 +82,15 @@ function Announcement() {
     // Merge new images with existing images
     setImages((prev) => [...prev, ...Array.from(e.target.files)]);
   };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeFile = (index) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
 
   const addAnnouncement = async () => {
     const formData = new FormData();
@@ -132,8 +141,6 @@ function Announcement() {
     setIsEditMode(true); // open modal in edit mode
     setShowModal(true);
   };
-
-
 
   const deleteAnnouncement = (id) => {
     const announcementToDelete = announcements.find(a => a.id === id);
@@ -186,6 +193,8 @@ function Announcement() {
       console.error(err);
     }
   };
+
+  
   
 
   return (
@@ -219,9 +228,9 @@ function Announcement() {
             <div style={styles.announcementLeft}>
               <input style={styles.searchInput} placeholder="Search" />
               <select style={styles.filterBtn}>
-                <option selected disabled>Priority</option>
-                <option>Normal</option>
-                <option>Urgent</option>
+                <option selected disabled required>Priority</option>
+                <option value="Normal">Normal</option>
+                <option value="Urgent">Urgent</option>
               </select>
               <select style={styles.filterBtn}>
                 <option>Visibility</option>
@@ -257,15 +266,39 @@ function Announcement() {
                     <div style={styles.announcementDate}>
                       <p style={styles.lblDate}>{announcement.created_at}</p>
                       <p style={styles.lblPriority}>{announcement.priority}</p>
-                      <button onClick={() => setMenuOpen(!menuOpen)}>
-                        <FaEllipsisV />
-                      </button>
-                      {menuOpen && (
-                        <div style={styles.menu}>
-                          <button onClick={() => editAnnouncement(announcement.id)}>Edit</button>
-                          <button onClick={() => deleteAnnouncement(announcement.id)}>Delete</button>
-                        </div>
-                      )}
+
+                      <div style={{ position: "relative", display: "inline-block" }}>
+                        <button
+                          style={styles.menuDots}
+                          onClick={() =>
+                            setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
+                          }
+                          onBlur={() => setMenuOpen(null)} 
+                        >
+                          <FaEllipsisV />
+                        </button>
+
+                        {menuOpen === announcement.id && (
+                          <div style={styles.menu}>
+                            <button
+                              style={styles.buttonMenu1}
+                              onMouseDown={(e) => e.preventDefault()} // ✅ prevents blur from firing too early
+                              onClick={() => editAnnouncement(announcement.id)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              style={styles.buttonMenu}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => deleteAnnouncement(announcement.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+
                     </div>
                   </div>
 
@@ -377,7 +410,7 @@ function Announcement() {
                   alignItems: "center",
                   zIndex: 1000,
                 }}
-                onClick={() => setPreviewImage(null)} // close on click
+                onClick={() => setPreviewImage(null)} 
               >
                 <img
                   src={previewImage}
@@ -459,27 +492,66 @@ function Announcement() {
                   </div>
 
                    {files.length > 0 && (
-                          <ul>
-                            {files.map((f, i) => (
-                              <li key={i}>{f.name}</li>
-                            ))}
-                          </ul>
-                        )}
+                        <ul style={{ marginTop: "10px" }}>
+                          {files.map((f, i) => (
+                            <li key={i} style={{ position: "relative", marginBottom: "5px" }}>
+                              {f.name}
+                              <button
+                                onClick={() => removeFile(i)}
+                                style={{
+                                  marginLeft: "10px",
+                                  background: "red",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  padding: "2px 6px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
 
                         {images.length > 0 && (
-                          <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                            {images.map((img, i) => (
-                              <img
-                                key={i}
-                                src={URL.createObjectURL(img)}
-                                alt="preview"
-                                width="80"
-                                height="80"
-                                style={{ borderRadius: "5px", objectFit: "cover" }}
-                              />
-                            ))}
-                          </div>
-                        )}
+                            <div style={{ display: "flex", gap: "10px", marginTop: "10px", flexWrap: "wrap" }}>
+                              {images.map((img, i) => (
+                                <div key={i} style={{ position: "relative" }}>
+                                  <img
+                                    src={URL.createObjectURL(img)}
+                                    alt="preview"
+                                    width="80"
+                                    height="80"
+                                    style={{ borderRadius: "5px", objectFit: "cover" }}
+                                  />
+                                  <button
+                                    onClick={() => removeImage(i)}
+                                    style={{
+                                      position: "absolute",
+                                      top: "-5px",
+                                      right: "-5px",
+                                      background: "rgba(0,0,0,0.6)",
+                                      color: "white",
+                                      border: "none",
+                                      borderRadius: "50%",
+                                      cursor: "pointer",
+                                      width: "20px",
+                                      height: "20px",
+                                      fontSize: "12px",
+                                      lineHeight: "20px",
+                                      textAlign: "center",
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
 
                   <div style={styles.btnUploads}>
                     <button style={styles.btnFile} onClick={handleFileClick}>Upload File</button>
@@ -534,11 +606,11 @@ function Announcement() {
 
       {showDeleteModal && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalContainer}>
-            <p>Are you sure you want to delete this announcement?</p>
-            <div>
-              <button onClick={confirmDeleteAnnouncement}>Yes, Delete</button>
-              <button onClick={() => setShowDeleteModal(false)}>Cancel</button>
+          <div style={styles.modalContainerDel}>
+            <p style={styles.questionDelete}>Are you sure you want to delete this announcement?</p>
+            <div style={styles.deleteButtons}>
+              <button style={styles.deleteBtn} onClick={confirmDeleteAnnouncement}>Delete</button>
+              <button style={styles.cnldeleteBtn} onClick={() => setShowDeleteModal(false)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -884,7 +956,82 @@ const styles = {
     textAlign: "center", 
     marginTop: "50px",
     color: "#777",
-  }
+  },
+  menuDots: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '6px',
+    fontSize: '16px'
+  },
+  menu: {
+    position: "absolute",
+    top: "100%",
+    right: 0,
+    background: "#fff",
+    border: "1px solid #ddd",
+    borderRadius: "6px",
+    boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+    zIndex: 9999,
+    minWidth: "120px",
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  buttonMenu: {
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    padding: '5px'
+  },
+  buttonMenu1: {
+    borderBottom: '.5px solid rgba(219, 219, 219, 1)',
+    borderRight: 'none',
+    borderLeft: 'none',
+    borderTop: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    padding: '5px'
+  },
+  deleteButtons: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '20px',
+  },
+  deleteBtn: {
+    padding: '5px 10px 5px 10px',
+    fontSize: '14px',
+    fontWeight: 500,
+    border: 'none',
+    borderRadius: '5px',
+    backgroundColor: 'red',
+    color: 'white',
+    cursor: 'pointer'
+  },
+  cnldeleteBtn: {
+    padding: '5px 10px 5px 10px',
+    fontSize: '14px',
+    fontWeight: 500,
+    border: 'none',
+    borderRadius: '5px',
+    backgroundColor: 'rgba(200, 200, 200, 1)',
+    cursor: 'pointer'
+  },
+  questionDelete: {
+    fontSize: '20px',
+    textAlign: 'center'
+  },
+  modalContainerDel: {
+    backgroundColor: '#ffffff',
+    width: '500px',
+    padding: '25px',
+    borderRadius: '12px',
+    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.2)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    alignItems: 'center'
+  },
+
 };
 
 
