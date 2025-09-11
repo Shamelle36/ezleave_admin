@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -29,6 +29,8 @@ function Dashboard() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState("Leave Type");
+  const [employeeCount, setEmployeeCount] = useState(0);
+
 
   const options = [
     "Vacation",
@@ -49,51 +51,67 @@ function Dashboard() {
     setIsOpen(false);
   };
 
+  useEffect(() => {
+    const fetchEmployeeCount = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/employees/count");
+        const data = await res.json();
+        setEmployeeCount(data.total);
+      } catch (err) {
+        console.error("Error fetching employee count:", err);
+      }
+    };
+
+    fetchEmployeeCount();
+  }, []);
 
   const cardsData = [
   {
     title: 'Total Employees',
     description: '5% increase more than last month',
-    value: 200,
+    value: employeeCount,
     background: styles.card, 
     paddingTop: '5px',
   },
   {
-    title: 'Total Employees',
+    title: 'Pending Leave Requests',
     description: '3% less than last month',
-    value: 200,
+    value: 0,
     background: styles.card,
     paddingTop: '20px',
   },
   {
-    title: 'Total Employees',
+    title: 'Approved Leave Requests',
     description: '5% less than last month',
-    value: 200,
+    value: 0,
     background: styles.card,
     paddingTop: '20px',
   },
   {
-    title: 'Total Employees',
+    title: 'Present Employees',
     description: '2% increase more than last month',
-    value: 200,
+    value: 0,
     background: styles.card1,
     paddingTop: '5px',
   },
   {
-    title: 'Total Employees',
+    title: 'Absent Employees',
     description: '2% less than last month',
-    value: 200,
+    value: 0,
     background: styles.card2,
     paddingTop: '20px',
   },
   {
-    title: 'Total Employees',
+    title: 'Late Employees',
     description: '2% less than last month',
-    value: 200,
+    value: 0,
     background: styles.card3,
     paddingTop: '20px',
   },
 ];
+
+  
+
 
 
   const employees = [

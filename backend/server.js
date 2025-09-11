@@ -5,6 +5,7 @@ import authRoute from "./routes/authRoute.js";
 import auditLogRoutes from "./routes/auditLogRoute.js";
 import cors from "cors";
 import announcementRoute from "./routes/announcementRoute.js";
+import employeeRoute from "./routes/employeeRoute.js";
 
 dotenv.config();
 const app = express();
@@ -20,6 +21,7 @@ app.use("/api/auth", authRoute);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/announcements", announcementRoute);
 app.use("/uploads", express.static("uploads"));
+app.use("/api/employees", employeeRoute);
 
 
 const PORT = process.env.PORT || 5000;

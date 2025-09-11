@@ -27,7 +27,6 @@ import Papa from 'papaparse';
 
   function Employees() {
  const [employeeRecord, setEmployeeRecords] = useState([]);
-  const [departments, setDepartments] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [employeesToUpload, setEmployeesToUpload] = useState([]);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
@@ -47,7 +46,7 @@ import Papa from 'papaparse';
     full_name: '',
     email: '',
     position: '',
-    department_id: '',
+    department: '',
     employment_status: '',
     gender: '',
     status: 'active',
@@ -57,39 +56,45 @@ import Papa from 'papaparse';
     civil_status: '',
   });
 
-  // Mock: Load employees and departments
-  useEffect(() => {
-    fetchEmployees();
-    fetchDepartments();
-  }, []);
+  const departments = [
+    "Office of the Municipal Mayor",
+    "Human Resource Management Division",
+    "Business Permit and Licensing Division",
+    "Sangguniang Bayan Office",
+    "Office of the Municipal Accountant",
+    "Office of the Assessor",
+    "Municipal Budget Office",
+    "Municipal Planning and Development Office",
+    "Office of the Municipal Engineer",
+    "Municipal Risk Reduction and Management Office",
+    "Municipal Social Welfare and Development Office",
+    "Municipal Environment and Natural Resources Office",
+    "Office of the Municipal Agriculturist",
+    "Municipal General Services Office",
+    "Municipal Public Employment Service Office",
+    "Municipal Health Office",
+    "Municipal Treasurer’s Office",
+  ];
 
-  const fetchEmployees = async () => {
-    // Replace with API call later
-    setEmployeeRecords([
-      {
-        id: 1,
-        id_number: '20230001',
-        full_name: 'John Doe',
-        email: 'john@example.com',
-        position: 'Developer',
-        department_id: 1,
-        employment_status: 'permanent',
-        gender: 'Male',
-        civil_status: 'Single',
-        status: 'active',
-        contact_number: '09171234567',
-        date_hired: '2023-01-01',
-      },
-    ]);
+
+  
+
+    useEffect(() => {
+      loadEmployees();
+    }, []);
+
+  const loadEmployees = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/employees");
+      const data = await res.json();
+      // Always wrap response as an array
+      setEmployeeRecords(Array.isArray(data) ? data : [data]);
+    } catch (err) {
+      console.error("Error loading employees:", err);
+      setEmployeeRecords([]); // fallback to empty array
+    }
   };
 
-  const fetchDepartments = async () => {
-    // Replace with API call later
-    setDepartments([
-      { id: 1, name: 'IT' },
-      { id: 2, name: 'HR' },
-    ]);
-  };
 
   const handleButtonClick = () => {
     fileInputRef.current.click();
@@ -147,28 +152,64 @@ import Papa from 'papaparse';
   };
 
   const confirmDelete = async () => {
+    await fetch(`http://localhost:5000/api/employees/${employeeToDelete.id}`, {
+      method: "DELETE",
+    });
+
     setEmployeeRecords((prev) =>
       prev.filter((emp) => emp.id !== employeeToDelete.id)
     );
     setShowDeleteModal(false);
-    setEmployeeToDelete(null);
-    alert('Employee deleted successfully!');
   };
+
 
   const handleLogout = () => {
     // Replace with your auth logout
     window.location.href = '/';
   };
 
-  const handleAddEmployee = () => {
-    const newEmp = {
-      ...newEmployee,
-      id: Date.now(),
-    };
-    setEmployeeRecords((prev) => [newEmp, ...prev]);
-    setShowAddModal(false);
-    alert('Employee added successfully!');
+  const handleAddEmployee = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/employees", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newEmployee),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to add employee");
+      }
+
+      const savedEmployee = await response.json();
+
+      // Update UI
+      setEmployeeRecords((prev) => [savedEmployee, ...prev]);
+
+      setShowAddModal(false);
+      alert("Employee added successfully!");
+      
+      // reset form
+      setNewEmployee({
+        full_name: "",
+        email: "",
+        position: "",
+        department_id: "",
+        employment_status: "",
+        gender: "",
+        status: "active",
+        date_hired: "",
+        id_number: "",
+        contact_number: "",
+        civil_status: "",
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Error adding employee");
+    }
   };
+
 
   const handleViewClick = (employee) => {
     setSelectedEmployee(employee);
@@ -180,15 +221,21 @@ import Papa from 'papaparse';
     setShowEditModal(true);
   };
 
-  const handleEditSave = () => {
+  const handleEditSave = async () => {
+    await fetch(`http://localhost:5000/api/employees/${employeesToEdit.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(employeesToEdit),
+    });
+
     setEmployeeRecords((prev) =>
       prev.map((emp) =>
         emp.id === employeesToEdit.id ? employeesToEdit : emp
       )
     );
     setShowEditModal(false);
-    alert('Employee updated successfully!');
   };
+
 
   const handleBulkInvite = () => {
     const emails = employeeRecord.map((e) => e.email).filter(Boolean);
@@ -285,9 +332,9 @@ import Papa from 'papaparse';
                     <tr key={record.id}>
                       <td style={styles.rowName}>{index + 1}</td>
                       <td style={styles.rowName}>{record.id_number || '—'}</td>
-                      <td style={styles.rowName}>{record.full_name}</td>
+                      <td style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
                       <td style={styles.rowName}>{record.position}</td>
-                      <td style={styles.rowName}>{departments.find(d => d.id === record.department_id)?.name || '—'}</td>
+                      <td style={styles.rowName}>{record.department || '—'}</td>
                       <td style={styles.rowName}>{record.employment_status}</td>
                       <td style={styles.rowName}>{record.gender}</td>
                       <td style={styles.rowName}>{record.civil_status}</td>
@@ -444,25 +491,19 @@ import Papa from 'papaparse';
 
                       <select
                         style={styles.modalInputs}
-                        value={employeesToEdit.department_id}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, department_id: e.target.value })}
+                        value={employeesToEdit.department || ""}   
+                        onChange={(e) =>
+                          setEmployeesToEdit({ ...employeesToEdit, department: e.target.value })
+                        }
                       >
-                        <option value="" disabled>Select Department</option>
-                        {departments.map(dept => (
-                          <option key={dept.id} value={dept.id}>{dept.name}</option>
+                        <option value="">Select Department</option>
+                        {departments.map((dept, index) => (
+                          <option key={index} value={dept}>
+                            {dept}
+                          </option>
                         ))}
                       </select>
-                      <select
-                        style={styles.modalInputs}
-                        value={employeesToEdit.employment_status}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, employment_status: e.target.value })}
-                      >
-                        <option value="">Select Employment Type</option>
-                        <option value="temporary">Temporary</option>
-                        <option value="permanent">Permanent</option>
-                        <option value="contract">Contract</option>
-                        <option value="casual">Casual</option>
-                      </select>
+
                       <select
                         style={styles.modalInputs}
                         value={employeesToEdit.status}
@@ -530,11 +571,17 @@ import Papa from 'papaparse';
                 }}>
 
                 <h3>Add New Employee</h3>
-                  <input 
-                    placeholder="Full Name" 
-                    style={styles.modalInputs} 
-                    value={newEmployee.full_name}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, full_name: e.target.value })}
+                  <input
+                    placeholder="First Name"
+                    style={styles.modalInputs}
+                    value={newEmployee.first_name}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, first_name: e.target.value })}
+                  />
+                  <input
+                    placeholder="Last Name"
+                    style={styles.modalInputs}
+                    value={newEmployee.last_name}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, last_name: e.target.value })}
                   />
                   <input 
                     placeholder="Email" 
@@ -616,20 +663,25 @@ import Papa from 'papaparse';
                         <option value="Annulled">Annulled</option>
                       </select>
 
+                    <select
+                        style={styles.modalInputs}
+                        value={newEmployee.department || ""}
+                        onChange={(e) =>
+                          setNewEmployee({ ...newEmployee, department: e.target.value })
+                        }
+                      >
+                        <option value="" disabled>
+                          Select Department
+                        </option>
+                        {departments.map((dept, index) => (
+                          <option key={index} value={dept}>
+                            {dept}
+                          </option>
+                        ))}
+                      </select>
                     <select 
                       style={styles.modalInputs}
-                      value={newEmployee.department_id}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, department_id: e.target.value })}
-                    >
-                      <option value="" disabled hidden>Select Department</option>
-                      {departments.map(dept => (
-                        <option key={dept.id} value={dept.id}>{dept.name}</option>
-                      ))}
-                    </select>
-
-                    <select 
-                      style={styles.modalInputs}
-                      value={newEmployee.employment_status}
+                      value={newEmployee.employment_status}z
                       onChange={(e) => setNewEmployee({ ...newEmployee, employment_status: e.target.value })}
                     >
                       <option value="">Select Employment Type</option>
@@ -715,11 +767,11 @@ import Papa from 'papaparse';
                     )}
                   </div>
                   <div style={styles.info}>
-                    <p style={styles.name}>{emp.full_name}</p>
+                  <p style={styles.name}>
+                    {`${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                  </p>
                     <p style={styles.position}>{emp.position}</p>
-                    <p style={styles.department}>
-                      {departments.find(d => d.id === emp.department_id)?.name || '—'}
-                    </p>
+                    <p style={styles.department}>{emp.department || '—'}</p>
                   </div>
                 </div>
             ))}

@@ -50,7 +50,7 @@ export const createAnnouncement = async (req, res) => {
 
     const userRole = user[0]?.role || 'Unknown';
 
-    // 1️⃣ Insert into announcements
+    //Insert into announcements
     const result = await sql`
       INSERT INTO announcements (title, details, priority, created_by, files, images)
       VALUES (${title}, ${details}, ${priority}, ${created_by}, ${filePaths}, ${imagePaths})
