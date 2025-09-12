@@ -110,10 +110,6 @@ function Dashboard() {
   },
 ];
 
-  
-
-
-
   const employees = [
     { id: 1, name: 'Shamelle Tadeja', department: 'HR', timein: '8:00 AM', timeout: '4:00 PM', status: 'On-Time' },
     { id: 2, name: 'Reyland Tanglao', department: 'Finance', timein: '8:00 AM', timeout: '4:00 PM', status: 'Late' },

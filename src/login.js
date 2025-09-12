@@ -57,7 +57,7 @@ function Login() {
         </div>
 
         <div className="col2">
-          <h2>Admin Log In</h2>
+          <h2>Log In</h2>
           <form onSubmit={handleLogin}>
             <input
               type="email"

@@ -76,7 +76,7 @@ function Signup() {
         </div>
 
         <div className="col2">
-          <h2>Sign Up (Admin)</h2>
+          <h2>Sign Up</h2>
           <form onSubmit={handleSignup}>
             <input
               type="email"
