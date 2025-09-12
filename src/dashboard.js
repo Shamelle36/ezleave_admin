@@ -33,17 +33,21 @@ function Dashboard() {
 
 
   const options = [
-    "Vacation",
-    "Sick",
-    "Mandatory",
-    "Maternity",
-    "Privilege",
-    "Solo Parent",
-    "Study",
-    "VAWC",
-    "Rehabilitation",
-    "Women",
-    "Emergency"
+    "Vacation Leave",
+    "Mandatory/Forced Leave",
+    "Sick Leave",
+    "Maternity Leave",
+    "Paternity Leave",
+    "Special Privilege Leave",
+    "Solo Parent Leave",
+    "Study Leave",
+    "VAWC Leave",
+    "Rehabilitation Leave",
+    "Special Leave Benefits for Women",
+    "Special Emergency (Calamity) Leave",
+    "Monetization of Leave Credits",
+    "Terminal Leave",
+    "Adoption Leave"
   ];
 
   const handleSelect = (option) => {

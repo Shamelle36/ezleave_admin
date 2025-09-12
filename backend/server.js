@@ -6,6 +6,8 @@ import auditLogRoutes from "./routes/auditLogRoute.js";
 import cors from "cors";
 import announcementRoute from "./routes/announcementRoute.js";
 import employeeRoute from "./routes/employeeRoute.js";
+import path from "path";
+
 
 dotenv.config();
 const app = express();
@@ -20,7 +22,7 @@ app.use(express.json());
 app.use("/api/auth", authRoute);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/announcements", announcementRoute);
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/api/employees", employeeRoute);
 
 

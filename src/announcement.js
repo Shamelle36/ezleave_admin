@@ -59,7 +59,6 @@ function Announcement() {
       document.body.style.overflow = "auto";
     }
 
-    // Cleanup when component unmounts
     return () => {
       document.body.style.overflow = "auto";
     };
@@ -74,12 +73,10 @@ function Announcement() {
   const handleImageClick = () => imageInputRef.current.click();
 
   const handleFileChange = (e) => {
-    // Merge new files with existing files
     setFiles((prev) => [...prev, ...Array.from(e.target.files)]);
   };
 
   const handleImageChange = (e) => {
-    // Merge new images with existing images
     setImages((prev) => [...prev, ...Array.from(e.target.files)]);
   };
 
@@ -99,12 +96,10 @@ function Announcement() {
     formData.append("priority", newAnnouncement.priority);
     formData.append("created_by", 1);
 
-    // Append documents
     files.forEach((file) => {
       formData.append("files", file);
     });
 
-    // Append images
     images.forEach((img) => {
       formData.append("images", img);
     });
@@ -135,10 +130,10 @@ function Announcement() {
       details: announcementToEdit.details,
       priority: announcementToEdit.priority,
     });
-    setFiles([]);   // optionally reset files (or load existing ones if you want)
+    setFiles([]);   
     setImages([]);
     setEditingAnnouncement(announcementToEdit);
-    setIsEditMode(true); // open modal in edit mode
+    setIsEditMode(true); 
     setShowModal(true);
   };
 
@@ -155,7 +150,6 @@ function Announcement() {
       formData.append("details", newAnnouncement.details);
       formData.append("priority", newAnnouncement.priority);
       
-      // Append new files/images if any
       files.forEach((file) => formData.append("files", file));
       images.forEach((img) => formData.append("images", img));
 
@@ -193,9 +187,6 @@ function Announcement() {
       console.error(err);
     }
   };
-
-  
-  
 
   return (
     <div style={styles.dashboardContainer}>
@@ -282,7 +273,7 @@ function Announcement() {
                           <div style={styles.menu}>
                             <button
                               style={styles.buttonMenu1}
-                              onMouseDown={(e) => e.preventDefault()} // ✅ prevents blur from firing too early
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => editAnnouncement(announcement.id)}
                             >
                               Edit
@@ -311,20 +302,18 @@ function Announcement() {
                         display: "-webkit-box",
                         WebkitBoxOrient: "vertical",
                         overflow: "hidden",
-                        WebkitLineClamp: expanded ? "unset" : 2, // 2 lines when collapsed
+                        WebkitLineClamp: expanded ? "unset" : 2, 
                       }}>
                       {announcement.details}
                       </p>
 
-                      
-
-                      {/* Show images if any */}
+                      {/* images */}
                       {announcement.images && announcement.images.length > 0 && (
                         <div style={{ marginTop: "10px" }}>
                           {announcement.images.map((img, i) => (
                             <img
                               key={i}
-                              src={`http://localhost:5000${img}`} // serve from backend uploads
+                              src={`http://localhost:5000${img}`} 
                               alt={`attachment-${i}`}
                               style={{ 
                                 maxWidth: "120px",
@@ -347,7 +336,7 @@ function Announcement() {
                         {announcement.files && announcement.files.length > 0 && (
                           <div style={{ marginTop: "10px" }}>
                             {announcement.files.map((file, i) => {
-                              const fileName = file.split("/").pop(); // get actual file name
+                              const fileName = file.split("/").pop(); 
                               return (
                                 <a
                                   key={i}

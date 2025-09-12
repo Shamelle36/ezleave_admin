@@ -236,12 +236,6 @@ import Papa from 'papaparse';
     setShowEditModal(false);
   };
 
-
-  const handleBulkInvite = () => {
-    const emails = employeeRecord.map((e) => e.email).filter(Boolean);
-    alert(`Invites sent to: ${emails.join(', ')}`);
-  };
-
   return (
     <div style={styles.dashboardContainer}>
 
@@ -292,7 +286,6 @@ import Papa from 'papaparse';
             <div style={styles.firstRow}>
               <p>List of Employee</p>
               <div>
-                <button style={styles.importBtn} onClick={handleBulkInvite}>Invite Employee</button>
                 <button style={styles.importBtn} onClick={handleButtonClick}>
                   <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
                   Import CSV

@@ -443,7 +443,7 @@ const styles = {
     boxSizing: 'border-box',
   },
   content: {
-    marginLeft: '300px', // Adjusted to account for the sidebar width
+    marginLeft: '300px',
     padding: '20px',
     backgroundColor: '#F8F8F8',
     marginTop: '60px', 
