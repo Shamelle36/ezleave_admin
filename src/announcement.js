@@ -44,13 +44,19 @@ function Announcement() {
 
   
   useEffect(() => {
-    fetch("http://localhost:5000/api/announcements")
-      .then((res) => res.json())
-      .then((data) => {
-        setAnnouncements(Array.isArray(data) ? data : data.data || []);
-      })
-      .catch((err) => console.error("Error fetching announcements:", err));
-  }, []);
+  fetch("http://localhost:5000/api/announcements")
+    .then((res) => res.json())
+    .then((data) => {
+      const cleanData = (Array.isArray(data) ? data : data.data || []).map((a) => ({
+        ...a,
+        images: typeof a.images === "string" ? JSON.parse(a.images) : a.images || [],
+        files: typeof a.files === "string" ? JSON.parse(a.files) : a.files || [],
+      }));
+      setAnnouncements(cleanData);
+    })
+    .catch((err) => console.error("Error fetching announcements:", err));
+}, []);
+
 
   useEffect(() => {
     if (previewImage) {
@@ -313,7 +319,7 @@ function Announcement() {
                           {announcement.images.map((img, i) => (
                             <img
                               key={i}
-                              src={`http://localhost:5000${img}`} 
+                              src={img} 
                               alt={`attachment-${i}`}
                               style={{ 
                                 maxWidth: "120px",
@@ -325,7 +331,7 @@ function Announcement() {
                                 boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                               }}
                               onClick={() =>
-                                setPreviewImage(`http://localhost:5000${img}`)
+                                setPreviewImage(img)
                               }
                             />
                           ))}
@@ -340,7 +346,7 @@ function Announcement() {
                               return (
                                 <a
                                   key={i}
-                                  href={`http://localhost:5000${file}`}
+                                  href={file}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{

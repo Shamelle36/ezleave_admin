@@ -6,6 +6,7 @@ import auditLogRoutes from "./routes/auditLogRoute.js";
 import cors from "cors";
 import announcementRoute from "./routes/announcementRoute.js";
 import employeeRoute from "./routes/employeeRoute.js";
+import leaveRequestRoute from "./routes/leaveRequestRoute.js";
 import path from "path";
 
 
@@ -22,8 +23,11 @@ app.use(express.json());
 app.use("/api/auth", authRoute);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/announcements", announcementRoute);
+
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
 app.use("/api/employees", employeeRoute);
+app.use("/api/leave-requests", leaveRequestRoute);
 
 
 const PORT = process.env.PORT || 5000;

@@ -44,22 +44,11 @@ function LeaveManagement() {
     const [leaveBalances, setLeaveBalances] = useState([]);
     const [loading, setLoading] = useState(true);
     const [date, setDate] = useState(new Date());
+    const [requests, setRequests] = useState([]);
+    const [filteredRecords, setFilteredRecords] = useState([]);
 
-  const [leaveRecords, setLeaveRecords] = useState([
-    {
-      name: 'Reyland S. Tanglao',
-      department: 'Human Resource Management Division',
-      leaveType: 'Vacation Leave',
-      entitled: 15,
-      used: 5,
-      remaining: 10,
-      status: 'Approved',
-      approvedBy: 'Marites D. Lopez',
-      dateFiled: 'May 1, 2025',
-      range: { from: 'May 3, 2025', to: 'May 5, 2025' },
-    },
-    
-  ]);
+
+  const [leaveRecords, setLeaveRecords] = useState([]);
 
   const formatDate = (date) =>
     date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -135,6 +124,77 @@ const handleFileUpload = (e) => {
   useEffect(() => {
     fetchLeaveBalances();
   }, []);
+
+
+  useEffect(() => {
+    if (activeTab === "summary") {
+      fetch("http://localhost:5000/api/leave-requests")
+        .then((res) => res.json())
+        .then((data) => {
+          const formatted = data.map((req) => {
+            let from = null;
+            let to = null;
+
+            if (req.inclusive_dates) {
+                // Example: "[2025-09-18,2025-09-19)"
+                const match = req.inclusive_dates.match(/\[(.*?),(.*?)[)\]]/);
+                if (match) {
+                from = new Date(match[1]); // ✅ convert to Date
+                to = new Date(match[2]);   // ✅ convert to Date
+                }
+            }
+
+            return {
+                name: req.first_name && req.last_name
+                ? `${req.first_name} ${req.last_name}`
+                : req.user_id,
+                department: req.office_department,
+                leaveType: req.leave_type,
+                entitled: 0,
+                used: 0,
+                remaining: 0,
+                status: req.status,
+                approvedBy: req.approved_by || "N/A",
+                dateFiled: new Date(req.date_filing),
+                range: { from, to }
+            };
+            });
+
+
+          setLeaveRecords(formatted);
+        })
+        .catch((err) => console.error("Error fetching summary:", err));
+    }
+  }, [activeTab]);
+
+  // Whenever date or records change → filter
+  useEffect(() => {
+  const dayStr = date.toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+  const filtered = leaveRecords.filter((record) => {
+    if (!record.range.from || !record.range.to) return false;
+
+    const fromStr = record.range.from.toISOString().split("T")[0];
+    const toStr = record.range.to.toISOString().split("T")[0];
+
+    // ✅ check if selected day falls in range
+    return dayStr >= fromStr && dayStr <= toStr;
+  });
+
+  setFilteredRecords(filtered);
+}, [date, leaveRecords]);
+
+
+  useEffect(() => {
+    if (activeTab === "requests") {
+      fetch("http://localhost:5000/api/leave-requests")
+        .then((res) => res.json())
+        .then((data) => setRequests(data))
+        .catch((err) => console.error("Error fetching requests:", err));
+    }
+  }, [activeTab]);
+
+  
   
   return (
     <div style={styles.dashboardContainer}>
@@ -214,7 +274,7 @@ const handleFileUpload = (e) => {
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
                                 <p style={styles.txtlabel}>Total Requests</p>
-                                <p style={styles.txtData}>{leaveRecords.length}</p>
+                                <p style={styles.txtData}>{filteredRecords.length}</p>
                             </div>
                         </div>
                         </div>
@@ -225,7 +285,7 @@ const handleFileUpload = (e) => {
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
                                     <p style={styles.txtlabel}>Approved Leaves</p>
-                                    <p style={styles.txtData}>{leaveRecords.filter(l => l.status === 'Approved').length}</p>
+                                    <p style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Approved').length}</p>
                                 </div>
                         </div>
                         </div>
@@ -237,7 +297,7 @@ const handleFileUpload = (e) => {
 
                                 <div style={styles.data1}>
                                     <p style={styles.txtlabel}>Pending Leaves</p>
-                                    <p style={styles.txtData}>{leaveRecords.filter(l => l.status === 'Pending').length}</p>
+                                    <p style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Pending').length}</p>
                                 </div>
                             </div>
                         </div>
@@ -248,7 +308,7 @@ const handleFileUpload = (e) => {
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
                                     <p style={styles.txtlabel}>Rejected Leaves</p>
-                                    <p style={styles.txtData}>{leaveRecords.filter(l => l.status === 'Rejected').length}</p>
+                                    <p style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Rejected').length}</p>
                                 </div>
                             </div>
                         </div>
@@ -331,25 +391,87 @@ const handleFileUpload = (e) => {
                     </tr>
                     </thead>
                     <tbody>
-                    {leaveRecords.map((record, index) => (
-                        <tr key={index}>
-                        <td style={styles.td}>{index + 1}</td>
-                        <td style={styles.td}>{record.name}</td>
-                        <td style={styles.td}>{record.department}</td>
-                        <td style={styles.td}>{record.leaveType}</td>
-                        <td style={styles.td}>{record.entitled}</td>
-                        <td style={styles.td}>{record.used}</td>
-                        <td style={styles.td}>{record.remaining}</td>
-                        <td style={styles.td}>{record.status}</td>
-                        <td style={styles.td}>{record.approvedBy}</td>
-                        <td style={styles.td}>{record.dateFiled}</td>
-                        <td style={styles.td}>{record.range.from} - {record.range.to}</td>
-                    </tr>
-                    ))}
-                    </tbody>
+                        {filteredRecords.length > 0 ? (
+                            filteredRecords.map((record, index) => (
+                            <tr key={index}>
+                                <td style={styles.td}>{index + 1}</td>
+                                <td style={styles.td}>{record.name}</td>
+                                <td style={styles.td}>{record.department}</td>
+                                <td style={styles.td}>{record.leaveType}</td>
+                                <td style={styles.td}>{record.entitled}</td>
+                                <td style={styles.td}>{record.used}</td>
+                                <td style={styles.td}>{record.remaining}</td>
+                                <td style={styles.td}>{record.status}</td>
+                                <td style={styles.td}>{record.approvedBy}</td>
+                                <td style={styles.td}>
+                                {record.dateFiled
+                                    ? record.dateFiled.toLocaleDateString()
+                                    : "N/A"}
+                                </td>
+                                <td style={styles.td}>
+                                {record.range.from
+                                    ? record.range.from.toLocaleDateString()
+                                    : "N/A"}{" "}
+                                -{" "}
+                                {record.range.to
+                                    ? record.range.to.toLocaleDateString()
+                                    : "N/A"}
+                                </td>
+                            </tr>
+                            ))
+                        ) : (
+                            <tr>
+                            <td style={styles.td} colSpan="15" align="center">
+                                No leave requests found for this day
+                            </td>
+                            </tr>
+                        )}
+                        </tbody>
+
                 </table>
             </div>
             </>
+            )}
+
+            {activeTab === "requests" && (
+                <div style={styles.leaveRequests}>
+                <table style={styles.leaveRequestsTable}>
+                    <thead style={styles.leaveRequeststhead}>
+                        <tr>
+                            <th style={styles.leaveRequestsColumn}>ID</th>
+                            <th style={styles.leaveRequestsColumn}>Name</th>
+                            <th style={styles.leaveRequestsColumn}>Department</th>
+                            <th style={styles.leaveRequestsColumn}>Position</th>
+                            <th style={styles.leaveRequestsColumn}>Leave Type</th>
+                            <th style={styles.leaveRequestsColumn}>Dates</th>
+                            <th style={styles.leaveRequestsColumn}>Days</th>
+                            <th style={styles.leaveRequestsColumn}>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                            {Array.isArray(requests) && requests.length > 0 ? (
+                                requests.map((req) => (
+                                <tr key={req.id}>
+                                    <td style={styles.leaveRequestsRows} >{req.id_number}</td>
+                                    <td style={styles.leaveRequestsRows}>{req.first_name} {req.middle_name} {req.last_name}</td>
+                                    <td style={styles.leaveRequestsRows}>{req.office_department}</td>
+                                    <td style={styles.leaveRequestsRows}>{req.position}</td>
+                                    <td style={styles.leaveRequestsRows}>{req.leave_type}</td>
+                                    <td style={styles.leaveRequestsRows}>{String(req.inclusive_dates)}</td>
+                                    <td style={styles.leaveRequestsRows}>{req.number_of_days}</td>
+                                    <td style={styles.leaveRequestsRows}>{req.status}</td>
+                                </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                <td>
+                                    No leave requests found
+                                </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             )}
 
             
@@ -592,6 +714,8 @@ const handleFileUpload = (e) => {
                     </div>
                 </div>
                 )}
+
+                
 
 
              </div>
@@ -1178,7 +1302,42 @@ const styles = {
         boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.37)',
         padding: '0 5px',
         fontSize: '12px'
-    }
+    },
+    leaveRequests: {
+
+    },
+
+    leaveRequestsTable: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        backgroundColor: '#ffffff',
+        borderRadius: 8,
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    },
+
+    leaveRequeststhead: {
+        backgroundColor: '#F9FAFB',
+    },
+    leaveRequestsColumn: {
+        padding: '16px 20px',
+        textAlign: 'left',
+        fontSize: 12,
+        fontWeight: 600,
+        color: '#374151',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        borderBottom: '1px solid #E5E7EB',
+        width: '200px'
+    },
+
+    leaveRequestsRows: {
+        padding: '16px 20px',
+        borderBottom: '1px solid #F3F4F6',
+        fontSize: 14,
+        color: '#1F2937',
+        verticalAlign: 'middle',
+    },
     
 
 
