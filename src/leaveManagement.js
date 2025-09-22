@@ -35,6 +35,7 @@ import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import Papa from 'papaparse';
+import { width } from '@fortawesome/free-solid-svg-icons/fa0';
 
 function LeaveManagement() {
     const navigate = useNavigate();
@@ -46,18 +47,22 @@ function LeaveManagement() {
     const [date, setDate] = useState(new Date());
     const [requests, setRequests] = useState([]);
     const [filteredRecords, setFilteredRecords] = useState([]);
+    const [selectedRequest, setSelectedRequest] = useState(null);
+    const [actionType, setActionType] = useState(null); // "approve" or "reject"
+    const [actionRemarks, setActionRemarks] = useState(""); // remarks input by admin
+    const [showActionModal, setShowActionModal] = useState(false);
 
 
-  const [leaveRecords, setLeaveRecords] = useState([]);
+    const [leaveRecords, setLeaveRecords] = useState([]);
 
-  const formatDate = (date) =>
-    date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+    const formatDate = (date) =>
+        date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  const goToPreviousDay = () => {
-    const prev = new Date(date);
-    prev.setDate(prev.getDate() - 1);
-    setDate(prev);
-  };
+    const goToPreviousDay = () => {
+        const prev = new Date(date);
+        prev.setDate(prev.getDate() - 1);
+        setDate(prev);
+    };
 
   const goToNextDay = () => {
     const next = new Date(date);
@@ -193,6 +198,70 @@ const handleFileUpload = (e) => {
         .catch((err) => console.error("Error fetching requests:", err));
     }
   }, [activeTab]);
+
+
+const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
+  try {
+    const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionBy: "Admin", remarks }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setRequests((prev) =>
+        prev.map((req) =>
+          req.id === requestId
+            ? { ...req, status: "Approved", action_by: "Admin", updated_at: new Date(), remarks }
+            : req
+        )
+      );
+      setSelectedRequest((prev) =>
+        prev && prev.id === requestId
+          ? { ...prev, status: "Approved", action_by: "Admin", updated_at: new Date(), remarks }
+          : prev
+      );
+      alert("Leave request approved!");
+    } else {
+      alert(data.error || "Failed to approve request");
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Error approving leave request");
+  }
+};
+
+// Reject a leave request
+const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
+  try {
+    const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionBy: "Admin", remarks }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setRequests((prev) =>
+        prev.map((req) =>
+          req.id === requestId
+            ? { ...req, status: "Rejected", action_by: "Admin", updated_at: new Date(), remarks }
+            : req
+        )
+      );
+      setSelectedRequest((prev) =>
+        prev && prev.id === requestId
+          ? { ...prev, status: "Rejected", action_by: "Admin", updated_at: new Date(), remarks }
+          : prev
+      );
+      alert("Leave request rejected!");
+    } else {
+      alert(data.error || "Failed to reject request");
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Error rejecting leave request");
+  }
+};
 
   
   
@@ -435,42 +504,249 @@ const handleFileUpload = (e) => {
 
             {activeTab === "requests" && (
                 <div style={styles.leaveRequests}>
-                <table style={styles.leaveRequestsTable}>
-                    <thead style={styles.leaveRequeststhead}>
-                        <tr>
-                            <th style={styles.leaveRequestsColumn}>ID</th>
-                            <th style={styles.leaveRequestsColumn}>Name</th>
-                            <th style={styles.leaveRequestsColumn}>Department</th>
-                            <th style={styles.leaveRequestsColumn}>Position</th>
-                            <th style={styles.leaveRequestsColumn}>Leave Type</th>
-                            <th style={styles.leaveRequestsColumn}>Dates</th>
-                            <th style={styles.leaveRequestsColumn}>Days</th>
-                            <th style={styles.leaveRequestsColumn}>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                            {Array.isArray(requests) && requests.length > 0 ? (
-                                requests.map((req) => (
-                                <tr key={req.id}>
-                                    <td style={styles.leaveRequestsRows} >{req.id_number}</td>
-                                    <td style={styles.leaveRequestsRows}>{req.first_name} {req.middle_name} {req.last_name}</td>
-                                    <td style={styles.leaveRequestsRows}>{req.office_department}</td>
-                                    <td style={styles.leaveRequestsRows}>{req.position}</td>
-                                    <td style={styles.leaveRequestsRows}>{req.leave_type}</td>
-                                    <td style={styles.leaveRequestsRows}>{String(req.inclusive_dates)}</td>
-                                    <td style={styles.leaveRequestsRows}>{req.number_of_days}</td>
-                                    <td style={styles.leaveRequestsRows}>{req.status}</td>
-                                </tr>
-                                ))
-                            ) : (
+                    <div style={styles.leftSection}>
+                        <table style={styles.leaveRequestsTable}>
+                            <thead style={styles.leaveRequeststhead}>
                                 <tr>
-                                <td>
-                                    No leave requests found
-                                </td>
+                                    <th style={styles.leaveRequestsColumn}>ID</th>
+                                    <th style={styles.leaveRequestsColumn}>Name</th>
+                                    <th style={styles.leaveRequestsColumn}>Department</th>
+                                    <th style={styles.leaveRequestsColumn}>Position</th>
+                                    <th style={styles.leaveRequestsColumn}>Leave Type</th>
+                                    <th style={styles.leaveRequestsColumn}>Dates</th>
+                                    <th style={styles.leaveRequestsColumn}>Days</th>
+                                    <th style={styles.leaveRequestsColumn}>Status</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {Array.isArray(requests) && requests.length > 0 ? (
+                                    requests.map((req) => (
+                                    <tr 
+                                        key={req.id}
+                                        onClick={() => setSelectedRequest(req)} // ✅ when row is clicked
+                                        style={{ cursor: "pointer" }}
+                                    >
+                                        <td style={styles.leaveRequestsRows}>{req.id_number}</td>
+                                        <td style={styles.leaveRequestsRows}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <img
+                                            src={req.profile_picture || "/default-avatar.png"}
+                                            alt={`${req.first_name} ${req.last_name}`}
+                                            style={{
+                                                width: "32px",
+                                                height: "32px",
+                                                borderRadius: "2px",
+                                                objectFit: "cover",
+                                            }}
+                                            />
+                                            <span>
+                                            {req.first_name} {req.middle_name} {req.last_name}
+                                            </span>
+                                        </div>
+                                        </td>
+                                        <td style={styles.leaveRequestsRows}>{req.office_department}</td>
+                                        <td style={styles.leaveRequestsRows}>{req.position}</td>
+                                        <td style={styles.leaveRequestsRows}>{req.leave_type}</td>
+                                        <td style={styles.leaveRequestsRows}>{String(req.inclusive_dates)}</td>
+                                        <td style={styles.leaveRequestsRows}>{req.number_of_days}</td>
+                                        <td style={styles.leaveRequestsRows}>{req.status}</td>
+                                    </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                    <td>No leave requests found</td>
+                                    </tr>
+                                )}
+                                </tbody>
+
+                            </table>
+                        </div>
+
+                        <div style={styles.rightSection}>
+                                {selectedRequest ? (
+                                    <>
+                                    <div style={styles.employeeCard}>
+                                        <img 
+                                        src={selectedRequest.profile_picture || "/default-avatar.png"}
+                                        alt="profile"
+                                        style={styles.profile_picture}
+                                        />
+                                        <div style={styles.employeeInfo}>
+                                        <p>{selectedRequest.first_name} {selectedRequest.middle_name} {selectedRequest.last_name}</p>
+                                        <p>{selectedRequest.position}</p>
+                                        </div>
+                                    </div>
+
+                                    <div style={styles.moreInfo}>
+                                        <div style={styles.infoRow}>
+                                        <p style={styles.infoLabel}>Employee ID:</p>
+                                        <p style={styles.infoValue}>{selectedRequest.id_number}</p>
+                                        </div>
+
+                                        <div style={styles.infoRow}>
+                                        <p style={styles.infoLabel}>Department:</p>
+                                        <p style={styles.infoValue}>{selectedRequest.office_department}</p>
+                                        </div>
+
+                                        <div style={styles.infoRow}>
+                                        <p style={styles.infoLabel}>Email:</p>
+                                        <p style={styles.infoValue}>{selectedRequest.email}</p>
+                                        </div>
+                                    </div>
+
+                                    <div style={styles.moreDetails}>
+                                        <div style={styles.columnLeave}>
+                                        <div style={styles.leaveRow1}>
+                                            <p>{selectedRequest.number_of_days}</p>
+                                            <p>Days</p>
+                                        </div>
+
+                                        <div style={styles.leaveRow}>
+                                            <p style={styles.leaveColumnName}>Duration</p>
+                                            <p style={styles.leaveRowValue}>{String(selectedRequest.inclusive_dates)}</p>
+                                        </div>
+
+                                        <div style={styles.leaveRow}>
+                                            <p style={styles.leaveColumnName}>Leave Type</p>
+                                            <p style={styles.leaveRowValue}>{selectedRequest.leave_type}</p>
+                                        </div>
+
+                                        <div style={styles.leaveRow}>
+                                            <p style={styles.leaveColumnName}>Status</p>
+                                            <p style={styles.leaveRowValueStatus}>{selectedRequest.status}</p>
+                                        </div>
+                                        </div>
+
+                                        <div style={styles.reasonDetails}>
+                                        <p style={styles.reasonTxt}>Reason</p>
+                                        <p style={styles.reasonTxtMore}>{selectedRequest.reason || "No reason provided"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div style={styles.leaveBalanceDetails}>
+                                        <h3>{selectedRequest.leave_type}</h3>
+                                        <div style={styles.leaveBalanceInfo}>
+                                        <div style={styles.leaveBalanceRow}>
+                                            <p style={styles.balanceTxtUsed}>{selectedRequest.used ?? 0}</p>
+                                            <p style={styles.lblBalance}>Used</p>
+                                        </div>
+
+                                        <div style={styles.leaveBalanceRow}>
+                                            <p style={styles.balanceTxtRemain}>
+                                            {(selectedRequest.entitled ?? 0) - (selectedRequest.used ?? 0)}
+                                            </p>
+                                            <p style={styles.lblBalance}>Balance</p>
+                                        </div>
+                                        </div>
+                                    </div>
+
+                                    <div style={styles.actionButtons}>
+                                        {selectedRequest.status === "Pending" ? (
+                                            <>
+                                                <button
+                                                style={styles.approveBtn}
+                                                onClick={() => {
+                                                    setActionType("approve");
+                                                    setActionRemarks(""); // optional notes
+                                                    setShowActionModal(true);
+                                                }}
+                                                >
+                                                <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
+                                                Approve
+                                                </button>
+                                                <button
+                                                style={styles.rejectBtn}
+                                                onClick={() => {
+                                                    setActionType("reject");
+                                                    setActionRemarks(""); // must enter reason
+                                                    setShowActionModal(true);
+                                                }}                                                >
+                                                <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
+                                                Reject
+                                                </button>
+                                            </>
+                                            ) : (
+                                            <div style={styles.approvalInfo}>
+                                                <div style={styles.approvalDetails}>
+                                                <p style={styles.approvalTxt}>
+                                                    {selectedRequest.status} by {selectedRequest.action_by || "Admin"} on{" "}
+                                                    {new Date(selectedRequest.updated_at).toLocaleDateString()}
+                                                </p>
+                                                {selectedRequest.remarks && (
+                                                    <p style={{ fontSize: "14px", color: "#777", marginTop: "4px" }}>
+                                                    Remarks: {selectedRequest.remarks}
+                                                    </p>
+                                                )}
+                                                </div>
+                                                <div style={styles.approvalDetails}>
+                                                <button style={styles.historyBtn}>View History</button>
+                                                </div>
+                                            </div>
+                                            )}
+
+                                        </div>
+                                    </>
+                                ) : (
+                                    <p style={{ textAlign: "center", marginTop: "50px" }}>Select a leave request to view details</p>
+                                )}
+                                </div>
+
+
+                                {showActionModal && (
+                                    <div style={styles.modalOverlay}>
+                                        <div style={styles.modalContent}>
+                                        <h3>{actionType === "approve" ? "Approve Leave Request" : "Reject Leave Request"}</h3>
+
+                                        {actionType === "reject" && (
+                                            <div style={{ margin: "12px 0" }}>
+                                            <label>Reason for Rejection:</label>
+                                            <textarea
+                                                style={styles.textarea}
+                                                value={actionRemarks}
+                                                onChange={(e) => setActionRemarks(e.target.value)}
+                                                placeholder="Enter reason..."
+                                            />
+                                            </div>
+                                        )}
+
+                                        {actionType === "approve" && (
+                                            <div style={{ margin: "12px 0" }}>
+                                            <label>Optional Note:</label>
+                                            <textarea
+                                                style={styles.textarea}
+                                                value={actionRemarks}
+                                                onChange={(e) => setActionRemarks(e.target.value)}
+                                                placeholder="Optional remarks..."
+                                            />
+                                            </div>
+                                        )}
+
+                                        <div style={styles.modalActions}>
+                                            <button
+                                            style={styles.confirmBtn}
+                                            onClick={() => {
+                                                if (actionType === "approve") {
+                                                handleApprove(selectedRequest.id, actionRemarks);
+                                                } else {
+                                                handleReject(selectedRequest.id, actionRemarks);
+                                                }
+                                                setShowActionModal(false);
+                                            }}
+                                            disabled={actionType === "reject" && !actionRemarks.trim()} // require reason for reject
+                                            >
+                                            Confirm
+                                            </button>
+                                            <button
+                                            style={styles.cancelBtn}
+                                            onClick={() => setShowActionModal(false)}
+                                            >
+                                            Cancel
+                                            </button>
+                                        </div>
+                                        </div>
+                                    </div>
+                                    )}
+
                 </div>
             )}
 
@@ -714,10 +990,6 @@ const handleFileUpload = (e) => {
                     </div>
                 </div>
                 )}
-
-                
-
-
              </div>
       </div>
   );
@@ -1304,7 +1576,14 @@ const styles = {
         fontSize: '12px'
     },
     leaveRequests: {
+        display: 'flex',
+        flexDirection: 'row',
+    },
 
+    leftSection: {
+        flex: 3,
+        marginRight: 24,
+        overflowX: 'auto',
     },
 
     leaveRequestsTable: {
@@ -1338,9 +1617,329 @@ const styles = {
         color: '#1F2937',
         verticalAlign: 'middle',
     },
+
+    rightSection: {
+        flex: 2,
+        backgroundColor: '#F2F2F2',
+        padding: 16,
+        borderRadius: 12,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        height: 'fit-content',
+    },
+
+    profile_picture: {
+        width: '50px',
+        height: '50px',
+        borderRadius: '8px',
+        objectFit: 'cover',
+        marginRight: '12px',
+        border: '2px solid #E5E7EB',
+        backgroundColor: '#F3F4F6',
+    },
+
+    employeeInfo: {
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        fontSize: '14px',
+        fontWeight: '600',
+        color: '#1F2937',
+        marginTop: '4px'
+    },
+
+    employeeCard: {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    moreInfo: {
+        marginTop: 15,
+        backgroundColor: '#ffffff',
+        padding: 16,
+        borderRadius: 12,
+    },
+
+    infoRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+
+    moreDetails: {
+        marginTop: 15,
+        backgroundColor: '#ffffff',
+        padding: 16,
+        borderRadius: 12,
+    },
+
+    columnLeave: {
+        display: 'flex',
+        flexDirection: 'row',
+        gap: 12,
+        justifyContent: 'space-between',
+    },
+
+    leaveRow1: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        backgroundColor: '#5ab049ff',
+        color: '#fefcf5',
+        padding: '10px 16px',
+        borderRadius: '8px',
+        justifyContent: 'center',
+    },
+
+    leaveColumnName: {
+        color: '#6B7280',
+        fontSize: '12px',
+        marginBottom: '4px',
+    },
+
+    leaveRowValue: {
+        fontSize: '14px',
+        fontWeight: '500',
+        color: '#1F2937',
+    },
+
+    leaveRowValueStatus: {
+        fontSize: '14px',
+        fontWeight: '600',
+        color: '#1F2937',
+        backgroundColor: '#FFDD00',
+        padding: '4px 8px',
+        borderRadius: '8px',
+    },
+
+    reasonDetails: {
+        marginTop: 16,
+        padding: 15,
+        borderRadius: 12,
+        border: '1px solid #E5E7EB',
+    },
+
+    reasonTxt: {
+        fontSize: '14px',
+        fontWeight: '600',
+        marginBottom: 8,
+        color: '#1F2937',
+    },
+
+    reasonTxtMore: {
+        fontSize: '13px',
+        color: '#4B5563',
+        lineHeight: '1.5',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        maxHeight: '100px',
+        overflowY: 'auto',
+        paddingRight: '8px',
+        textAlign: 'justify',
+    },
+
+    leaveBalanceDetails: {
+        marginTop: 16,
+        padding: 15,
+        borderRadius: 12,
+        backgroundColor: '#ffffff',
+    },
+
+    leaveBalanceInfo: {
+        display: 'flex',
+        gap: 12,
+        marginTop: 12,
+        justifyContent: 'center',
+    },
+
+    leaveBalanceRow: {
+        display: 'flex',
+        flexDirection: 'row',
+        borderRadius: '8px',
+        alignItems: 'center',
+        textAlign: 'center',
+    },
+
+    balanceTxtUsed: {
+        fontSize: '20px',
+        fontWeight: '600',
+        color: '#ffffffff',
+        backgroundColor: '#ff5e5eff',
+        padding: '10px 16px',
+        borderTopLeftRadius: '8px',
+        borderBottomLeftRadius: '8px',
+        boxShadow: 'inset 1px 1px 2px rgba(44, 44, 44, 0.44)',
+    },
+
+    balanceTxtRemain: {
+        fontSize: '20px',
+        fontWeight: '600',
+        color: '#ffffffff',
+        backgroundColor: '#003cffff',
+        padding: '10px 16px',
+        borderTopLeftRadius: '8px',
+        borderBottomLeftRadius: '8px',
+        boxShadow: 'inset 1px 1px 2px rgba(44, 44, 44, 0.44)',
+    },
+
+
+    lblBalance: {
+        fontSize: '20px',
+        fontWeight: '600',
+        color: '#1F2937',
+        padding: '10px 40px',
+        borderTopRightRadius: '8px',
+        borderBottomRightRadius: '8px',
+        boxShadow: 'inset 1px 1px 2px rgba(44, 44, 44, 0.44)',
+        backgroundColor: '#f3f4f6',
+    },
+
+    actionButtons: {
+        display: 'flex',
+        gap: 12,
+        marginTop: 16,
+    },
+
+    approveBtn: {
+        backgroundColor: '#00d54eff',
+        color: '#ffffff',
+        border: 'none',
+        borderRadius: 8,
+        padding: '8px 12px',
+        fontSize: '14px',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease-in-out',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        boxShadow: '1px 1px 1px rgba(0, 0, 0, 0.3)',
+    },
+
+    rejectBtn: {
+        backgroundColor: '#ff3d3dff',
+        color: '#ffffff',
+        border: 'none',
+        borderRadius: 8,
+        padding: '8px 12px',
+        fontSize: '14px',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease-in-out',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        boxShadow: '1px 1px 1px rgba(0, 0, 0, 0.3)',
+    },
+
+    iconApprove: {
+        fontSize: '16px',
+        marginRight: '4px',
+    },
     
+    iconReject: {
+        fontSize: '16px',
+        marginRight: '4px',
+    },
 
+    historyBtn: {
+        backgroundColor: '#5ab049ff',
+        color: '#fefcf5',
+        border: 'none',
+        borderRadius: 8,
+        padding: '8px 12px',
+        fontSize: '14px',
+        fontWeight: 500,
+    },
 
+    approvalInfo: {
+        display: 'flex',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 100,
+    },
+
+    approvalTxt: {
+        fontSize: '14px',
+        color: '#4B5563',
+        lineHeight: '1.5',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        textAlign: 'justify',
+    },
+
+    modalOverlay: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+
+    modalContent: {
+        backgroundColor: '#fff',
+        padding: 24,
+        borderRadius: 12,
+        width: '400px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        position: 'relative',
+        maxHeight: '80vh',
+        overflowY: 'auto',
+    },
+
+    textarea: {
+        width: '100%',
+        height: '100px',
+        borderRadius: '8px',
+        border: '1px solid #ccc',
+        padding: '10px',
+        fontSize: '14px',
+        resize: 'vertical',
+        boxSizing: 'border-box',
+        marginTop: '10px',
+    },
+
+    modalActions: {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '10px',
+        marginTop: '20px',
+    },
+
+    confirmBtn: {
+        backgroundColor: '#5ab049ff',
+        color: '#fefcf5',
+        border: 'none',
+        borderRadius: 8,
+        padding: '8px 12px',
+        fontSize: '14px',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease-in-out',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+    },
+
+    cancelBtn: {
+        backgroundColor: '#ff3d3dff',
+        color: '#ffffff',
+        border: 'none',
+        borderRadius: 8,
+        padding: '8px 12px',
+        fontSize: '14px',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease-in-out',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+    }
 
 };
 

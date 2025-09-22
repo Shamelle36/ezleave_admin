@@ -30,7 +30,12 @@ function Dashboard() {
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState("Leave Type");
   const [employeeCount, setEmployeeCount] = useState(0);
-
+  const [leaveCounts, setLeaveCounts] = useState({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0
+  });
 
   const options = [
     "Vacation Leave",
@@ -69,6 +74,20 @@ function Dashboard() {
     fetchEmployeeCount();
   }, []);
 
+  useEffect(() => {
+    const fetchLeaveCount = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/leave-requests/count");
+        const data = await res.json();
+        setLeaveCounts(data);
+      } catch (err) {
+        console.error("Error fetching leave count:", err);
+      }
+    };
+
+    fetchLeaveCount();
+  }, []);
+
   const cardsData = [
   {
     title: 'Total Employees',
@@ -80,14 +99,14 @@ function Dashboard() {
   {
     title: 'Pending Leave Requests',
     description: '3% less than last month',
-    value: 0,
+    value: leaveCounts.pending,
     background: styles.card,
     paddingTop: '20px',
   },
   {
     title: 'Approved Leave Requests',
     description: '5% less than last month',
-    value: 0,
+    value: leaveCounts.approved,
     background: styles.card,
     paddingTop: '20px',
   },
