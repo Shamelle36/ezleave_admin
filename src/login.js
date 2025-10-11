@@ -20,30 +20,52 @@ function Login() {
     }
   }, [navigate]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setMessage("");
-    setLoading(true);
+const handleLogin = async (e) => {
+  e.preventDefault();
+  setMessage("");
+  setLoading(true);
 
+  try {
+    // First try the main admin login
+    let res = await axios.post("http://localhost:5000/api/auth/login", {
+      email,
+      password,
+    });
+
+    // ✅ Admin login success
+    if (res.status === 200) {
+      localStorage.setItem("admin", JSON.stringify(res.data.user));
+      localStorage.setItem("role", res.data.user.role);
+      navigate("/dashboard");
+      return;
+    }
+  } catch (err) {
+    // If admin login fails, try the department account login
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/login", {
+      const res = await axios.post("http://localhost:5000/api/authAdmin/login", {
         email,
         password,
       });
 
       if (res.status === 200) {
-        setMessage("Login successful! Redirecting to admin dashboard...");
-        localStorage.setItem("admin", JSON.stringify(res.data.user)); // Save session
-        setLoading(false);
-
-        setTimeout(() => navigate("/dashboard"), 1000);
+        localStorage.setItem("admin", JSON.stringify(res.data.user));
+        localStorage.setItem("token", res.data.token);
+        localStorage.setItem("role", res.data.user.role);
+        localStorage.setItem("department", res.data.user.department);
+        navigate("/dashboard");
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      setMessage(err.response?.data?.message || "Login failed");
+    } catch (err2) {
+      console.error(err2);
+      setMessage(err2.response?.data?.message || "Invalid credentials.");
       setLoading(false);
+      return;
     }
-  };
+  }
+
+  setMessage("Invalid credentials.");
+  setLoading(false);
+};
 
   return (
     <div className="container">

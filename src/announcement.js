@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -26,7 +26,8 @@ function Announcement() {
     details: "",
     priority: "",
   });
-
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -38,9 +39,55 @@ function Announcement() {
   const toggleExpand = () => setExpanded(!expanded);
   const [menuOpen, setMenuOpen] = useState(null);
 
+
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+
+   const [showLogoutModal, setShowLogoutModal] = useState(false);
+      const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+        
+      const menuItems = [
+        { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+        { name: "Employees", icon: faUsers, to: "/employee" },
+        { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+        { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+        { name: "Message", icon: faEnvelope, to: "/messages" },
+        { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+        { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+        { name: "User Management", icon: faUserCog, to: "/userManagement" },
+        { name: "Settings", icon: faCog, to: "#" },
+      ];
+        
+          const allowedMenus = menuItems.filter((item) => {
+            if (role === "admin") return true;
+            if (role === "mayor" || role === "office_head") {
+              return [
+                "Dashboard",
+                "Employees",
+                "Attendance",
+                "Leave Management",
+                "Message",
+                "Announcement",
+              ].includes(item.name);
+            }
+            return false;
+          });
+    
+      const handleLogout = async () => {
+        const user = JSON.parse(localStorage.getItem("admin")); // get current session
+    
+        if (user) {
+          await fetch("http://localhost:5000/api/auth/logout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, role: user.role }),
+          });
+        }
+    
+        localStorage.removeItem("admin"); // clear session
+        navigate("/"); // redirect to login
+      };
 
   
   useEffect(() => {
@@ -203,21 +250,71 @@ function Announcement() {
 
       <div style={styles.sidebar}>
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-        <ul style={styles.sidebarList}>
-          <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-          <li><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-          <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
-          <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-          <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-          <li style={styles.btnActive}><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-          <li><Link style={styles.sb} to="/audit_logs"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
-        </ul>
+            <ul style={styles.sidebarList}>
+  {allowedMenus.map((item) => {
+    const isActive = location.pathname === item.to; // Check if current route matches
+
+    return (
+      <li
+        key={item.name}
+        style={{
+          ...(isActive ? styles.btnActive : {}), // Apply active tab background
+        }}
+      >
+        <Link
+          style={{
+            ...styles.sb,
+            ...(isActive ? styles.btnActive : {}),
+          }}
+          to={item.to}
+        >
+          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+        </Link>
+      </li>
+    );
+  })}
+
+  <li>
+    <Link
+      style={styles.sb}
+      to="#"
+      onClick={(e) => {
+        e.preventDefault();
+        setShowLogoutModal(true);
+      }}
+    >
+      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+    </Link>
+  </li>
+</ul>
       </div>
 
       <div style={styles.content}>
+
+               {showLogoutModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelBtn}
+                onClick={() => setShowLogoutModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                style={styles.confirmBtn}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
         <div style={styles.announcementBoard}>
           <p style={{ fontSize: '20px', fontWeight: '600' }}>Announcement</p>
 
@@ -373,9 +470,6 @@ function Announcement() {
                         )}
 
                     </div>
-
-                    
-
                     
                   </div>
 

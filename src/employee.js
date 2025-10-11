@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -19,7 +19,9 @@ import {
   faPen,
   faCircle,
   faDownload,
-  faSearch
+  faSearch,
+  faTimes,
+  faPenToSquare
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -27,6 +29,7 @@ import Papa from 'papaparse';
 
   function Employees() {
  const [employeeRecord, setEmployeeRecords] = useState([]);
+ const location = useLocation();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [employeesToUpload, setEmployeesToUpload] = useState([]);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
@@ -39,8 +42,16 @@ import Papa from 'papaparse';
   const [view, setView] = useState('list');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+  const listEmployeePerPage = 10;
   const fileInputRef = React.useRef(null);
   const navigate = useNavigate();
+  const [selectAll, setSelectAll] = useState(false);
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterEmploymentStatus, setFilterEmploymentStatus] = useState('');
+
+
 
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
@@ -55,6 +66,37 @@ import Papa from 'papaparse';
     contact_number: '',
     civil_status: '',
   });
+
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  
+    const menuItems = [
+      { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+      { name: "Employees", icon: faUsers, to: "/employee" },
+      { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+      { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+      { name: "Message", icon: faEnvelope, to: "/messages" },
+      { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+      { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+      { name: "User Management", icon: faUserCog, to: "/userManagement" },
+      { name: "Settings", icon: faCog, to: "#" },
+    ];
+  
+    const allowedMenus = menuItems.filter((item) => {
+      if (role === "admin") return true;
+      if (role === "mayor" || role === "office_head") {
+        return [
+          "Dashboard",
+          "Employees",
+          "Attendance",
+          "Leave Management",
+          "Message",
+          "Announcement",
+        ].includes(item.name);
+      }
+      return false;
+    });
+  
 
   const departments = [
     "Office of the Municipal Mayor",
@@ -83,68 +125,113 @@ import Papa from 'papaparse';
       loadEmployees();
     }, []);
 
-  const loadEmployees = async () => {
-    try {
-      const res = await fetch("http://localhost:5000/api/employees");
-      const data = await res.json();
-      // Always wrap response as an array
-      setEmployeeRecords(Array.isArray(data) ? data : [data]);
-    } catch (err) {
-      console.error("Error loading employees:", err);
-      setEmployeeRecords([]); // fallback to empty array
-    }
-  };
+const loadEmployees = async () => {
+  try {
+    const role = localStorage.getItem("role") || "admin";
+    const department = localStorage.getItem("department") || "";
+
+    // Always include role and department in query params
+    const params = new URLSearchParams({ role, department }).toString();
+    const url = `http://localhost:5000/api/employees?${params}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    setEmployeeRecords(Array.isArray(data) ? data : [data]);
+  } catch (err) {
+    console.error("Error loading employees:", err);
+    setEmployeeRecords([]); // fallback
+  }
+};
+
 
 
   const handleButtonClick = () => {
     fileInputRef.current.click();
   };
 
-  const handleCSVUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+const handleCSVUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-    Papa.parse(file, {
-      header: true,
-      complete: (results) => {
-        const employeesRaw = results.data.map((row) => ({
-          full_name: row.full_name?.trim(),
-          email: row.email?.trim(),
-          position: row.position?.trim(),
-          employment_status: row.employment_status?.trim(),
-          department_id: 1, // default mock
-          gender: row.gender?.trim(),
-          date_hired:
-            row.date_hired?.trim() ||
-            new Date().toISOString().split('T')[0],
-          civil_status: row.civil_status?.trim(),
-        }));
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => {
+      const employeesRaw = results.data.map((row, index) => {
+        // Combine first_name + last_name if full_name not provided
+        const firstName = row.first_name?.trim() || `FirstName${index + 1}`;
+        const lastName = row.last_name?.trim() || `LastName${index + 1}`;
+        const fullName = `${firstName} ${lastName}`;
 
-        const validEmployees = employeesRaw.filter(
-          (emp) =>
-            emp.full_name &&
-            emp.email &&
-            emp.position &&
-            emp.department_id &&
-            emp.gender
-        );
+        return {
+          first_name: firstName,
+          last_name: lastName,
+          full_name: fullName,
+          email: row.email?.trim() || `user${index + 1}@example.com`,
+          position: row.position?.trim() || 'Employee',
+          employment_status: row.employment_status?.trim() || 'Permanent',
+          department: row.department?.trim() || 'General',
+          gender: row.gender?.trim() || 'Male',
+          date_hired: row.date_hired?.trim() || new Date().toISOString().split('T')[0],
+          civil_status: row.civil_status?.trim() || 'Single',
+          contact_number: row.contact_number?.trim() || '',
+          id_number: row.id_number?.trim() || `ID${index + 1}`,
+          status: row.status?.trim() || 'active',
+        };
+      });
 
-        if (validEmployees.length === 0) {
-          alert('No valid employees in CSV.');
-          return;
-        }
+      // No need to filter; import all
+      setEmployeesToUpload(employeesRaw);
+      setShowConfirmModal(true);
 
-        setEmployeesToUpload(validEmployees);
-        setShowConfirmModal(true);
-      },
-    });
-  };
+      console.log('CSV parsed employees:', employeesRaw);
+    },
+    error: (err) => {
+      console.error('CSV parsing error:', err);
+      alert('Failed to parse CSV file.');
+    },
+  });
+};
+
 
   const confirmUpload = async () => {
+  if (employeesToUpload.length === 0) return;
+
+  try {
+    const savedEmployees = [];
+
+    for (const emp of employeesToUpload) {
+      const response = await fetch("http://localhost:5000/api/employees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(emp),
+      });
+
+      if (!response.ok) {
+        console.error(`Failed to import ${emp.full_name}`);
+        continue; // skip this employee and continue
+      }
+
+      const savedEmployee = await response.json();
+      savedEmployees.push(savedEmployee);
+    }
+
+    if (savedEmployees.length > 0) {
+      setEmployeeRecords((prev) => [...savedEmployees, ...prev]);
+      alert(`${savedEmployees.length} employees imported successfully!`);
+    } else {
+      alert("No employees were imported. Check your CSV for valid data.");
+    }
+
+    setEmployeesToUpload([]);
     setShowConfirmModal(false);
-    setEmployeeRecords((prev) => [...employeesToUpload, ...prev]);
-    alert('Employees imported successfully!');
-  };
+  } catch (error) {
+    console.error("Error importing employees:", error);
+    alert("Something went wrong while importing employees.");
+  }
+};
+
 
   const handleDeleteClick = (employee) => {
     setEmployeeToDelete(employee);
@@ -163,9 +250,19 @@ import Papa from 'papaparse';
   };
 
 
-  const handleLogout = () => {
-    // Replace with your auth logout
-    window.location.href = '/';
+  const handleLogout = async () => {
+    const user = JSON.parse(localStorage.getItem("admin")); // get current session
+
+    if (user) {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, role: user.role }),
+      });
+    }
+
+    localStorage.removeItem("admin"); // clear session
+    navigate("/"); // redirect to login
   };
 
   const handleAddEmployee = async () => {
@@ -236,6 +333,49 @@ import Papa from 'papaparse';
     setShowEditModal(false);
   };
 
+  const handleSelectAll = (e) => {
+    const checked = e.target.checked;
+    setSelectAll(checked);
+    if (checked) {
+      setSelectedEmployees(employeeRecord.map((emp) => emp.id));
+    } else {
+      setSelectedEmployees([]);
+    }
+  };
+
+  const handleSelectEmployee = (id) => {
+    setSelectedEmployees((prev) =>
+      prev.includes(id)
+        ? prev.filter((empId) => empId !== id)
+        : [...prev, id]
+    );
+  };
+
+  useEffect(() => {
+    if (showViewModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => (document.body.style.overflow = 'auto');
+  }, [showViewModal]);
+
+  const filteredEmployees = employeeRecord
+  .filter(emp =>
+    (`${emp.first_name} ${emp.last_name}`)
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase()) ||
+    emp.email.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+  .filter(emp =>
+    filterDepartment ? emp.department === filterDepartment : true
+  )
+  .filter(emp =>
+    filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true
+  );
+
+
+
   return (
     <div style={styles.dashboardContainer}>
 
@@ -247,24 +387,69 @@ import Papa from 'papaparse';
       <div style={styles.sidebar}>
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
         <ul style={styles.sidebarList}>
-          <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-          <li style={styles.btnActive}><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-          <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
-          <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-          <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-          <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-          <li><Link style={styles.sb} to="/audit_logs"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
-          <li>
-            <button style={{ ...styles.sb, background: 'none', border: 'none', cursor: 'pointer' }} onClick={handleLogout}>
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </button>
-          </li>
-        </ul>
+  {allowedMenus.map((item) => {
+    const isActive = location.pathname === item.to; // Check if current route matches
+
+    return (
+      <li
+        key={item.name}
+        style={{
+          ...(isActive ? styles.btnActive : {}), // Apply active tab background
+        }}
+      >
+        <Link
+          style={{
+            ...styles.sb,
+            ...(isActive ? styles.btnActive : {}),
+          }}
+          to={item.to}
+        >
+          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+        </Link>
+      </li>
+    );
+  })}
+
+  <li>
+    <Link
+      style={styles.sb}
+      to="#"
+      onClick={(e) => {
+        e.preventDefault();
+        setShowLogoutModal(true);
+      }}
+    >
+      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+    </Link>
+  </li>
+</ul>
       </div>
 
       <div style={styles.content}>
+      
+      {showLogoutModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelBtn}
+                onClick={() => setShowLogoutModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                style={styles.confirmBtn}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         <div style={styles.buttons}>
           <button 
             style={view === 'list' ? styles.btn1 : styles.btn}
@@ -284,87 +469,157 @@ import Papa from 'papaparse';
         {view === 'list' && (
           <div style={styles.content1}>
             <div style={styles.firstRow}>
-              <p>List of Employee</p>
-              <div>
-                <button style={styles.importBtn} onClick={handleButtonClick}>
-                  <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
-                  Import CSV
-                </button>
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  ref={fileInputRef}
-                  onChange={handleCSVUpload} 
-                  style={{display: 'none'}} 
-                />
-                <button style={styles.btnAddEmployee} onClick={() => setShowAddModal(true)}><FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd} />Add Employee</button>
+
+                {/* Search Input */}
+                <div style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px'}}>
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, or position..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ ...styles.searchInput, width: '300px' }}
+                  />
+
+                  {/* Department Filter */}
+                  <select
+                    value={filterDepartment}
+                    onChange={(e) => setFilterDepartment(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+                  >
+                    <option value="">All Departments</option>
+                    {departments.map((dept, idx) => (
+                      <option key={idx} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+
+                  {/* Employment Status Filter */}
+                  <select
+                    value={filterEmploymentStatus}
+                    onChange={(e) => setFilterEmploymentStatus(e.target.value)}
+                    style={{ ...styles.filterDropdown, padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc'}}
+                  >
+                    <option value="">All Employment Status</option>
+                    <option value="Temporary">Temporary</option>
+                    <option value="Contractual">Contractual</option>
+                    <option value="Permanent">Permanent</option>
+                    <option value="Casual">Casual</option>
+                    {/* Add other statuses here */}
+                  </select>
+                </div>
+
+                <div style={styles.row1}>
+                  <button style={styles.importBtn} onClick={handleButtonClick}>
+                    <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
+                    Import CSV
+                  </button>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    ref={fileInputRef}
+                    onChange={handleCSVUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <button style={styles.btnAddEmployee} onClick={() => setShowAddModal(true)}>
+                    <FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd} />
+                    Add Employee
+                  </button>
               </div>
             </div>
 
-            <div style={styles.table}>
-              <table style={styles.employeeTable}>
-                <thead>
-                  <tr>
-                    <th style={styles.columnName}>No.</th>
-                    <th style={styles.columnName}>ID Number</th>
-                    <th style={styles.columnName}>Name</th>
-                    <th style={styles.columnName}>Position</th>
-                    <th style={styles.columnName}>Department</th>
-                    <th style={styles.columnName}>Status of Employment</th>
-                    <th style={styles.columnName}>Gender</th>
-                    <th style={styles.columnName}>Civil Status</th>
-                    <th style={styles.columnName}>Status</th>
-                    <th style={styles.columnName}>Email</th>
-                    <th style={styles.columnName}>Contact Number</th>
-                    <th style={styles.columnName}>Date Hired</th>
-                    <th style={styles.columnName}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employeeRecord.map((record, index) => (
-                    <tr key={record.id}>
-                      <td style={styles.rowName}>{index + 1}</td>
-                      <td style={styles.rowName}>{record.id_number || '—'}</td>
-                      <td style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
-                      <td style={styles.rowName}>{record.position}</td>
-                      <td style={styles.rowName}>{record.department || '—'}</td>
-                      <td style={styles.rowName}>{record.employment_status}</td>
-                      <td style={styles.rowName}>{record.gender}</td>
-                      <td style={styles.rowName}>{record.civil_status}</td>
-                      <td style={styles.rowName}>
-                        <FontAwesomeIcon
-                          icon={faCircle}
+
+              <div style={styles.tableContainer}>
+                <div style={styles.table}>
+                  <table style={styles.employeeTable}>
+                    <thead>
+                      <tr>
+                        <th style={styles.columnName}>
+                          <input
+                            type="checkbox"
+                            checked={selectAll}
+                            onChange={handleSelectAll}
+                            style={styles.checkbox}
+                          />
+                        </th>
+                        <th style={styles.columnName}>No.</th>
+                        <th style={styles.columnName}>ID Number</th>
+                        <th style={styles.columnName}>Name</th>
+                        <th style={styles.columnName}>Position</th>
+                        <th style={styles.columnName}>Department</th>
+                        <th style={styles.columnName}>Status of Employment</th>
+                        <th style={styles.columnName}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredEmployees
+                        .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
+                        .map((record, index) => (
+                          <tr key={record.id}>
+                            <td style={styles.rowName}>
+                              <input
+                                type="checkbox"
+                                checked={selectedEmployees.includes(record.id)}
+                                onChange={() => handleSelectEmployee(record.id)}
+                                style={styles.checkbox}
+                              />
+                            </td>
+                            <td style={styles.rowName}>{index + 1 + (currentPage - 1) * listEmployeePerPage}</td>
+                            <td style={styles.rowName}>{record.id_number || '—'}</td>
+                            <td style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
+                            <td style={styles.rowName}>{record.position}</td>
+                            <td style={styles.rowName}>{record.department || '—'}</td>
+                            <td style={styles.rowName}>{record.employment_status}</td>
+                            <td style={styles.rowName}>
+                              <button style={styles.viewBtn} onClick={() => handleViewClick(record)}>
+                                <FontAwesomeIcon icon={faEye} />
+                              </button>
+                              <button style={styles.editBtn} onClick={() => handleEditClick(record)}>
+                                <FontAwesomeIcon icon={faPenToSquare} />
+                              </button>
+                              <button style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
+                                <FontAwesomeIcon icon={faTrash} />
+                              </button>
+                            </td>
+                          </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Pagination */}
+                  <div style={styles.paginationContainer}>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      style={styles.pageBtn}
+                    >
+                      {'<'}
+                    </button>
+
+                    {[...Array(Math.ceil(filteredEmployees.length / listEmployeePerPage))].map((_, idx) => {
+                      const page = idx + 1;
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
                           style={{
-                            color:
-                              record.status === 'active'
-                                ? 'green'
-                                : record.status === 'inactive'
-                                ? 'red'
-                                : 'gray',
-                            marginRight: 5,
+                            ...styles.pageBtn,
+                            ...(currentPage === page ? styles.activePageBtn : {}),
                           }}
-                        />
-                        {record.status}
-                      </td>
-                      <td style={styles.rowName}>{record.email}</td>
-                      <td style={styles.rowName}>{record.contact_number || '—'}</td>
-                      <td style={styles.rowName}>{record.date_hired}</td>
-                      <td style={styles.rowName}>
-                        <button style={styles.viewBtn} onClick={() => handleViewClick(record)}>
-                          <FontAwesomeIcon icon={faEye} />
+                        >
+                          {page}
                         </button>
-                        <button style={styles.editBtn} onClick={() => handleEditClick(record)}>
-                          <FontAwesomeIcon icon={faPen} />
-                        </button>
-                        <button style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
-                          <FontAwesomeIcon icon={faTrash}/>
-                        </button>
-                      </td>   
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      );
+                    })}
+
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredEmployees.length / listEmployeePerPage)))}
+                      style={styles.pageBtn}
+                    >
+                      {'>'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+
 
 
             {showConfirmModal && (
@@ -378,335 +633,459 @@ import Papa from 'papaparse';
             )}
 
             {showViewModal && selectedEmployee && (
-                <div style={styles.confirmModal}>
-                  <div style={styles.viewModalCard}>
-                    <div style={styles.profileSection}>
-                      <img
-                        src={selectedEmployee.profile_url || 'https://via.placeholder.com/100'}
-                        alt="Profile"
-                        style={styles.profileImage}
-                      />
-                      <h2 style={styles.viewModalHeader}>{selectedEmployee.full_name}</h2>
-                      <p style={styles.viewSubtext}>{selectedEmployee.position}</p>
-                      <p style={styles.viewSubtext}>{selectedEmployee.id_number}</p>
-                    </div>
+              <div style={styles.rightModalOverlay} onClick={() => setShowViewModal(false)}>
+                <div
+                  style={styles.rightModalCard}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div style={styles.rightModalHeader}>
+                    <h2 style={styles.viewModalHeader}>Employee Details</h2>
+                    <FontAwesomeIcon
+                      icon={faTimes}
+                      style={styles.closeIcon}
+                      onClick={() => setShowViewModal(false)}
+                    />
+                  </div>
 
-                    <div style={styles.viewModalContent}>
-                      <div style={styles.viewRow}>
-                        <label>Email:</label>
-                        <span>{selectedEmployee.email}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Contact Number:</label>
-                        <span>{selectedEmployee.contact_number}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Department:</label>
-                        <span>{departments.find(d => d.id === selectedEmployee.department_id)?.name || '—'}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Employment Status:</label>
-                        <span>{selectedEmployee.employment_status}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Gender:</label>
-                        <span>{selectedEmployee.gender}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Civil Status:</label>
-                        <span>{selectedEmployee.civil_status}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Status:</label>
-                        <span>{selectedEmployee.status}</span>
-                      </div>
-                      <div style={styles.viewRow}>
-                        <label>Date Hired:</label>
-                        <span>{selectedEmployee.date_hired}</span>
+                  {/* Top Profile Section */}
+                  <div style={styles.topSection}>
+                    <img
+                      src={selectedEmployee.profile_picture || "https://via.placeholder.com/140"}
+                      alt="Profile"
+                      style={styles.profileImage}
+                    />
+                    <div style={styles.profileText}>
+                      <h3 style={styles.employeeName}>{selectedEmployee.full_name}</h3>
+                      <p style={styles.employeePosition}>{selectedEmployee.position}</p>
+                      <p style={styles.employeeID}>ID: {selectedEmployee.id_number}</p>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div style={styles.detailsContainer}>
+                    <div style={styles.detailCard}>
+                      <h4 style={styles.detailHeader}>Contact Information</h4>
+                      <div style={styles.twoColumnGrid}>
+                        <div>
+                          <label>Email</label>
+                          <p>{selectedEmployee.email}</p>
+                        </div>
+                        <div>
+                          <label>Contact Number</label>
+                          <p>{selectedEmployee.contact_number}</p>
+                        </div>
                       </div>
                     </div>
 
-                    <button onClick={() => setShowViewModal(false)} style={styles.viewCloseBtn}>
-                      Close
-                    </button>
+                    <div style={styles.detailCard}>
+                      <h4 style={styles.detailHeader}>Employment Details</h4>
+                      <div style={styles.twoColumnGrid}>
+                        <div>
+                          <label>Department</label>
+                          <p>{selectedEmployee.department}</p>
+                        </div>
+                        <div>
+                          <label>Employment Status</label>
+                          <p>{selectedEmployee.employment_status}</p>
+                        </div>
+                        <div>
+                          <label>Date Hired</label>
+                          <p>{new Date(selectedEmployee.date_hired).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={styles.detailCard}>
+                      <h4 style={styles.detailHeader}>Personal Information</h4>
+                      <div style={styles.twoColumnGrid}>
+                        <div>
+                          <label>Gender</label>
+                          <p>{selectedEmployee.gender}</p>
+                        </div>
+                        <div>
+                          <label>Civil Status</label>
+                          <p>{selectedEmployee.civil_status}</p>
+                        </div>
+                        <div>
+                          <label>Status</label>
+                          <p>{selectedEmployee.status}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              
-              {showEditModal && employeesToEdit && (
-                  <div style={styles.confirmModal}>
-                    <div style={{ ...styles.questionModal, width: '500px', textAlign: 'left' }}>
-                      <h3>Edit Employee</h3>
-                      <input 
-                        style={styles.modalInputs}
-                        value={employeesToEdit.full_name}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, full_name: e.target.value })}
-                        placeholder="Full Name"
-                      />
-                      <input 
-                        style={styles.modalInputs}
-                        value={employeesToEdit.email}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, email: e.target.value })}
-                        placeholder="Email"
-                      />
-                      <input 
-                        style={styles.modalInputs}
-                        value={employeesToEdit.position}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, position: e.target.value })}
-                        placeholder="Position"
-                      />
-                      <input
-                        style={styles.modalInputs}
-                        value={employeesToEdit.id_number || ''}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, id_number: e.target.value })}  
-                        placeholder='ID Number (e.g., 20230606)'
-                      />
-                      <input 
-                        style={styles.modalInputs}
-                        value={employeesToEdit.contact_number || ''}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, contact_number: e.target.value })}
-                        placeholder='Contact Number (e.g., 09171234567)'
-                      />
+            {showEditModal && employeesToEdit && (
+              <div style={styles.modalOverlay}>
+                <div style={styles.modalContainer}>
+                  <h3 style={styles.modalTitle}>Edit Employee Information</h3>
+                  <p style={styles.modalSubtitle}>
+                    Update the necessary details below and click <strong>Save</strong> to apply changes.
+                  </p>
 
-                      <select
-                        style={styles.modalInputs}
-                        value={employeesToEdit.civil_status}
-                        onChange={(e) => setEmployeesToEdit({...employeesToEdit, civil_status: e.target.value})}  
-                      >
-                        <option value="" disabled>Select Civil Status</option>
-                        <option value="Single">Single</option>
-                        <option value="Married">Married</option>
-                        <option value="Widowed">Widowed</option>
-                        <option value="Separated">Separated</option>
-                        <option value="Annulled">Annulled</option>
-                      </select>
+                  <div style={styles.modalGrid}>
+                    {/* First Name */}
+                    <input
+                      placeholder="First Name"
+                      style={styles.modalInput}
+                      value={employeesToEdit.first_name}
+                      onChange={(e) =>
+                        setEmployeesToEdit({ ...employeesToEdit, first_name: e.target.value.replace(/[0-9]/g, "") })
+                      }
+                    />
 
-                      <select
-                        style={styles.modalInputs}
-                        value={employeesToEdit.department || ""}   
-                        onChange={(e) =>
-                          setEmployeesToEdit({ ...employeesToEdit, department: e.target.value })
-                        }
-                      >
-                        <option value="">Select Department</option>
-                        {departments.map((dept, index) => (
-                          <option key={index} value={dept}>
-                            {dept}
-                          </option>
+                    {/* Last Name */}
+                    <input
+                      placeholder="Last Name"
+                      style={styles.modalInput}
+                      value={employeesToEdit.last_name}
+                      onChange={(e) =>
+                        setEmployeesToEdit({ ...employeesToEdit, last_name: e.target.value.replace(/[0-9]/g, "") })
+                      }
+                    />
+
+                    {/* Email */}
+                    <input
+                      placeholder="Email"
+                      style={styles.modalInput}
+                      value={employeesToEdit.email}
+                      onChange={(e) =>
+                        setEmployeesToEdit({ ...employeesToEdit, email: e.target.value })
+                      }
+                    />
+
+                    {/* Position */}
+                    <input
+                      placeholder="Position"
+                      style={styles.modalInput}
+                      value={employeesToEdit.position}
+                      onChange={(e) =>
+                        setEmployeesToEdit({ ...employeesToEdit, position: e.target.value.replace(/[0-9]/g, "") })
+                      }
+                    />
+
+                    {/* ID Number */}
+                    <input
+                      placeholder="ID Number"
+                      style={styles.modalInput}
+                      value={employeesToEdit.id_number || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (/^\d{0,8}$/.test(value)) setEmployeesToEdit({ ...employeesToEdit, id_number: value });
+                      }}
+                    />
+
+                    {/* Contact Number */}
+                    <input
+                      placeholder="Contact Number"
+                      style={styles.modalInput}
+                      value={employeesToEdit.contact_number || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (/^\d{0,11}$/.test(value)) setEmployeesToEdit({ ...employeesToEdit, contact_number: value });
+                      }}
+                    />
+
+                    {/* Gender */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={styles.label}>Gender</label>
+                      <div style={styles.genderContainer}>
+                        {['Male', 'Female'].map((g) => (
+                          <div
+                            key={g}
+                            style={{
+                              ...styles.genderBtn,
+                              ...(employeesToEdit.gender === g ? styles.genderBtnActive : {}),
+                            }}
+                            onClick={() => setEmployeesToEdit({ ...employeesToEdit, gender: g })}
+                          >
+                            {g}
+                          </div>
                         ))}
-                      </select>
-
-                      <select
-                        style={styles.modalInputs}
-                        value={employeesToEdit.status}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, status: e.target.value })}
-                      >
-                        <option value="">Select Status</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                      <input 
-                        type="date"
-                        style={styles.modalInputs}
-                        value={employeesToEdit.date_hired}
-                        onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, date_hired: e.target.value })}
-                      />
-                      <div style={styles.modalBtn}>
-                        <button style={styles.cancelBtn} onClick={() => setShowEditModal(false)}>Cancel</button>
-                        <button style={styles.saveBtn} onClick={handleEditSave}>Save</button>
-                      </div>
-                    </div>
-                  </div>
-              )}
-
-
-
-              {showDeleteModal && (
-                <div style={{
-                  position: 'fixed', top: 0, left: 0,
-                  width: '100%', height: '100%',
-                  background: 'rgba(0,0,0,0.5)'
-                }}>
-                  <div style={{
-                    background: '#fff', padding: 20,
-                    margin: '100px auto', width: 400,
-                    borderRadius: 10
-                  }}>
-                    <p>Are you sure you want to delete {employeeToDelete?.full_name}?</p>
-                    <button onClick={confirmDelete} style={{ marginRight: 10, backgroundColor: 'red', color: '#fff' }}>
-                      Yes, Delete
-                    </button>
-                    <button onClick={() => setShowDeleteModal(false)}>Cancel</button>
-                  </div>
-                </div>
-              )}
-
-              {showAddModal && (
-                <div style={{
-                  position: 'fixed',
-                  top: 0, left: 0,
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: 'rgba(0,0,0,0.5)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  zIndex: 9999
-                }}>
-
-                <div style={{
-                  backgroundColor: 'white',
-                  padding: 20,
-                  borderRadius: 8,
-                  width: 500,
-                  boxShadow: '0 0 10px rgba(0,0,0,0.2)'
-                }}>
-
-                <h3>Add New Employee</h3>
-                  <input
-                    placeholder="First Name"
-                    style={styles.modalInputs}
-                    value={newEmployee.first_name}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, first_name: e.target.value })}
-                  />
-                  <input
-                    placeholder="Last Name"
-                    style={styles.modalInputs}
-                    value={newEmployee.last_name}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, last_name: e.target.value })}
-                  />
-                  <input 
-                    placeholder="Email" 
-                    style={styles.modalInputs} 
-                    value={newEmployee.email}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}  
-                  />
-                  <input 
-                    placeholder="Position" 
-                    style={styles.modalInputs} 
-                    value={newEmployee.position}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, position: e.target.value })}  
-                  />
-                  <input
-                    type="text"
-                    placeholder="ID Number (e.g., 20230606)"
-                    value={newEmployee.id_number || ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (/^\d{0,8}$/.test(value)) {
-                        setNewEmployee(prev => ({
-                          ...prev,
-                          id_number: value
-                        }));
-                      }
-                    }}
-                    style={styles.modalInputs}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Contact Number (e.g., 09171234567)"
-                    value={newEmployee.contact_number}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (/^\d{0,11}$/.test(value)) {
-                        setNewEmployee(prev => ({
-                          ...prev,
-                          contact_number: value
-                        }));
-                      }
-                    }}
-                    style={styles.modalInputs}
-                  />
-                  <label>Gender</label>
-                    <div style={styles.genderInputs}>
-                      <div style={styles.radioCircle}>
-                        <input
-                          type='radio' 
-                          name='gender' 
-                          value="Male"
-                          checked={newEmployee.gender === 'Male'}
-                          onChange={(e) => setNewEmployee({ ...newEmployee, gender: e.target.value })}
-                        />
-                        <label style={{fontSize: '15px'}}>Male</label>
-                      </div>
-
-                      <div style={styles.radioCircle}>
-                        <input 
-                          type='radio' 
-                          name='gender' 
-                          value="Female"
-                          checked={newEmployee.gender === 'Female'}
-                          onChange={(e) => setNewEmployee({ ...newEmployee, gender: e.target.value })}
-                        />
-                        <label style={{fontSize: '15px'}}>Female</label>
                       </div>
                     </div>
 
-                      <select
-                        style={styles.modalInputs}
-                        value={newEmployee.civil_status}
-                        onChange={(e) => setNewEmployee({...newEmployee, civil_status: e.target.value})}  
-                      >
-                        <option value="" disabled>Select Civil Status</option>
-                        <option value="Single">Single</option>
-                        <option value="Married">Married</option>
-                        <option value="Widowed">Widowed</option>
-                        <option value="Separated">Separated</option>
-                        <option value="Annulled">Annulled</option>
-                      </select>
-
+                    {/* Civil Status */}
                     <select
-                        style={styles.modalInputs}
-                        value={newEmployee.department || ""}
-                        onChange={(e) =>
-                          setNewEmployee({ ...newEmployee, department: e.target.value })
-                        }
-                      >
-                        <option value="" disabled>
-                          Select Department
-                        </option>
-                        {departments.map((dept, index) => (
-                          <option key={index} value={dept}>
-                            {dept}
-                          </option>
-                        ))}
-                      </select>
-                    <select 
-                      style={styles.modalInputs}
-                      value={newEmployee.employment_status}z
-                      onChange={(e) => setNewEmployee({ ...newEmployee, employment_status: e.target.value })}
+                      style={styles.selectInput}
+                      value={employeesToEdit.civil_status || ""}
+                      onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, civil_status: e.target.value })}
                     >
-                      <option value="">Select Employment Type</option>
-                      <option value="temporary">Temporary</option>
-                      <option value="permanent">Permanent</option>
-                      <option value="contract">Contract</option>
-                      <option value="casual">Casual</option>
+                      <option value="">Select Civil Status</option>
+                      <option value="Single">Single</option>
+                      <option value="Married">Married</option>
+                      <option value="Widowed">Widowed</option>
+                      <option value="Separated">Separated</option>
+                      <option value="Annulled">Annulled</option>
                     </select>
-                    <select 
-                      style={styles.modalInputs}
-                      value={newEmployee.status}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, status: e.target.value })}
+
+                    {/* Department */}
+                    <select
+                      style={styles.selectInput}
+                      value={employeesToEdit.department || ""}
+                      onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, department: e.target.value })}
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((dept, idx) => (
+                        <option key={idx} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+
+                    {/* Employment Type */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={styles.label}>Employment Type</label>
+                      <div style={styles.genderContainer}>
+                        {['Temporary', 'Permanent', 'Contractual', 'Casual'].map((type) => (
+                          <div
+                            key={type}
+                            style={{
+                              ...styles.genderBtn,
+                              ...(employeesToEdit.employment_status === type ? styles.genderBtnActive : {}),
+                            }}
+                            onClick={() => setEmployeesToEdit({ ...employeesToEdit, employment_status: type })}
+                          >
+                            {type}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <select
+                      style={styles.selectInput}
+                      value={employeesToEdit.status || ""}
+                      onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, status: e.target.value })}
                     >
                       <option value="">Select Employment Status</option>
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
+
+                    {/* Date Hired */}
                     <input
                       type="date"
-                      placeholder="Date Hired"
-                      style={styles.modalInputs}
-                      value={newEmployee.date_hired || ''}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
-                      />
+                      style={styles.modalInput}
+                      value={employeesToEdit.date_hired || ""}
+                      onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, date_hired: e.target.value })}
+                    />
+                  </div>
 
-                    <div style={styles.modalBtn}>
-                      <button onClick={() => setShowAddModal(false)} style={styles.cancelBtn}>Cancel</button>
-                      <button style={styles.saveBtn} onClick={handleAddEmployee}>Save</button>
-                    </div>
+                  {/* Actions */}
+                  <div style={styles.modalActions}>
+                    <button style={styles.cancelBtn} onClick={() => setShowEditModal(false)}>Cancel</button>
+                    <button style={styles.saveBtn} onClick={handleEditSave}>Save</button>
+                  </div>
                 </div>
               </div>
             )}
+
+
+
+              {showDeleteModal && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  background: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  zIndex: 1000
+                }}>
+                  <div style={{
+                    background: '#fff',
+                    padding: '30px 20px',
+                    width: '400px',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{ marginBottom: '25px', fontSize: '16px' }}>
+                        This action will permanently remove <strong>{employeeToDelete?.full_name}</strong> from the employee list. Do you want to continue?                    
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
+                      <button 
+                        onClick={confirmDelete} 
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: 'red',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Delete
+                      </button>
+                      <button 
+                        onClick={() => setShowDeleteModal(false)} 
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#ccc',
+                          color: '#333',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
+              {showAddModal && (
+                <div style={styles.modalOverlay}>
+                  <div style={styles.modalContainer}>
+                    <h3 style={styles.modalTitle}>Add New Employee</h3>
+                      <p style={styles.modalSubtitle}>
+                        Fill out the details below to add a new employee record.
+                      </p>
+
+                    <div style={styles.modalGrid}>
+                      <input
+                        placeholder="First Name"
+                        style={styles.modalInput}
+                        value={newEmployee.first_name}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, first_name: e.target.value.replace(/[0-9]/g, "") })}
+                      />
+
+                      <input
+                        placeholder="Last Name"
+                        style={styles.modalInput}
+                        value={newEmployee.last_name}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, last_name: e.target.value.replace(/[0-9]/g, "") })}
+                      />
+
+                      <input
+                        placeholder="Email"
+                        style={styles.modalInput}
+                        value={newEmployee.email}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                      />
+
+                      <input
+                        placeholder="Position"
+                        style={styles.modalInput}
+                        value={newEmployee.position}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, position: e.target.value.replace(/[0-9]/g, "") })}
+                      />
+
+                      <input
+                        placeholder="ID Number"
+                        style={styles.modalInput}
+                        value={newEmployee.id_number}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (/^\d{0,8}$/.test(value)) setNewEmployee({ ...newEmployee, id_number: value });
+                        }}
+                      />
+
+                      <input
+                        placeholder="Contact Number"
+                        style={styles.modalInput}
+                        value={newEmployee.contact_number}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (/^\d{0,11}$/.test(value)) setNewEmployee({ ...newEmployee, contact_number: value });
+                        }}
+                      />
+
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={styles.label}>Gender</label>
+                        <div style={styles.genderContainer}>
+                          {['Male', 'Female'].map((g) => (
+                            <div
+                              key={g}
+                              style={{
+                                ...styles.genderBtn,
+                                ...(newEmployee.gender === g ? styles.genderBtnActive : {}),
+                              }}
+                              onClick={() => setNewEmployee({ ...newEmployee, gender: g })}
+                            >
+                              {g}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <select
+                        style={styles.selectInput}
+                        value={newEmployee.civil_status}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, civil_status: e.target.value })}
+                      >
+                        <option value="">Select Civil Status</option>
+                        <option value="Single">Single</option>
+                        <option value="Married">Married</option>
+                        <option value="Widowed">Widowed</option>
+                        <option value="Separated">Separated</option>
+                        <option value="Annulled">Annulled</option>
+                      </select>
+
+                      <select
+                        style={styles.selectInput}
+                        value={newEmployee.department}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                      >
+                        <option value="">Select Department</option>
+                        {departments.map((dept, idx) => (
+                          <option key={idx} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={styles.label}>Employment Type</label>
+                        <div style={styles.genderContainer}>
+                          {['Temporary', 'Permanent', 'Contractual', 'Casual'].map((type) => (
+                            <div
+                              key={type}
+                              style={{
+                                ...styles.genderBtn,
+                                ...(newEmployee.employment_status === type ? styles.genderBtnActive : {}),
+                              }}
+                              onClick={() => setNewEmployee({ ...newEmployee, employment_status: type })}
+                            >
+                              {type}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <select
+                        style={styles.selectInput}
+                        value={newEmployee.status}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, status: e.target.value })}
+                      >
+                        <option value="">Select Employment Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+
+                      <input
+                        type="date"
+                        style={styles.modalInput}
+                        value={newEmployee.date_hired || ''}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
+                      />
+                    </div>
+
+                    <div style={styles.modalActions}>
+                      <button style={styles.cancelBtn} onClick={() => setShowAddModal(false)}>Cancel</button>
+                      <button style={styles.saveBtn} onClick={handleAddEmployee}>Save</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
         </div>
       )}
 
@@ -748,11 +1127,11 @@ import Papa from 'papaparse';
                 <div
                   key={emp.id}
                   style={{ ...styles.card, cursor: 'pointer' }}
-                  onClick={() => navigate(`/employeeProfile/${emp.id_number}`)}
+                  onClick={() => navigate(`/employeeProfile/${emp.id}`)}
                 >
                   <div style={styles.avatarContainer}>
-                    {emp.profile_url ? (
-                      <img src={emp.profile_url} alt="Profile" style={styles.avatar} />
+                    {emp.profile_picture ? (
+                      <img src={emp.profile_picture} alt="Profile" style={styles.avatar} />
                     ) : (
                       <div style={styles.initials}>
                         {emp.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
@@ -923,8 +1302,6 @@ const styles = {
   },
   content1: {
     borderRadius: '5px',
-    backgroundColor: '#fff',
-    boxShadow: '1px 1px 5px rgba(44, 44, 44, 0.44)',
     border: 'none',
     marginTop: '20px',
     width: '1200px',
@@ -933,7 +1310,6 @@ const styles = {
     justifyContent: 'space-between',
     display: 'flex',
     flex: '1',
-    padding: '10px 10px 0 10px'
   },
   btnAddEmployee: {
     padding: '5px',
@@ -984,12 +1360,8 @@ const styles = {
   },
   table: {
     maxWidth: '100%',
-    overflowX: 'auto',
-    marginLeft: '10px',
-    marginRight: '10px',
     marginBottom: '20px',
-    marginTop: '10px',
-
+    marginTop: '20px',
   },
   employeeTable: {
     backgroundColor: '#f5f7f9',
@@ -1002,40 +1374,46 @@ const styles = {
     overflow: 'hidden',
   },
   columnName: {
-    padding: '10px 30px',
+    padding: '10px',
     fontSize: '14px',
     fontWeight: '600',
     textAlign: 'left',
     backgroundColor: '#6FCB5C',
-    color: '#2B2B2B',
+    color: '#ffffffff',
     textWrap: 'nowrap',
   },
   rowName: {
-    padding: '10px 0 10px 30px',
+    padding: '10px',
     fontSize: '13px',
-    backgroundColor: '#fefcf5',
+    backgroundColor: '#ffffffff',
     textWrap: 'nowrap',
   },
   viewBtn: {
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     border: 'none',
     cursor: 'pointer',
-    color: '#1E90fd',
-    marginRight: '15px'
+    marginRight: '15px',
+    color: '#5A5A5A',
+    fontSize: '15px',
+    transition: 'all 0.2s ease',
   },
   editBtn: {
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     border: 'none',
     cursor: 'pointer',
-    color: '#FFA500',
-    marginRight: '15px'
+    marginRight: '15px',
+    color: '#5A5A5A',
+    fontSize: '15px',
+    transition: 'all 0.2s ease',
   },
   delBtn: {
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     border: 'none',
     cursor: 'pointer',
-    color: '#FF0000',
-    marginRight: '10px'
+    marginRight: '10px',
+    color: '#5A5A5A',
+    fontSize: '15px',
+    transition: 'all 0.2s ease',
   },
   modalInputs: {
     display: 'block',
@@ -1052,23 +1430,7 @@ const styles = {
     justifyContent: 'flex-end',
     gap: '10px'
   },
-  cancelBtn: {
-    padding: '8px 16px',
-    backgroundColor: '#f0f0f0',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    fontWeight: '600'
-  },
-  saveBtn: {
-    padding: '8px 16px',
-    backgroundColor: '#28a745',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    fontWeight: '600'
-  },
+  
   importBtn: {
     padding: '5px 10px',
     borderRadius: '5px',
@@ -1213,15 +1575,15 @@ const styles = {
 
 pageBtn: {
   padding: '6px 10px',
-  backgroundColor: '#e4e4e4',
-  border: 'none',
+  backgroundColor: '#ffffffff',
+  border: '1px solid #d4d4d4ff',
   borderRadius: '6px',
   cursor: 'pointer',
   fontWeight: 500,
 },
 
 activePageBtn: {
-  backgroundColor: '#d4d4d4',
+  backgroundColor: '#d4d4d4ff',
   fontWeight: '700',
 },
 
@@ -1237,51 +1599,6 @@ viewModalCard: {
   textAlign: 'center',
 },
 
-profileSection: {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  marginBottom: '20px',
-},
-
-profileImage: {
-  width: '100px',
-  height: '100px',
-  borderRadius: '50%',
-  objectFit: 'cover',
-  marginBottom: '10px',
-  border: '2px solid #e0e0e0',
-},
-
-viewModalHeader: {
-  fontSize: '20px',
-  fontWeight: '600',
-  color: '#1A1A1A',
-  margin: 0,
-},
-
-viewSubtext: {
-  fontSize: '14px',
-  color: '#666',
-  marginBottom: '20px',
-},
-
-viewModalContent: {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '14px',
-  color: '#333',
-  textAlign: 'left',
-},
-
-viewRow: {
-  display: 'flex',
-  justifyContent: 'space-between',
-  borderBottom: '1px solid #e5e5e5',
-  paddingBottom: '6px',
-  fontSize: '14px',
-},
-
 viewCloseBtn: {
   marginTop: '24px',
   backgroundColor: '#0066CC',
@@ -1294,10 +1611,281 @@ viewCloseBtn: {
   transition: 'background-color 0.3s ease',
 },
 
+rightModalOverlay: {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100vh",
+  backgroundColor: "rgba(0, 0, 0, 0.35)",
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  zIndex: 1000,
+  backdropFilter: "blur(2px)",
+  animation: "fadeIn 0.3s ease",
+},
 
-  
-  
-  
+rightModalCard: {
+  backgroundColor: "#fff",
+  width: "500px",
+  height: "90%",
+  marginRight: "2%",
+  borderRadius: "16px",
+  boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
+  padding: "30px",
+  display: "flex",
+  flexDirection: "column",
+  animation: "slideIn 0.3s ease forwards",
+},
+
+rightModalHeader: {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: "20px",
+  borderBottom: "1px solid #eee",
+  paddingBottom: "8px",
+},
+
+closeIcon: {
+  fontSize: "20px",
+  color: "#666",
+  cursor: "pointer",
+  transition: "color 0.2s ease",
+},
+
+topSection: {
+  display: "flex",
+  alignItems: "center",
+  gap: "18px",
+  marginBottom: "25px",
+},
+
+profileImage: {
+  width: "80px",
+  height: "80px",
+  borderRadius: "50%",
+  objectFit: "cover",
+  border: "3px solid #f3f3f3",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+},
+
+profileText: {
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+},
+
+employeeName: {
+  fontSize: "18px",
+  fontWeight: "600",
+  color: "#222",
+  margin: "0 0 4px 0",
+},
+
+employeePosition: {
+  fontSize: "14px",
+  color: "#666",
+  margin: "0 0 4px 0",
+},
+
+employeeID: {
+  fontSize: "13px",
+  color: "#999",
+},
+
+detailsContainer: {
+  display: "flex",
+  flexDirection: "column",
+  gap: "18px",
+  flex: 1,
+  overflowY: "scroll", // allow vertical scroll
+  scrollbarWidth: "none", // hide scrollbar in Firefox
+  msOverflowStyle: "none", // hide scrollbar in IE/Edge
+},
+
+
+detailCard: {
+  backgroundColor: "#f8f8f8", // soft off-white
+  borderRadius: "12px",
+  padding: "16px 18px",
+  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.08)",
+  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+},
+
+
+detailCardHover: {
+  transform: "translateY(-2px)",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+},
+
+detailHeader: {
+  fontSize: "15px",
+  fontWeight: "600",
+  color: "#000000ff",
+  marginBottom: "10px",
+},
+
+twoColumnGrid: {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "10px 18px",
+  fontSize: "14px",
+  color: "#444",
+},
+
+"@keyframes slideIn": {
+  from: { transform: "translateX(100%)" },
+  to: { transform: "translateX(0)" },
+},
+
+"@keyframes fadeIn": {
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+},
+
+checkbox: {
+  width: '15px',
+  height: '15px',
+  cursor: 'pointer',
+  accentColor: '#28a745', 
+  borderRadius: '4px',
+},
+
+
+  modalOverlay: {
+    position: 'fixed',
+    top: 0, left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999
+  },
+
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '25px',
+    width: '600px',
+    maxHeight: '85vh',
+    overflowY: 'auto',
+    boxShadow: '0 8px 25px rgba(0,0,0,0.2)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '15px'
+  },
+
+  modalTitle: {
+    fontSize: '22px',
+    fontWeight: '600',
+    textAlign: 'left',
+    color: '#2C3E50'
+  },
+
+  modalGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px'
+  },
+
+  modalInput: {
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid #ccc',
+    fontSize: '14px',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+    transition: '0.2s'
+  },
+
+  selectInput: {
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid #ccc',
+    fontSize: '14px',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+    backgroundColor: '#fff',
+    cursor: 'pointer'
+  },
+
+  label: {
+    fontWeight: '500',
+    marginBottom: '5px',
+    display: 'block',
+    fontSize: '14px',
+    color: '#34495E'
+  },
+
+  genderContainer: {
+    display: 'flex',
+    gap: '10px',
+    marginTop: '5px'
+  },
+
+  genderBtn: {
+    flex: 1,
+    padding: '8px 0',
+    borderRadius: '8px',
+    border: '1px solid #ccc',
+    textAlign: 'center',
+    cursor: 'pointer',
+    fontSize: '14px',
+    color: '#333',
+    backgroundColor: '#f7f7f7',
+    transition: '0.2s'
+  },
+
+  genderBtnActive: {
+    backgroundColor: '#4CAF50',
+    color: '#fff',
+    borderColor: '#4CAF50',
+    fontWeight: '600'
+  },
+
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
+    marginTop: '15px'
+  },
+
+  cancelBtn: {
+    padding: '10px 22px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: '#E74C3C',
+    color: '#fff',
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: '0.2s'
+  },
+
+  saveBtn: {
+    padding: '10px 22px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: '#4CAF50',
+    color: '#fff',
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: '0.2s'
+  },
+
+  modalSubtitle: {
+    fontSize: '14px',
+    color: '#555',
+    marginTop: '-10px',
+    textAlign: 'left',
+  },
+
+
   
 };
 

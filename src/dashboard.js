@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -26,6 +26,7 @@ import { height, width } from '@fortawesome/free-solid-svg-icons/fa0';
 
 function Dashboard() {
   const [date, setDate] = useState(new Date());
+  const location = useLocation();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState("Leave Type");
@@ -36,6 +37,57 @@ function Dashboard() {
     rejected: 0,
     total: 0
   });
+  const [attendance, setAttendance] = useState([]);
+  const [attendanceStats, setAttendanceStats] = useState({
+    present: 0,
+    absent: 0,
+    late: 0,
+    leave: 0,
+  });
+  const [monthlyLeaves, setMonthlyLeaves] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [admin, setAdmin] = useState(null);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({
+    full_name: "",
+    email: "",
+    role: "",
+    profile_picture: "",
+  });
+  const [isUploading, setIsUploading] = useState(false);
+  const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  const [department, setDepartment] = useState(localStorage.getItem("department") || "");
+  const [officeHead, setOfficeHead] = useState(null);
+
+  const menuItems = [
+    { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+    { name: "Employees", icon: faUsers, to: "/employee" },
+    { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+    { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+    { name: "Message", icon: faEnvelope, to: "/messages" },
+    { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+    { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+    { name: "User Management", icon: faUserCog, to: "/userManagement" },
+    { name: "Settings", icon: faCog, to: "#" },
+  ];
+
+  const allowedMenus = menuItems.filter((item) => {
+    if (role === "admin") return true;
+    if (role === "mayor" || role === "office_head") {
+      return [
+        "Dashboard",
+        "Employees",
+        "Attendance",
+        "Leave Management",
+        "Message",
+        "Announcement",
+      ].includes(item.name);
+    }
+    return false;
+  });
+
 
   const options = [
     "Vacation Leave",
@@ -59,6 +111,25 @@ function Dashboard() {
     setSelected(option);
     setIsOpen(false);
   };
+  
+  
+  useEffect(() => {
+  const counts = leaveRequests.reduce(
+    (acc, curr) => {
+      if (curr.status === "Pending") acc.pending += 1;
+      else if (curr.status === "Approved") acc.approved += 1;
+      else if (curr.status === "Rejected") acc.rejected += 1;
+      return acc;
+    },
+    { pending: 0, approved: 0, rejected: 0 }
+  );
+
+  counts.total = leaveRequests.length;
+
+  setLeaveCounts(counts);
+}, [leaveRequests]);
+
+
 
   useEffect(() => {
     const fetchEmployeeCount = async () => {
@@ -74,19 +145,79 @@ function Dashboard() {
     fetchEmployeeCount();
   }, []);
 
-  useEffect(() => {
-    const fetchLeaveCount = async () => {
-      try {
-        const res = await fetch("http://localhost:5000/api/leave-requests/count");
-        const data = await res.json();
-        setLeaveCounts(data);
-      } catch (err) {
-        console.error("Error fetching leave count:", err);
-      }
-    };
+ useEffect(() => {
+  const fetchEmployeeCount = async () => {
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/employees/count?role=${encodeURIComponent(role)}&department=${encodeURIComponent(department)}`
+      );
+      const data = await res.json();
+      setEmployeeCount(data.total);
+    } catch (err) {
+      console.error("Error fetching employee count:", err);
+    }
+  };
 
-    fetchLeaveCount();
-  }, []);
+  fetchEmployeeCount();
+}, [role, department]); 
+
+  useEffect(() => {
+  const fetchLeaveRequests = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/leave-requests");
+      const data = await res.json();
+      setLeaveRequests(data);
+    } catch (err) {
+      console.error("Error fetching leave requests:", err);
+    }
+  };
+
+  fetchLeaveRequests();
+
+  // Optional auto-refresh every 5 mins
+  const interval = setInterval(fetchLeaveRequests, 300000);
+  return () => clearInterval(interval);
+}, []);
+
+
+ useEffect(() => {
+  const today = new Date().toISOString().split("T")[0]; // e.g. "2025-10-03"
+
+  const fetchAttendance = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/attendance?date=${today}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      const mapped = Array.isArray(data) ? data.map(log => ({
+        name: log.name,
+        id: log.pin,
+        amCheckin: log.am_checkin,
+        amCheckout: log.am_checkout,
+        pmCheckin: log.pm_checkin,
+        pmCheckout: log.pm_checkout,
+        status: log.am_checkin || log.pm_checkin ? "Present" : "Absent",
+        date: log.attendance_date,
+      })) : [];
+
+      setAttendance(mapped);
+    } catch (err) {
+      console.error("❌ Error fetching attendance:", err);
+    }
+  };
+
+  fetchAttendance();
+
+  // Refresh every 5 minutes (300000 ms)
+  const interval = setInterval(fetchAttendance, 5000);
+  return () => clearInterval(interval);
+}, []);
+
+
 
   const cardsData = [
   {
@@ -174,12 +305,54 @@ function Dashboard() {
 };
 
 
-  const data = [
-    { name: 'Present', value: 400 },
-    { name: 'Absent', value: 300 },
-    { name: 'Late', value: 100 },
-    { name: 'Leave', value: 200 },
-  ];
+  const pieData =
+  attendanceStats.present +
+  attendanceStats.absent +
+  attendanceStats.late +
+  attendanceStats.leave === 0
+    ? [{ name: "No Data", value: 1 }]
+    : [
+        { name: "Present", value: attendanceStats.present },
+        { name: "Absent", value: attendanceStats.absent },
+        { name: "Late", value: attendanceStats.late },
+        { name: "Leave", value: attendanceStats.leave }
+      ];
+
+    const COLORS = ['#005EFF', '#FF0042', '#FFCC00', '#FF0599', '#ccc'];
+
+
+    useEffect(() => {
+      const fetchMonthlyLeaves = async () => {
+        try {
+          const res = await fetch("http://localhost:5000/api/leave-requests/monthly");
+          const data = await res.json();
+          setMonthlyLeaves(data);
+        } catch (err) {
+          console.error("Error fetching monthly leaves:", err);
+        }
+      };
+
+      fetchMonthlyLeaves();
+    }, []);
+
+    useEffect(() => {
+      const fetchMonthlyLeaves = async () => {
+        try {
+          const url = selected !== "Leave Type" 
+            ? `http://localhost:5000/api/leave-requests/monthly?leaveType=${encodeURIComponent(selected)}`
+            : "http://localhost:5000/api/leave-requests/monthly";
+
+          const res = await fetch(url);
+          const data = await res.json();
+          setMonthlyLeaves(data);
+        } catch (err) {
+          console.error("Error fetching monthly leaves:", err);
+        }
+      };
+
+      fetchMonthlyLeaves();
+    }, [selected]); // 👈 refetch whenever dropdown changes
+
 
   const dataBar = [
     { month: 'Jan', value: 15, fill: '#FF0000' },
@@ -196,7 +369,6 @@ function Dashboard() {
     { month: 'Dec', value: 7, fill: '#FFA500' },
   ];
 
-  const COLORS = ['#005EFF', '#FF0042', '#FFCC00', '#FF0599'];
 
   const RADIAN = Math.PI / 180;
 
@@ -221,51 +393,351 @@ function Dashboard() {
   };
 
   const handleLogout = async () => {
-  const user = JSON.parse(localStorage.getItem("admin")); // get current session
+    const user = JSON.parse(localStorage.getItem("admin")); // get current session
 
-  if (user) {
-    await fetch("http://localhost:5000/api/auth/logout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, role: user.role }),
-    });
+    if (user) {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, role: user.role }),
+      });
+    }
+
+    localStorage.removeItem("admin"); // clear session
+    navigate("/"); // redirect to login
+  };
+
+  useEffect(() => {
+  const fetchAdmin = async () => {
+    const storedAdmin = JSON.parse(localStorage.getItem("admin"));
+    if (!storedAdmin?.id) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/auth/useradmin/${storedAdmin.id}`);
+      const data = await res.json();
+      setAdmin(data);
+    } catch (err) {
+      console.error("Error fetching admin data:", err);
+    }
+  };
+
+  fetchAdmin();
+}, []);
+
+useEffect(() => {
+  if (showProfileModal && admin?.id) {
+    fetch(`http://localhost:5000/api/auth/useradmin/${admin.id}`)
+      .then(res => res.json())
+      .then(data => setProfileData(data))
+      .catch(err => console.error("Error loading profile:", err));
   }
-
-  localStorage.removeItem("admin"); // clear session
-  navigate("/"); // redirect to login
-};
-
+}, [showProfileModal, admin]);
 
   return (
     <div style={styles.dashboardContainer}>
 
-      <div style={styles.header}>
+     <div style={styles.header}>
         <input type="text" placeholder="Search..." style={styles.search} />
-        <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+
+        <div style={styles.headerRight}>
+          <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+
+          {/* Profile Section */}
+          <div style={styles.profileContainer}>
+            <div onClick={() => setShowProfileMenu(!showProfileMenu)} style={styles.profileInfo}>
+              <img
+                src={admin?.profile_picture}
+                alt="Profile"
+                style={styles.profileImage}
+              />
+              <div style={styles.profileDetails}>
+                <p style={styles.profileName}>
+                  {admin ? admin.full_name : "Loading..."}
+                </p>
+                <p style={styles.profileRole}>
+                  {admin ? admin.role : ""}
+                </p>
+              </div>
+            </div>
+
+            {showProfileMenu && (
+              <div style={styles.profileDropdown}>
+                <button style={styles.dropdownItem} onClick={() => setShowProfileModal(true)}>
+                  <FontAwesomeIcon icon={faUserCog} style={styles.dropdownIcon} /> My Profile
+                </button>
+                <button style={styles.dropdownItem}>
+                  <FontAwesomeIcon icon={faCog} style={styles.dropdownIcon} /> Settings
+                </button>
+                <button
+                  style={styles.dropdownItem}
+                  onClick={() => setShowLogoutModal(true)}
+                >
+                  <FontAwesomeIcon icon={faSignOutAlt} style={styles.dropdownIcon} /> Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
+{showProfileModal && (
+  <div style={styles.modalOverlayProfile}>
+    <div style={styles.modalContentProfile}>
+      <h2 style={styles.modalTitle}>My Profile</h2>
+
+      {/* Profile Photo Section */}
+      <div style={styles.profileSection}>
+        <div className="photoContainer">
+          <img
+            src={
+              profileData.profile_picture ||
+              "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
+            }
+            alt="Profile"
+            className="modalProfileImage"
+          />
+          <div className="photoOverlay">
+            <label htmlFor="profileUpload" className="overlayText">
+              {isUploading ? "Uploading..." : "Change Photo"}
+            </label>
+            <input
+              id="profileUpload"
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                setIsUploading(true);
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("upload_preset", "profile_picture");
+
+                try {
+                  const res = await fetch(
+                    "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
+                    { method: "POST", body: formData }
+                  );
+                  const data = await res.json();
+
+                  if (data.secure_url) {
+                    setProfileData((prev) => ({
+                      ...prev,
+                      profile_picture: data.secure_url,
+                    }));
+                  } else {
+                    alert("Upload failed");
+                  }
+                } catch (err) {
+                  console.error(err);
+                  alert("Upload error");
+                } finally {
+                  setIsUploading(false);
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Form Fields */}
+      <div style={styles.formSection}>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Full Name</label>
+          <input
+            type="text"
+            value={profileData.full_name}
+            onChange={(e) =>
+              setProfileData({ ...profileData, full_name: e.target.value })
+            }
+            style={styles.input}
+          />
+        </div>
+
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Email</label>
+          <input
+            type="text"
+            value={profileData.email}
+            disabled
+            style={styles.inputDisabled}
+          />
+        </div>
+
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Role</label>
+          <input
+            type="text"
+            value={profileData.role}
+            disabled
+            style={styles.inputDisabled}
+          />
+        </div>
+      </div>
+
+      {/* Buttons */}
+      <div style={styles.modalButtons}>
+        <button
+          style={styles.saveBtn}
+          disabled={isUploading}
+          onClick={async () => {
+            if (!profileData.profile_picture) {
+              alert("Please upload a profile image first.");
+              return;
+            }
+
+            try {
+              const res = await fetch(
+                `http://localhost:5000/api/auth/updateProfile/${admin.id}`,
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(profileData),
+                }
+              );
+
+              const result = await res.json();
+              if (res.ok) {
+                alert("Profile updated successfully!");
+                setShowProfileModal(false);
+              } else {
+                alert(result.message || "Failed to update profile.");
+              }
+            } catch (err) {
+              console.error("❌ Error updating profile:", err);
+              alert("Error updating profile. See console.");
+            }
+          }}
+        >
+          {isUploading ? "Uploading..." : "Save Changes"}
+        </button>
+
+        <button style={styles.cancelButton} onClick={() => setShowProfileModal(false)}>
+          Cancel
+        </button>
+      </div>
+
+      {/* ✅ Inline style tag for hover effect */}
+      <style>
+        {`
+          .photoContainer {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            cursor: pointer;
+          }
+
+          .modalProfileImage {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+          }
+
+          .photoOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 50%;
+          }
+
+          .photoContainer:hover .photoOverlay {
+            opacity: 1;
+          }
+
+          .photoContainer:hover .modalProfileImage {
+            transform: scale(1.05);
+          }
+
+          .overlayText {
+            font-size: 0.9rem;
+            font-weight: 500;
+          }
+        `}
+      </style>
+    </div>
+  </div>
+)}
       <div style={styles.sidebar}>
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-          <ul style={styles.sidebarList}>
-            <li style={styles.btnActive}><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-            <li><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-            <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
-            <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-            <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-            <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-            <li><Link style={styles.sb} to="/audit_logs"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-            <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-            <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
-            <li><Link style={styles.sb} to="#" 
-              onClick={(e) => {
-              e.preventDefault(); 
-              handleLogout();
-            }}>
-            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
-          </ul>
+         <ul style={styles.sidebarList}>
+  {allowedMenus.map((item) => {
+    const isActive = location.pathname === item.to; // Check if current route matches
+
+    return (
+      <li
+        key={item.name}
+        style={{
+          ...(isActive ? styles.btnActive : {}), // Apply active tab background
+        }}
+      >
+        <Link
+          style={{
+            ...styles.sb,
+            ...(isActive ? styles.btnActive : {}),
+          }}
+          to={item.to}
+        >
+          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+        </Link>
+      </li>
+    );
+  })}
+
+  <li>
+    <Link
+      style={styles.sb}
+      to="#"
+      onClick={(e) => {
+        e.preventDefault();
+        setShowLogoutModal(true);
+      }}
+    >
+      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+    </Link>
+  </li>
+</ul>
       </div>
 
       <div style={styles.content}>
+
+      {showLogoutModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelBtn}
+                onClick={() => setShowLogoutModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                style={styles.confirmBtn}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
         <div style={styles.cnt1}>
           <div style={styles.cards}>
@@ -298,58 +770,101 @@ function Dashboard() {
 
         <div style={styles.row2}>
           <div style={styles.tableContainer}>
-            <h5 style={{padding: '5px'}}>Attendance Status</h5>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>ID</th>
-                  <th style={styles.th}>Name</th>
-                  <th style={styles.th}>Department</th>
-                  <th style={styles.th}>Time In</th>
-                  <th style={styles.th}>Time Out</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map(emp => (
+          <h5 style={{ padding: "5px" }}>Attendance Status</h5>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>ID</th>
+                <th style={styles.th}>Name</th>
+                <th style={styles.th}>AM (In / Out)</th>
+                <th style={styles.th}>PM (In / Out)</th>
+                <th style={styles.th}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attendance.length > 0 ? (
+                attendance.map(emp => (
                   <tr key={emp.id}>
                     <td style={styles.td}>{emp.id}</td>
                     <td style={styles.td}>{emp.name}</td>
-                    <td style={styles.td}>{emp.department}</td>
-                    <td style={styles.td}>{emp.timein}</td>
-                    <td style={styles.td}>{emp.timeout}</td>
+                    <td style={styles.td}>
+                      {emp.amCheckin || "-"} / {emp.amCheckout || "-"}
+                    </td>
+                    <td style={styles.td}>
+                      {emp.pmCheckin || "-"} / {emp.pmCheckout || "-"}
+                    </td>
                     <td style={styles.td}>{emp.status}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan="6"
+                    style={{ textAlign: "center", padding: "10px", color: "#777" }}
+                  >
+                    No attendance records found for today.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+
 
           <div style={styles.tableContainer}>
-            <h5 style={{padding: '5px'}}>Leave Status</h5>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>ID</th>
-                  <th style={styles.th}>Name</th>
-                  <th style={styles.th}>Leave Type</th>
-                  <th style={styles.th}>Department</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leave.map(item => (
-                  <tr key={item.id}>
-                    <td style={styles.td}>{item.id}</td>
-                    <td style={styles.td}>{item.name}</td>
-                    <td style={styles.td}>{item.leaveType}</td>
-                    <td style={styles.td}>{item.department}</td>
-                    <td style={styles.td}>{item.status}</td>
+              <h5 style={{ padding: '5px' }}>Leave Status</h5>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>ID</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>Leave Type</th>
+                    <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Date</th>
+                    <th style={styles.th}>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {leaveRequests.length > 0 ? (
+                    leaveRequests.map(item => (
+                      <tr key={item.id}>
+                        <td style={styles.td}>{item.id}</td>
+                        <td style={styles.td}>{item.first_name} {item.last_name}</td>
+                        <td style={styles.td}>{item.leave_type}</td>
+                        <td style={styles.td}>{item.department}</td>
+                        <td style={styles.td}>
+                          {item.inclusive_date_start || "-"} 
+                          {item.inclusive_date_end ? ` - ${item.inclusive_date_end}` : ""}
+                        </td>
+                        <td style={styles.td}>
+                          <span
+                            style={{
+                              color:
+                                item.status === "Approved"
+                                  ? "green"
+                                  : item.status === "Pending"
+                                  ? "orange"
+                                  : "red",
+                              fontWeight: "bold"
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: "center", padding: "10px", color: "#777" }}>
+                        No leave requests found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
         </div>
 
         <div style={styles.row3}>
@@ -358,22 +873,23 @@ function Dashboard() {
             <div style={styles.pieAndLegend}>
               <PieChart width={200} height={185}>
                 <Pie
-                  data={data}
+                  data={pieData}
                   cx={90}
                   cy={90}
                   innerRadius={35}
                   outerRadius={60}
                   labelLine={false}
-                  label={renderCustomizedLabel}
+                  label={pieData.length === 1 ? false : renderCustomizedLabel}
                   dataKey="value"
                 >
-                  {data.map((entry, index) => (
+                  {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
               </PieChart>
+
               <div style={styles.legendContainer}>
-                {data.map((entry, index) => (
+                {pieData.map((entry, index) => (
                   <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
                     <div style={{
                       width: 12,
@@ -386,6 +902,7 @@ function Dashboard() {
                   </div>
                 ))}
               </div>
+
             </div>
           </div>
 
@@ -429,23 +946,14 @@ function Dashboard() {
 
             <div style={{ width: '330px' }}>
               <ResponsiveContainer width={"100%"} height={165}>
-                <BarChart data={dataBar}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12, fill: '#000' }}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: '#000' }}
-                  />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#8884d8">
-                    {data.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                  <BarChart data={monthlyLeaves}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#000' }} />
+                    <YAxis tick={{ fontSize: 12, fill: '#000' }} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#8884d8" />
+                  </BarChart>
+                </ResponsiveContainer>
             </div>
           </div>
 
@@ -541,6 +1049,74 @@ const styles = {
     width: 'calc(100% - 280px)', 
     zIndex: 1000, 
     boxSizing: 'border-box',
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "20px",
+    position: "relative",
+  },
+  profileContainer: {
+    position: "relative",
+    cursor: "pointer",
+    backgroundColor: '#ffffff',
+    padding: '5px 15px',
+    borderRadius: '5px'
+  },
+  profileInfo: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  profileImage: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "50%",
+    objectFit: "cover",
+  },
+  profileDetails: {
+    display: "flex",
+    flexDirection: "column",
+    lineHeight: "1.1",
+  },
+  profileName: {
+    fontWeight: "600",
+    fontSize: "12px",
+  },
+  profileRole: {
+    fontSize: "10px",
+    color: "#888",
+  },
+  profileCaret: {
+    fontSize: "14px",
+    color: "#666",
+  },
+  profileDropdown: {
+    position: "absolute",
+    top: "55px",
+    right: "0",
+    backgroundColor: "#fff",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+    borderRadius: "10px",
+    padding: "8px 0",
+    width: "130px",
+    zIndex: 1000,
+  },
+  dropdownItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 16px",
+    width: "100%",
+    border: "none",
+    background: "none",
+    textAlign: "left",
+    fontSize: "14px",
+    cursor: "pointer",
+    color: "#333",
+  },
+  dropdownIcon: {
+    fontSize: "14px",
   },
 
   content: {
@@ -641,6 +1217,7 @@ const styles = {
     minWidth: '300px', 
     maxWidth: '580px', 
     boxSizing: 'border-box',
+    minHeight: '300px'
   },
   table: {
     borderCollapse: 'collapse',
@@ -794,7 +1371,180 @@ const styles = {
     backgroundColor: '#A8FC0080',
     borderRadius: '5px',
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-}
+},
+
+ modalOverlay: {
+    position: "fixed",
+    top: 0, left: 0,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  },
+  modalContent: {
+    backgroundColor: "white",
+    padding: "20px",
+    borderRadius: "8px",
+    width: "400px",
+    textAlign: "center",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+  },
+  modalActions: {
+    marginTop: "20px",
+    display: "flex",
+    justifyContent: "space-around",
+  },
+  cancelBtn: {
+    backgroundColor: "#ccc",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+  confirmBtn: {
+    backgroundColor: "#e74c3c",
+    color: "white",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+
+  modalOverlayProfile: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    background: "rgba(0, 0, 0, 0.45)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+  },
+  modalContentProfile: {
+    background: "#fff",
+    borderRadius: "18px",
+    width: "420px",
+    padding: "32px 28px",
+    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    animation: "fadeIn 0.3s ease",
+  },
+  modalTitle: {
+    fontSize: "1.6rem",
+    fontWeight: "600",
+    color: "#2b2b2b",
+    marginBottom: "24px",
+  },
+  profileSection: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: "24px",
+  },
+  photoContainer: {
+    position: "relative",
+    width: "120px",
+    height: "120px",
+    borderRadius: "50%",
+    overflow: "hidden",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+    cursor: "pointer",
+  },
+  modalProfileImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    borderRadius: "50%",
+    transition: "transform 0.3s ease",
+  },
+  photoOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    background: "rgba(0, 0, 0, 0.55)",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0,
+    transition: "opacity 0.3s ease",
+    borderRadius: "50%",
+  },
+  overlayText: {
+    fontSize: "0.9rem",
+    fontWeight: "500",
+  },
+  formSection: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: "15px",
+  },
+  inputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+  },
+  label: {
+    fontSize: "0.9rem",
+    color: "#555",
+    fontWeight: "500",
+  },
+  input: {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "1px solid #ccc",
+    fontSize: "0.95rem",
+    outline: "none",
+    transition: "border-color 0.2s ease",
+  },
+  inputDisabled: {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "1px solid #e0e0e0",
+    background: "#f8f9fa",
+    fontSize: "0.95rem",
+    color: "#888",
+  },
+  modalButtons: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginTop: "26px",
+    width: "100%",
+  },
+  saveBtn: {
+    flex: 1,
+    background: "#007bff",
+    color: "#fff",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "500",
+    transition: "background 0.3s ease",
+    marginRight: "8px",
+  },
+  cancelButton: {
+    flex: 1,
+    background: "#f1f1f1",
+    color: "#333",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "500",
+    transition: "background 0.3s ease",
+  },
 };
+
 
 export default Dashboard;

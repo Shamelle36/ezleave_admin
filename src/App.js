@@ -12,6 +12,8 @@ import ForgotPassword from './forgotPassword';
 import AuditLogs from './audit_logs';
 import LeaveCalendar from './leaveCalendar';
 import EmployeeProfile from './employeeProfile';
+import UserManagement from './userManagement';
+import SetupPassword from './setUpPassword';
 
 function App() {
   return (
@@ -29,6 +31,8 @@ function App() {
         <Route path='/audit_logs' element={<AuditLogs/>} />
         <Route path='/leaveCalendar' element={<LeaveCalendar/>} />
         <Route path="/employeeProfile/:id" element={<EmployeeProfile />} />
+        <Route path='/userManagement' element={<UserManagement/>} />
+        <Route path="/setup-password" element={<SetupPassword />} />
       </Routes>
     </Router>
   );

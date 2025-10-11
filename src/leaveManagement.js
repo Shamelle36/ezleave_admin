@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -39,6 +39,7 @@ import { width } from '@fortawesome/free-solid-svg-icons/fa0';
 
 function LeaveManagement() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams();
     const [activeTab, setActiveTab] = useState('summary');
     const [csvData, setCsvData] = useState([]);
@@ -54,6 +55,52 @@ function LeaveManagement() {
 
 
     const [leaveRecords, setLeaveRecords] = useState([]);
+
+     const [showLogoutModal, setShowLogoutModal] = useState(false);
+        const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+      
+        const menuItems = [
+          { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+          { name: "Employees", icon: faUsers, to: "/employee" },
+          { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+          { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+          { name: "Message", icon: faEnvelope, to: "/messages" },
+          { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+          { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+          { name: "User Management", icon: faUserCog, to: "/userManagement" },
+          { name: "Settings", icon: faCog, to: "#" },
+        ];
+      
+        const allowedMenus = menuItems.filter((item) => {
+          if (role === "admin") return true;
+          if (role === "mayor" || role === "office_head") {
+            return [
+              "Dashboard",
+              "Employees",
+              "Attendance",
+              "Leave Management",
+              "Message",
+              "Announcement",
+            ].includes(item.name);
+          }
+          return false;
+        });
+
+         const handleLogout = async () => {
+    const user = JSON.parse(localStorage.getItem("admin")); // get current session
+
+    if (user) {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, role: user.role }),
+      });
+    }
+
+    localStorage.removeItem("admin"); // clear session
+    navigate("/"); // redirect to login
+  };
+      
 
     const formatDate = (date) =>
         date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -208,19 +255,18 @@ const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
       body: JSON.stringify({ actionBy: "Admin", remarks }),
     });
     const data = await res.json();
+
     if (res.ok) {
+      // Update the request list with the full updated object from backend
       setRequests((prev) =>
-        prev.map((req) =>
-          req.id === requestId
-            ? { ...req, status: "Approved", action_by: "Admin", updated_at: new Date(), remarks }
-            : req
-        )
+        prev.map((req) => (req.id === requestId ? { ...req, ...data } : req))
       );
+
+      // Update the selected request if it’s the same one
       setSelectedRequest((prev) =>
-        prev && prev.id === requestId
-          ? { ...prev, status: "Approved", action_by: "Admin", updated_at: new Date(), remarks }
-          : prev
+        prev && prev.id === requestId ? { ...prev, ...data } : prev
       );
+
       alert("Leave request approved!");
     } else {
       alert(data.error || "Failed to approve request");
@@ -230,6 +276,7 @@ const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
     alert("Error approving leave request");
   }
 };
+
 
 // Reject a leave request
 const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
@@ -275,21 +322,70 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
 
         <div style={styles.sidebar}>
             <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-            <ul style={styles.sidebarList}>
-                <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-                <li><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-                <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
-                <li style={styles.btnActive}><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-                <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-                <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-                <li><Link style={styles.sb} to="/audit_logs"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-                <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-                <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings</Link></li>
-                <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
-            </ul>
+             <ul style={styles.sidebarList}>
+  {allowedMenus.map((item) => {
+    const isActive = location.pathname === item.to; // Check if current route matches
+
+    return (
+      <li
+        key={item.name}
+        style={{
+          ...(isActive ? styles.btnActive : {}), // Apply active tab background
+        }}
+      >
+        <Link
+          style={{
+            ...styles.sb,
+            ...(isActive ? styles.btnActive : {}),
+          }}
+          to={item.to}
+        >
+          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+        </Link>
+      </li>
+    );
+  })}
+
+  <li>
+    <Link
+      style={styles.sb}
+      to="#"
+      onClick={(e) => {
+        e.preventDefault();
+        setShowLogoutModal(true);
+      }}
+    >
+      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+    </Link>
+  </li>
+</ul>
         </div>
 
         <div style={styles.content}>
+
+              {showLogoutModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelBtn}
+                onClick={() => setShowLogoutModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                style={styles.confirmBtn}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
             <div style={styles.tabContainer}>
                 <button
@@ -523,7 +619,7 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                                     requests.map((req) => (
                                     <tr 
                                         key={req.id}
-                                        onClick={() => setSelectedRequest(req)} // ✅ when row is clicked
+                                        onClick={() => setSelectedRequest(req)} 
                                         style={{ cursor: "pointer" }}
                                     >
                                         <td style={styles.leaveRequestsRows}>{req.id_number}</td>
@@ -533,9 +629,9 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                                             src={req.profile_picture || "/default-avatar.png"}
                                             alt={`${req.first_name} ${req.last_name}`}
                                             style={{
-                                                width: "32px",
-                                                height: "32px",
-                                                borderRadius: "2px",
+                                                width: "55px",
+                                                height: "55px",
+                                                borderRadius: "5px",
                                                 objectFit: "cover",
                                             }}
                                             />
@@ -544,10 +640,12 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                                             </span>
                                         </div>
                                         </td>
-                                        <td style={styles.leaveRequestsRows}>{req.office_department}</td>
+                                        <td style={styles.leaveRequestsRows}>{req.department}</td>
                                         <td style={styles.leaveRequestsRows}>{req.position}</td>
                                         <td style={styles.leaveRequestsRows}>{req.leave_type}</td>
-                                        <td style={styles.leaveRequestsRows}>{String(req.inclusive_dates)}</td>
+                                        <td style={styles.leaveRequestsRows}>
+                                        {`${req.inclusive_date_start} - ${req.inclusive_date_end}`}
+                                        </td>                                        
                                         <td style={styles.leaveRequestsRows}>{req.number_of_days}</td>
                                         <td style={styles.leaveRequestsRows}>{req.status}</td>
                                     </tr>
@@ -572,8 +670,8 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                                         style={styles.profile_picture}
                                         />
                                         <div style={styles.employeeInfo}>
-                                        <p>{selectedRequest.first_name} {selectedRequest.middle_name} {selectedRequest.last_name}</p>
-                                        <p>{selectedRequest.position}</p>
+                                            <p>{selectedRequest.first_name} {selectedRequest.middle_name} {selectedRequest.last_name}</p>
+                                            <p style={{color: 'rgba(151, 151, 151, 1)', fontWeight: 'regular'}}>{selectedRequest.position}</p>
                                         </div>
                                     </div>
 
@@ -585,7 +683,7 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
 
                                         <div style={styles.infoRow}>
                                         <p style={styles.infoLabel}>Department:</p>
-                                        <p style={styles.infoValue}>{selectedRequest.office_department}</p>
+                                        <p style={styles.infoValue}>{selectedRequest.department}</p>
                                         </div>
 
                                         <div style={styles.infoRow}>
@@ -603,7 +701,9 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
 
                                         <div style={styles.leaveRow}>
                                             <p style={styles.leaveColumnName}>Duration</p>
-                                            <p style={styles.leaveRowValue}>{String(selectedRequest.inclusive_dates)}</p>
+                                            <p style={styles.leaveRowValue}>
+                                            {`${selectedRequest.inclusive_date_start} - ${selectedRequest.inclusive_date_end}`}
+                                            </p>
                                         </div>
 
                                         <div style={styles.leaveRow}>
@@ -1581,7 +1681,7 @@ const styles = {
     },
 
     leftSection: {
-        flex: 3,
+        flex: 4,
         marginRight: 24,
         overflowX: 'auto',
     },
@@ -1619,7 +1719,7 @@ const styles = {
     },
 
     rightSection: {
-        flex: 2,
+        flex: 1.5,
         backgroundColor: '#F2F2F2',
         padding: 16,
         borderRadius: 12,
