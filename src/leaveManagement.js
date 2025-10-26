@@ -52,8 +52,10 @@ function LeaveManagement() {
     const [actionType, setActionType] = useState(null); // "approve" or "reject"
     const [actionRemarks, setActionRemarks] = useState(""); // remarks input by admin
     const [showActionModal, setShowActionModal] = useState(false);
-
-
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadResult, setUploadResult] = useState(null);
     const [leaveRecords, setLeaveRecords] = useState([]);
 
      const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -856,7 +858,7 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                 <div style={styles.leaveBalance}>
                     <button
                     style={styles.uploadButton}
-                    onClick={() => setActiveTab('upload')}
+                    onClick={() => setShowUploadModal(true)}
                     onMouseEnter={(e) => Object.assign(e.target.style, styles.uploadButtonHover)}
                     onMouseLeave={(e) => Object.assign(e.target.style, styles.uploadButton)}
                     >
@@ -926,7 +928,71 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                         </tbody>
                     </table>
                     )}
+
+                    {showUploadModal && (
+                    <div style={styles.modalOverlay}>
+                        <div style={styles.modalContent}>
+                        <h3 style={{ marginBottom: "15px" }}>Upload Leave Card Excel</h3>
+
+                        <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={(e) => setSelectedFile(e.target.files[0])}
+                        />
+
+                        {uploading ? (
+                            <p>Uploading...</p>
+                        ) : (
+                            <button
+                            style={styles.uploadConfirmButton}
+                            onClick={async () => {
+                                if (!selectedFile) return alert("Please select a file first!");
+
+                                setUploading(true);
+                                setUploadResult(null);
+
+                                try {
+                                const formData = new FormData();
+                                formData.append("file", selectedFile);
+
+                                const res = await fetch("http://localhost:5000/api/leave-cards/upload", {
+                                    method: "POST",
+                                    body: formData,
+                                });
+                                const data = await res.json();
+                                setUploadResult(data);
+                                } catch (err) {
+                                console.error("Upload failed:", err);
+                                alert("Failed to upload leave card.");
+                                } finally {
+                                setUploading(false);
+                                }
+                            }}
+                            >
+                            Upload
+                            </button>
+                        )}
+
+                        {uploadResult && (
+                            <div style={{ marginTop: "10px" }}>
+                            <p><strong>Inserted:</strong> {uploadResult.inserted}</p>
+                            <p><strong>Skipped (no matching employee):</strong> {uploadResult.skipped}</p>
+                            </div>
+                        )}
+
+                        <button
+                            style={styles.closeModalButton}
+                            onClick={() => setShowUploadModal(false)}
+                        >
+                            Close
+                        </button>
+                        </div>
+                    </div>
+                    )}
+
                 </div>
+
+                
             )}
 
             {activeTab === 'calendar' && (
@@ -2039,7 +2105,27 @@ const styles = {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
-    }
+    },
+
+uploadConfirmButton: {
+  backgroundColor: "#4CAF50",
+  color: "#fff",
+  border: "none",
+  padding: "10px 20px",
+  borderRadius: "6px",
+  cursor: "pointer",
+  marginTop: "10px",
+},
+closeModalButton: {
+  backgroundColor: "#aaa",
+  color: "#fff",
+  border: "none",
+  padding: "8px 16px",
+  borderRadius: "6px",
+  cursor: "pointer",
+  marginTop: "10px",
+},
+
 
 };
 

@@ -10,6 +10,8 @@ import leaveRequestRoute from "./routes/leaveRequestRoute.js";
 import attendanceRoute from "./routes/attendanceRoute.js";
 import exportRoute from "./routes/exportRoute.js";
 import adminAuthRoute from "./routes/adminAuthRoute.js";
+import leaveCardRoutes from "./routes/leaveCardRoute.js";
+import exportRoutes from "./routes/exportPdfRoute.js";
 import path from "path";
 
 
@@ -34,6 +36,8 @@ app.use("/api/leave-requests", leaveRequestRoute);
 app.use("/api/attendance", attendanceRoute);
 app.use("/api/export", exportRoute);
 app.use("/api/authAdmin", adminAuthRoute);
+app.use("/api/leave-cards", leaveCardRoutes);
+app.use("/api/exportPdf", exportRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

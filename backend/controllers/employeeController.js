@@ -1,9 +1,6 @@
 // controllers/employeeController.js
 import sql from "../config/db.js";
 
-
-
-// 📌 Add new employee
 export const addEmployee = async (req, res) => {
   try {
     let { 
@@ -21,7 +18,11 @@ export const addEmployee = async (req, res) => {
       employment_status 
     } = req.body;
 
-    // ✅ Sanitize date_hired
+    // Convert empty id_number and email to null
+    id_number = id_number?.trim() || null;
+    email = email?.trim() || null;  // <-- allow multiple employees without email
+
+    // Sanitize date_hired
     const parsedDate = new Date(date_hired);
     if (isNaN(parsedDate)) {
       date_hired = new Date().toISOString().split('T')[0]; // fallback to today

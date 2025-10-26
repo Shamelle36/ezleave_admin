@@ -425,13 +425,65 @@ function Dashboard() {
 }, []);
 
 useEffect(() => {
-  if (showProfileModal && admin?.id) {
-    fetch(`http://localhost:5000/api/auth/useradmin/${admin.id}`)
-      .then(res => res.json())
-      .then(data => setProfileData(data))
-      .catch(err => console.error("Error loading profile:", err));
-  }
-}, [showProfileModal, admin]);
+  const fetchInitialProfile = async () => {
+    try {
+      const storedUser = JSON.parse(localStorage.getItem("admin"));
+      if (!storedUser) return;
+
+      // ✅ Choose the correct API endpoint depending on the role
+      const url =
+        storedUser.role === "office_head"
+          ? `http://localhost:5000/api/authAdmin/user/${storedUser.id}`
+          : `http://localhost:5000/api/auth/useradmin/${storedUser.id}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (res.ok) {
+        setAdmin(data);        // ✅ for header display
+        setProfileData(data);  // ✅ for modal
+      } else {
+        console.error("Error loading initial profile:", data.message);
+      }
+    } catch (err) {
+      console.error("Error loading initial profile:", err);
+    }
+  };
+
+  fetchInitialProfile();
+}, []);
+
+
+useEffect(() => {
+  if (!showProfileModal) return;
+
+  const fetchProfileData = async () => {
+    try {
+      const storedUser = JSON.parse(localStorage.getItem("admin"));
+      if (!storedUser) return;
+
+      // ✅ Use the same correct route here
+      const url =
+        storedUser.role === "office_head"
+          ? `http://localhost:5000/api/authAdmin/user/${storedUser.id}`
+          : `http://localhost:5000/api/auth/useradmin/${storedUser.id}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (res.ok) {
+        setProfileData(data);
+      } else {
+        console.error("Error loading profile:", data.message);
+      }
+    } catch (err) {
+      console.error("Error loading profile:", err);
+    }
+  };
+
+  fetchProfileData();
+}, [showProfileModal]);
+
 
   return (
     <div style={styles.dashboardContainer}>
@@ -444,21 +496,31 @@ useEffect(() => {
 
           {/* Profile Section */}
           <div style={styles.profileContainer}>
-            <div onClick={() => setShowProfileMenu(!showProfileMenu)} style={styles.profileInfo}>
-              <img
-                src={admin?.profile_picture}
-                alt="Profile"
-                style={styles.profileImage}
-              />
-              <div style={styles.profileDetails}>
-                <p style={styles.profileName}>
-                  {admin ? admin.full_name : "Loading..."}
-                </p>
-                <p style={styles.profileRole}>
-                  {admin ? admin.role : ""}
-                </p>
-              </div>
-            </div>
+            <div
+  onClick={() => setShowProfileMenu(!showProfileMenu)}
+  style={styles.profileInfo}
+>
+  <img
+    src={
+      admin?.profile_picture ||
+      profileData?.profile_picture ||
+      "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
+    }
+    alt="Profile"
+    style={styles.profileImage}
+  />
+  <div style={styles.profileDetails}>
+    <p style={styles.profileName}>
+      {admin?.full_name ||
+        profileData?.full_name ||
+        "Loading..."}
+    </p>
+    <p style={styles.profileRole}>
+      {admin?.role || profileData?.role || ""}
+    </p>
+  </div>
+</div>
+
 
             {showProfileMenu && (
               <div style={styles.profileDropdown}>
@@ -578,40 +640,58 @@ useEffect(() => {
 
       {/* Buttons */}
       <div style={styles.modalButtons}>
-        <button
-          style={styles.saveBtn}
-          disabled={isUploading}
-          onClick={async () => {
-            if (!profileData.profile_picture) {
-              alert("Please upload a profile image first.");
-              return;
-            }
+<button
+  style={styles.saveBtn}
+  disabled={isUploading}
+  onClick={async () => {
+    if (!profileData.profile_picture) {
+      alert("Please upload a profile image first.");
+      return;
+    }
 
-            try {
-              const res = await fetch(
-                `http://localhost:5000/api/auth/updateProfile/${admin.id}`,
-                {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(profileData),
-                }
-              );
+    const storedUser = JSON.parse(localStorage.getItem("admin"));
+    if (!storedUser) {
+      alert("User not found in localStorage.");
+      return;
+    }
 
-              const result = await res.json();
-              if (res.ok) {
-                alert("Profile updated successfully!");
-                setShowProfileModal(false);
-              } else {
-                alert(result.message || "Failed to update profile.");
-              }
-            } catch (err) {
-              console.error("❌ Error updating profile:", err);
-              alert("Error updating profile. See console.");
-            }
-          }}
-        >
-          {isUploading ? "Uploading..." : "Save Changes"}
-        </button>
+    // ✅ Choose correct endpoint based on role
+    const endpoint =
+      storedUser.role === "office_head"
+        ? `http://localhost:5000/api/authAdmin/update/${storedUser.id}`
+        : `http://localhost:5000/api/auth/updateProfile/${storedUser.id}`;
+
+    // Only include fields that exist to avoid UNDEFINED_VALUE
+    const body = {};
+    if (profileData.full_name) body.full_name = profileData.full_name;
+    if (profileData.profile_picture) body.profile_picture = profileData.profile_picture;
+    if (profileData.department && storedUser.role === "office_head") body.department = profileData.department;
+    if (profileData.email && storedUser.role !== "office_head") body.email = profileData.email; // admins only
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        alert("✅ Profile updated successfully!");
+        setShowProfileModal(false);
+        setProfileData(result); // sync updated data
+      } else {
+        alert(result.message || "Failed to update profile.");
+      }
+    } catch (err) {
+      console.error("❌ Error updating profile:", err);
+      alert("Error updating profile. See console.");
+    }
+  }}
+>
+  {isUploading ? "Uploading..." : "Save Changes"}
+</button>
 
         <button style={styles.cancelButton} onClick={() => setShowProfileModal(false)}>
           Cancel
@@ -672,6 +752,7 @@ useEffect(() => {
     </div>
   </div>
 )}
+
       <div style={styles.sidebar}>
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
          <ul style={styles.sidebarList}>
@@ -781,32 +862,32 @@ useEffect(() => {
                 <th style={styles.th}>Status</th>
               </tr>
             </thead>
-            <tbody>
-              {attendance.length > 0 ? (
-                attendance.map(emp => (
-                  <tr key={emp.id}>
-                    <td style={styles.td}>{emp.id}</td>
-                    <td style={styles.td}>{emp.name}</td>
-                    <td style={styles.td}>
-                      {emp.amCheckin || "-"} / {emp.amCheckout || "-"}
-                    </td>
-                    <td style={styles.td}>
-                      {emp.pmCheckin || "-"} / {emp.pmCheckout || "-"}
-                    </td>
-                    <td style={styles.td}>{emp.status}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="6"
-                    style={{ textAlign: "center", padding: "10px", color: "#777" }}
-                  >
-                    No attendance records found for today.
+          <tbody>
+            {attendance.length > 0 ? (
+              attendance.slice(0, 7).map(emp => (   // 👈 only show first 6 records
+                <tr key={emp.id}>
+                  <td style={styles.td}>{emp.id}</td>
+                  <td style={styles.td}>{emp.name}</td>
+                  <td style={styles.td}>
+                    {emp.amCheckin || "-"} / {emp.amCheckout || "-"}
                   </td>
+                  <td style={styles.td}>
+                    {emp.pmCheckin || "-"} / {emp.pmCheckout || "-"}
+                  </td>
+                  <td style={styles.td}>{emp.status}</td>
                 </tr>
-              )}
-            </tbody>
+              ))
+            ) : (
+              <tr>
+                <td
+                  colSpan="6"
+                  style={{ textAlign: "center", padding: "10px", color: "#777" }}
+                >
+                  No attendance records found for today.
+                </td>
+              </tr>
+            )}
+          </tbody>
           </table>
         </div>
 

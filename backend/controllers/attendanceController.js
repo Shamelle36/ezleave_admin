@@ -14,37 +14,49 @@ const formatPHTime = (date) => {
 // 📌 Get all attendance logs
 export const getAttendanceLogs = async (req, res) => {
   try {
-    const { date } = req.query; // optional filter by date (YYYY-MM-DD)
-    let result;
+    const { date } = req.query; // YYYY-MM-DD
+    const formattedDate = date || new Date().toISOString().split("T")[0];
 
-    if (date) {
-      result = await sql`
-        SELECT id, pin, name, attendance_date, 
-               am_checkin, am_checkout, pm_checkin, pm_checkout
-        FROM attendance_logs
-        WHERE attendance_date = ${date}
-        ORDER BY pin ASC
-      `;
-    } else {
-      result = await sql`
-        SELECT id, pin, name, attendance_date, 
-               am_checkin, am_checkout, pm_checkin, pm_checkout
-        FROM attendance_logs
-        ORDER BY attendance_date DESC
-      `;
-    }
+    // Fetch employees, attendance, and leave applications
+    const result = await sql`
+      SELECT el.id, el.id_number, el.first_name, el.last_name,
+             CONCAT(el.first_name, ' ', el.last_name) AS name,
+             al.attendance_date,
+             al.am_checkin, al.am_checkout,
+             al.pm_checkin, al.pm_checkout,
+             la.id AS leave_id,
+             la.leave_type
+      FROM employee_list el
+      LEFT JOIN attendance_logs al
+      ON el.id_number = al.pin AND al.attendance_date = ${formattedDate}
+      LEFT JOIN leave_applications la
+      ON el.user_id = la.user_id 
+         AND ${formattedDate}::date <@ la.inclusive_dates
+         AND la.status = 'Approved'
+      ORDER BY el.last_name ASC
+    `;
 
-    // Format response (PH time)
-    const logs = result.map((row) => ({
-      id: row.id,
-      pin: row.pin,
-      name: row.name,
-      attendance_date: new Date(row.attendance_date).toISOString().split("T")[0], // YYYY-MM-DD
-      am_checkin: formatPHTime(row.am_checkin),
-      am_checkout: formatPHTime(row.am_checkout),
-      pm_checkin: formatPHTime(row.pm_checkin),
-      pm_checkout: formatPHTime(row.pm_checkout),
-    }));
+    const logs = result.map(row => {
+      // Determine status
+      let status = "Absent";
+      if (row.leave_id) {
+        status = "On-Leave";
+      } else if (row.am_checkin || row.pm_checkin) {
+        status = "Present";
+      }
+
+      return {
+        id: row.id,
+        pin: row.id_number,
+        name: row.name,
+        attendance_date: formattedDate,
+        am_checkin: row.am_checkin ? formatPHTime(row.am_checkin) : null,
+        am_checkout: row.am_checkout ? formatPHTime(row.am_checkout) : null,
+        pm_checkin: row.pm_checkin ? formatPHTime(row.pm_checkin) : null,
+        pm_checkout: row.pm_checkout ? formatPHTime(row.pm_checkout) : null,
+        status
+      };
+    });
 
     res.json(logs);
   } catch (err) {

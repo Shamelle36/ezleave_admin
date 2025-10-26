@@ -21,14 +21,18 @@ import {
   faDownload,
   faSearch,
   faTimes,
-  faPenToSquare
+  faPenToSquare,
+  faUser
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import Papa from 'papaparse';
+import * as XLSX from "xlsx";
+
 
   function Employees() {
  const [employeeRecord, setEmployeeRecords] = useState([]);
+ const [filterEmploymentType, setFilterEmploymentType] = useState('');
  const location = useLocation();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [employeesToUpload, setEmployeesToUpload] = useState([]);
@@ -50,8 +54,8 @@ import Papa from 'papaparse';
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterEmploymentStatus, setFilterEmploymentStatus] = useState('');
-
-
+  const [isDeleting, setIsDeleting] = useState(false);
+  
 
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
@@ -69,6 +73,8 @@ import Papa from 'papaparse';
 
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+
   
     const menuItems = [
       { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -154,81 +160,132 @@ const handleCSVUpload = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  Papa.parse(file, {
-    header: true,
-    skipEmptyLines: true,
-    complete: (results) => {
-      const employeesRaw = results.data.map((row, index) => {
-        // Combine first_name + last_name if full_name not provided
-        const firstName = row.first_name?.trim() || `FirstName${index + 1}`;
-        const lastName = row.last_name?.trim() || `LastName${index + 1}`;
-        const fullName = `${firstName} ${lastName}`;
+  const fileExt = file.name.split('.').pop().toLowerCase();
 
-        return {
-          first_name: firstName,
-          last_name: lastName,
-          full_name: fullName,
-          email: row.email?.trim() || `user${index + 1}@example.com`,
-          position: row.position?.trim() || 'Employee',
-          employment_status: row.employment_status?.trim() || 'Permanent',
-          department: row.department?.trim() || 'General',
-          gender: row.gender?.trim() || 'Male',
-          date_hired: row.date_hired?.trim() || new Date().toISOString().split('T')[0],
-          civil_status: row.civil_status?.trim() || 'Single',
-          contact_number: row.contact_number?.trim() || '',
-          id_number: row.id_number?.trim() || `ID${index + 1}`,
-          status: row.status?.trim() || 'active',
-        };
-      });
+  if (fileExt === 'xlsx' || fileExt === 'xls') {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const data = new Uint8Array(event.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      // Skip first 3 rows (index 0, 1, 2)
+      const rows = json.slice(3);
 
-      // No need to filter; import all
-      setEmployeesToUpload(employeesRaw);
+      // Filter out empty rows (no first/last name or position)
+      const validRows = rows.filter(
+        (row) => row.some(cell => cell && String(cell).trim() !== "")
+      );
+
+      const employees = validRows.map((row) => ({
+        first_name: row[0]?.trim() || "",
+        last_name: row[2]?.trim() || "",
+        full_name: `${row[0] || ""} ${row[1] || ""} ${row[2] || ""}`.trim(),
+        position: row[4]?.trim() || "",
+        department: row[5]?.trim() || "",
+        employment_status:
+          row[6]?.toUpperCase().includes("PERMANENT") ? "Permanent" :
+          row[6]?.toUpperCase().includes("COS") || row[6]?.toUpperCase().includes("JO") ? "Contractual" :
+          row[6]?.toUpperCase().includes("ELECTIVE") || row[6]?.toUpperCase().includes("CO-TERM") ? "Temporary" :
+          "Permanent",
+        id_number: String(row[7] || "").replace(".0", ""),
+        email: row[8]?.trim() || "",
+        contact_number: String(row[9] || "").trim(),
+        date_hired: row[10] ? new Date(row[10]).toISOString().split("T")[0] : "",
+        gender: row[11]?.toLowerCase() === "female" ? "Female" : "Male",
+        civil_status: row[12]?.trim() || "Single",
+        status: "active",
+      }));
+
+      setEmployeesToUpload(employees);
       setShowConfirmModal(true);
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    // fallback for CSV (existing Papa.parse)
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const employeesRaw = results.data
+          .filter(row => Object.values(row).some(cell => cell && cell.trim() !== "")) // skip fully empty
+          .map((row, index) => ({
+            first_name: row.first_name?.trim() || "",
+            last_name: row.last_name?.trim() || "",
+            full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
+            email: row.email?.trim() || "",
+            position: row.position?.trim() || "",
+            employment_status: row.employment_status?.trim() || "Permanent",
+            department: row.department?.trim() || "",
+            gender: row.gender?.trim() || "",
+            date_hired: row.date_hired?.trim() || "",
+            civil_status: row.civil_status?.trim() || "",
+            contact_number: row.contact_number?.trim() || "",
+            id_number: row.id_number?.trim() || "",
+            status: row.status?.trim() || "active",
+          }));
 
-      console.log('CSV parsed employees:', employeesRaw);
-    },
-    error: (err) => {
-      console.error('CSV parsing error:', err);
-      alert('Failed to parse CSV file.');
-    },
-  });
+        setEmployeesToUpload(employeesRaw);
+        setShowConfirmModal(true);
+      },
+    });
+  }
 };
 
 
-  const confirmUpload = async () => {
+const confirmUpload = async () => {
   if (employeesToUpload.length === 0) return;
 
+  // Hide the modal immediately
+  setShowConfirmModal(false);
+
+  // Show loading overlay
+  setIsDeleting(true);
+  await new Promise((resolve) => setTimeout(resolve, 50)); // allow render
+
   try {
-    const savedEmployees = [];
+    // Only filter out completely empty entries
+    const validEmployees = employeesToUpload.filter(
+      (emp) => Object.values(emp).some(value => value && String(value).trim() !== "")
+    );
 
-    for (const emp of employeesToUpload) {
-      const response = await fetch("http://localhost:5000/api/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emp),
-      });
 
-      if (!response.ok) {
-        console.error(`Failed to import ${emp.full_name}`);
-        continue; // skip this employee and continue
+    let importedCount = 0;
+
+    for (const emp of validEmployees) {
+      try {
+        // Remove id_number if empty
+        const payload = { ...emp };
+        if (!payload.id_number) delete payload.id_number;
+
+        const response = await fetch("http://localhost:5000/api/employees", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          console.warn(`❌ Failed to import: ${emp.full_name}`);
+          continue;
+        }
+
+        const savedEmployee = await response.json();
+        setEmployeeRecords((prev) => [savedEmployee, ...prev]);
+
+        importedCount++;
+        console.log(`✅ Imported ${importedCount} / ${validEmployees.length}: ${emp.full_name}`);
+      } catch (err) {
+        console.warn(`⚠️ Skipped due to error: ${emp.full_name}`, err);
       }
-
-      const savedEmployee = await response.json();
-      savedEmployees.push(savedEmployee);
     }
 
-    if (savedEmployees.length > 0) {
-      setEmployeeRecords((prev) => [...savedEmployees, ...prev]);
-      alert(`${savedEmployees.length} employees imported successfully!`);
-    } else {
-      alert("No employees were imported. Check your CSV for valid data.");
-    }
-
-    setEmployeesToUpload([]);
-    setShowConfirmModal(false);
+    console.log(`🎉 Finished importing ${importedCount} / ${validEmployees.length} employees`);
   } catch (error) {
     console.error("Error importing employees:", error);
-    alert("Something went wrong while importing employees.");
+  } finally {
+    setEmployeesToUpload([]);
+    setTimeout(() => setIsDeleting(false), 400); // smooth fade
   }
 };
 
@@ -238,16 +295,60 @@ const handleCSVUpload = async (e) => {
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = async () => {
-    await fetch(`http://localhost:5000/api/employees/${employeeToDelete.id}`, {
+const confirmDelete = async () => {
+  setIsDeleting(true);
+  await new Promise((resolve) => setTimeout(resolve, 50)); // let loader render
+
+  try {
+    const res = await fetch(`http://localhost:5000/api/employees/${employeeToDelete.id}`, {
       method: "DELETE",
     });
+
+    if (!res.ok) throw new Error("Failed to delete employee");
 
     setEmployeeRecords((prev) =>
       prev.filter((emp) => emp.id !== employeeToDelete.id)
     );
+
     setShowDeleteModal(false);
-  };
+  } catch (error) {
+    console.error("Delete error:", error);
+  } finally {
+    setTimeout(() => setIsDeleting(false), 400); // small delay for smooth fade
+  }
+};
+
+
+  // 🗑️ BULK DELETE SELECTED EMPLOYEES
+const handleBulkDelete = async () => {
+  if (selectedEmployees.length === 0) return;
+
+  const confirmBulk = window.confirm(
+    `Are you sure you want to delete ${selectedEmployees.length} selected employees?`
+  );
+  if (!confirmBulk) return;
+
+  setIsDeleting(true);
+  await new Promise((resolve) => setTimeout(resolve, 50)); // render loader
+
+  try {
+    for (const id of selectedEmployees) {
+      await fetch(`http://localhost:5000/api/employees/${id}`, { method: "DELETE" });
+    }
+
+    setEmployeeRecords((prev) =>
+      prev.filter((emp) => !selectedEmployees.includes(emp.id))
+    );
+
+    setSelectedEmployees([]);
+    setSelectAll(false);
+  } catch (err) {
+    console.error("Bulk delete failed:", err);
+  } finally {
+    setTimeout(() => setIsDeleting(false), 400);
+  }
+};
+
 
 
   const handleLogout = async () => {
@@ -343,6 +444,16 @@ const handleCSVUpload = async (e) => {
     }
   };
 
+  useEffect(() => {
+    // Keep "Select All" in sync with row selections
+    if (selectedEmployees.length === employeeRecord.length && employeeRecord.length > 0) {
+      setSelectAll(true);
+    } else {
+      setSelectAll(false);
+    }
+  }, [selectedEmployees, employeeRecord]);
+
+
   const handleSelectEmployee = (id) => {
     setSelectedEmployees((prev) =>
       prev.includes(id)
@@ -361,19 +472,37 @@ const handleCSVUpload = async (e) => {
   }, [showViewModal]);
 
   const filteredEmployees = employeeRecord
-  .filter(emp =>
-    (`${emp.first_name} ${emp.last_name}`)
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-  .filter(emp =>
-    filterDepartment ? emp.department === filterDepartment : true
-  )
-  .filter(emp =>
-    filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true
-  );
+    .filter(emp => {
+      const search = searchTerm.toLowerCase();
 
+      const fullName = `${emp.first_name || ""} ${emp.last_name || ""}`.toLowerCase();
+      const email = (emp.email || "").toLowerCase();
+      const position = (emp.position || "").toLowerCase();
+
+      return fullName.includes(search) || email.includes(search) || position.includes(search);
+    })
+    .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
+    .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true);
+
+
+  const totalPages = Math.ceil(filteredEmployees.length / listEmployeePerPage); 
+  // Helper function to generate pagination range
+  const getPaginationRange = (currentPage, totalPages) => {
+    const maxVisible = 3; // show up to 5 page numbers
+    let start = Math.max(currentPage - Math.floor(maxVisible / 2), 1);
+    let end = start + maxVisible - 1;
+
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(end - maxVisible + 1, 1);
+    }
+
+    const pages = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
 
 
   return (
@@ -484,7 +613,7 @@ const handleCSVUpload = async (e) => {
                   <select
                     value={filterDepartment}
                     onChange={(e) => setFilterDepartment(e.target.value)}
-                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
                   >
                     <option value="">All Departments</option>
                     {departments.map((dept, idx) => (
@@ -503,7 +632,8 @@ const handleCSVUpload = async (e) => {
                     <option value="Contractual">Contractual</option>
                     <option value="Permanent">Permanent</option>
                     <option value="Casual">Casual</option>
-                    {/* Add other statuses here */}
+                    <option value="Job Order">Job Order</option>
+                    <option value="Coterminous">Coterminous</option>
                   </select>
                 </div>
 
@@ -514,7 +644,7 @@ const handleCSVUpload = async (e) => {
                   </button>
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     ref={fileInputRef}
                     onChange={handleCSVUpload}
                     style={{ display: 'none' }}
@@ -523,7 +653,108 @@ const handleCSVUpload = async (e) => {
                     <FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd} />
                     Add Employee
                   </button>
-              </div>
+
+                  {selectedEmployees.length > 0 && (
+                    <button
+                      onClick={() => setShowBulkDeleteModal(true)}
+                      style={{
+                        background: 'linear-gradient(135deg, #e63946, #d62828)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '5px',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                        transition: 'all 0.2s ease-in-out',
+                        marginLeft: '10px',
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+                      onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                    >
+                      <FontAwesomeIcon icon={faTrash} />
+                      <span>Delete Selected ({selectedEmployees.length})</span>
+                    </button>
+                  )}
+
+                  {showBulkDeleteModal && (
+                    <div style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      background: 'rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      zIndex: 1000,
+                    }}>
+                      <div style={{
+                        background: '#fff',
+                        padding: '30px 25px',
+                        width: '420px',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                        textAlign: 'center',
+                        animation: 'fadeIn 0.3s ease-in-out',
+                      }}>
+                        <FontAwesomeIcon
+                          icon={faTrash}
+                          style={{ color: '#d62828', fontSize: '40px', marginBottom: '10px' }}
+                        />
+                        <h3 style={{ marginBottom: '10px', fontSize: '18px' }}>Confirm Bulk Deletion</h3>
+                        <p style={{ marginBottom: '25px', color: '#555', fontSize: '15px' }}>
+                          You are about to permanently delete <strong>{selectedEmployees.length}</strong> employees.
+                          This action cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
+                          <button
+                            onClick={() => {
+                              setShowBulkDeleteModal(false);
+                              handleBulkDelete();
+                            }}
+                            style={{
+                              backgroundColor: '#d62828',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '10px 18px',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setShowBulkDeleteModal(false)}
+                            style={{
+                              backgroundColor: '#ccc',
+                              color: '#333',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '10px 18px',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <style>
+                          {`@keyframes fadeIn {
+                            from { opacity: 0; transform: translateY(-10px); }
+                            to { opacity: 1; transform: translateY(0); }
+                          }`}
+                        </style>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
             </div>
 
 
@@ -566,7 +797,15 @@ const handleCSVUpload = async (e) => {
                             <td style={styles.rowName}>{record.id_number || '—'}</td>
                             <td style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
                             <td style={styles.rowName}>{record.position}</td>
-                            <td style={styles.rowName}>{record.department || '—'}</td>
+                            <td style={{ 
+                              ...styles.rowName, 
+                              maxWidth: '220px',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {record.department || '—'}
+                            </td>
                             <td style={styles.rowName}>{record.employment_status}</td>
                             <td style={styles.rowName}>
                               <button style={styles.viewBtn} onClick={() => handleViewClick(record)}>
@@ -585,37 +824,54 @@ const handleCSVUpload = async (e) => {
                   </table>
 
                   {/* Pagination */}
-                  <div style={styles.paginationContainer}>
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      style={styles.pageBtn}
-                    >
-                      {'<'}
-                    </button>
+                <div style={styles.paginationContainer}>
+                  {/* Previous Button */}
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    style={styles.pageBtn}
+                  >
+                    {'<'}
+                  </button>
 
-                    {[...Array(Math.ceil(filteredEmployees.length / listEmployeePerPage))].map((_, idx) => {
-                      const page = idx + 1;
-                      return (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          style={{
-                            ...styles.pageBtn,
-                            ...(currentPage === page ? styles.activePageBtn : {}),
-                          }}
-                        >
-                          {page}
-                        </button>
-                      );
-                    })}
+                  {/* First page + ellipsis if needed */}
+                  {getPaginationRange(currentPage, totalPages)[0] > 1 && (
+                    <>
+                      <button onClick={() => setCurrentPage(1)} style={styles.pageBtn}>1</button>
+                      {getPaginationRange(currentPage, totalPages)[0] > 2 && <span style={{ padding: '0 8px' }}>…</span>}
+                    </>
+                  )}
 
+                  {/* Visible page numbers */}
+                  {getPaginationRange(currentPage, totalPages).map((page) => (
                     <button
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredEmployees.length / listEmployeePerPage)))}
-                      style={styles.pageBtn}
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      style={{
+                        ...styles.pageBtn,
+                        ...(currentPage === page ? styles.activePageBtn : {}),
+                      }}
                     >
-                      {'>'}
+                      {page}
                     </button>
-                  </div>
+                  ))}
+
+                  {/* Last page + ellipsis if needed */}
+                  {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
+                    <>
+                      {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && <span style={{ padding: '0 8px' }}>…</span>}
+                      <button onClick={() => setCurrentPage(totalPages)} style={styles.pageBtn}>{totalPages}</button>
+                    </>
+                  )}
+
+                  {/* Next Button */}
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    style={styles.pageBtn}
+                  >
+                    {'>'}
+                  </button>
+                </div>
+                
                 </div>
               </div>
 
@@ -650,14 +906,29 @@ const handleCSVUpload = async (e) => {
 
                   {/* Top Profile Section */}
                   <div style={styles.topSection}>
-                    <img
-                      src={selectedEmployee.profile_picture || "https://via.placeholder.com/140"}
-                      alt="Profile"
-                      style={styles.profileImage}
-                    />
+                    {selectedEmployee?.profile_picture ? (
+                      <img
+                        src={selectedEmployee.profile_picture}
+                        alt="Profile"
+                        style={styles.profileImage}
+                      />
+                    ) : (
+                      <div style={{
+                        width: "80px",
+                        height: "80px",
+                        borderRadius: '50%',
+                        backgroundColor: '#ddd',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <FontAwesomeIcon icon={faUser} size="3x" color="#888" />
+                      </div>
+                    )}
                     <div style={styles.profileText}>
-                      <h3 style={styles.employeeName}>{selectedEmployee.full_name}</h3>
-                      <p style={styles.employeePosition}>{selectedEmployee.position}</p>
+                      <h3 style={styles.employeeName}>
+                        {selectedEmployee.full_name?.trim() || `${selectedEmployee.first_name || ''} ${selectedEmployee.last_name || ''}`.trim()}
+                      </h3>
                       <p style={styles.employeeID}>ID: {selectedEmployee.id_number}</p>
                     </div>
                   </div>
@@ -1045,12 +1316,13 @@ const handleCSVUpload = async (e) => {
                       <div style={{ gridColumn: '1 / -1' }}>
                         <label style={styles.label}>Employment Type</label>
                         <div style={styles.genderContainer}>
-                          {['Temporary', 'Permanent', 'Contractual', 'Casual'].map((type) => (
+                          {['Temporary', 'Permanent', 'Contractual', 'Casual', 'Job Order', 'Coterminous'].map((type) => (
                             <div
                               key={type}
                               style={{
                                 ...styles.genderBtn,
                                 ...(newEmployee.employment_status === type ? styles.genderBtnActive : {}),
+                                fontSize: '12px',
                               }}
                               onClick={() => setNewEmployee({ ...newEmployee, employment_status: type })}
                             >
@@ -1086,7 +1358,53 @@ const handleCSVUpload = async (e) => {
                 </div>
               )}
 
+        {isDeleting && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(255, 255, 255, 0.8)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2000,
+            backdropFilter: 'blur(2px)',
+          }}>
+            <div className="spinner" style={{
+              width: 60,
+              height: 60,
+              border: '6px solid #ccc',
+              borderTop: '6px solid #007bff',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <p style={{
+              marginTop: 20,
+              fontSize: 18,
+              fontWeight: '500',
+              color: '#333'
+            }}>
+              {employeesToUpload.length > 0
+                ? `Importing ${employeesToUpload.length} employees...`
+                : selectedEmployees.length > 1
+                  ? 'Deleting selected employees...'
+                  : 'Deleting employee...'}
+            </p>
+            <style>
+              {`@keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }`}
+            </style>
+          </div>
+        )}
+
         </div>
+
+        
       )}
 
       {view === 'directory' && (
@@ -1095,35 +1413,62 @@ const handleCSVUpload = async (e) => {
           <div style={styles.header1}>
             <div>
               <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
-              <input placeholder='Search' style={styles.searchInput}/>
+              <input
+                placeholder='Search by name, email, or position'
+                style={styles.searchInput}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
 
-            <select style={styles.filterStatus}>
+            <select
+              style={styles.filterStatus}
+              value={filterEmploymentStatus}
+              onChange={(e) => setFilterEmploymentStatus(e.target.value)}
+            >
               <option value="">Filter by Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
 
-            <select style={styles.filterStatus2}>
+            <select
+              style={styles.filterStatus2}
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+            >
               <option value="">Filter by Department</option>
-              {departments.map(dept => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              {departments.map((dept, idx) => (
+                <option key={idx} value={dept}>{dept}</option>
               ))}
             </select>
-            <select style={styles.filterStatus}>
+
+            <select
+              style={styles.filterStatus}
+              value={filterEmploymentType}
+              onChange={(e) => setFilterEmploymentType(e.target.value)}
+            >
               <option value="">Filter by Employment Type</option>
               <option value="temporary">Temporary</option>
               <option value="permanent">Permanent</option>
               <option value="contract">Contract</option>
               <option value="casual">Casual</option>
             </select>
-
           </div>
 
           <div style={styles.cardGrid}>
             {employeeRecord
+              .filter(emp => {
+                const search = searchTerm.toLowerCase();
+                const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+                const email = (emp.email || '').toLowerCase();
+                const position = (emp.position || '').toLowerCase();
+                return fullName.includes(search) || email.includes(search) || position.includes(search);
+              })
+              .filter(emp => filterDepartment ? (emp.department || '') === filterDepartment : true)
+              .filter(emp => filterEmploymentStatus ? (emp.status || '') === filterEmploymentStatus : true)
+              .filter(emp => filterEmploymentType ? (emp.employment_status || '').toLowerCase() === filterEmploymentType.toLowerCase() : true)
               .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-              .map((emp) => (
+              .map(emp => (
                 <div
                   key={emp.id}
                   style={{ ...styles.card, cursor: 'pointer' }}
@@ -1133,58 +1478,57 @@ const handleCSVUpload = async (e) => {
                     {emp.profile_picture ? (
                       <img src={emp.profile_picture} alt="Profile" style={styles.avatar} />
                     ) : (
-                      <div style={styles.initials}>
-                        {emp.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                      <div style={{
+                        width: "80px",
+                        height: "80px",
+                        borderRadius: '50%',
+                        backgroundColor: '#ddd',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <FontAwesomeIcon icon={faUser} size="3x" color="#888" />
                       </div>
                     )}
                   </div>
+
                   <div style={styles.info}>
-                  <p style={styles.name}>
-                    {`${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
-                  </p>
-                    <p style={styles.position}>{emp.position}</p>
+                    <p style={styles.name}>{`${emp.first_name || ''} ${emp.last_name || ''}`.trim()}</p>
+                    <p style={styles.position}>{emp.position || '—'}</p>
                     <p style={styles.department}>{emp.department || '—'}</p>
                   </div>
                 </div>
             ))}
           </div>
 
-
+          {/* Pagination */}
           <div style={styles.paginationContainer}>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                style={styles.pageBtn}
-              >
-                {'<'}
-              </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              style={styles.pageBtn}
+            >{'<'}</button>
 
-              {[...Array(Math.ceil(employeeRecord.length / itemsPerPage))].map((_, idx) => {
-                const page = idx + 1;
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    style={{
-                      ...styles.pageBtn,
-                      ...(currentPage === page ? styles.activePageBtn : {}),
-                    }}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
+            {[...Array(Math.ceil(employeeRecord.length / itemsPerPage))].map((_, idx) => {
+              const page = idx + 1;
+              return (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  style={{
+                    ...styles.pageBtn,
+                    ...(currentPage === page ? styles.activePageBtn : {}),
+                  }}
+                >
+                  {page}
+                </button>
+              );
+            })}
 
-              <button
-                onClick={() =>
-                  setCurrentPage((prev) =>
-                    Math.min(prev + 1, Math.ceil(employeeRecord.length / itemsPerPage))
-                  )
-                }
-                style={styles.pageBtn}
-              >
-                {'>'}
-              </button>
-            </div>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(employeeRecord.length / itemsPerPage)))}
+              style={styles.pageBtn}
+            >{'>'}</button>
+          </div>
 
         </div>
       )}
@@ -1663,8 +2007,8 @@ topSection: {
 },
 
 profileImage: {
-  width: "80px",
-  height: "80px",
+  width: "50px",
+  height: "50px",
   borderRadius: "50%",
   objectFit: "cover",
   border: "3px solid #f3f3f3",
@@ -1885,8 +2229,11 @@ checkbox: {
     textAlign: 'left',
   },
 
+  row1: {
+    display: 'flex',
+    flexDirection: 'row',
+  }
 
-  
 };
 
 export default Employees;

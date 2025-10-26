@@ -5,7 +5,8 @@ import {
   setupPassword,
   login,
   fetchAccounts,
-  getUserByRole
+  getUserById,
+  updateProfile,
 } from "../controllers/adminAuthController.js";
 
 const router = express.Router();
@@ -20,6 +21,8 @@ router.post("/setup-password/:token", setupPassword);
 // Login (for admin, head, mayor)
 router.post("/login", login);
 
-router.get("/user-by-role/:role", getUserByRole);
+router.get("/user/:id", getUserById);
+
+router.put("/update/:id", updateProfile); 
 
 export default router;

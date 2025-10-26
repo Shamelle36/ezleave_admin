@@ -184,22 +184,57 @@ export const login = async (req, res) => {
   }
 };
 
-export const getUserByRole = async (req, res) => {
-  const { role } = req.params;
+export const getUserById = async (req, res) => {
+  const { id } = req.params;
 
   try {
-    const users = await sql`
+    const user = await sql`
       SELECT id, full_name, email, role, department, profile_picture
       FROM admin_accounts
-      WHERE role = ${role}
-      LIMIT 1
+      WHERE id = ${id}
     `;
 
-    if (users.length === 0) return res.status(404).json({ message: "User not found." });
+    if (user.length === 0)
+      return res.status(404).json({ message: "User not found." });
 
-    res.json(users[0]);
+    res.json(user[0]);
   } catch (err) {
-    console.error("❌ Error fetching user by role:", err);
+    console.error("❌ Error fetching user by ID:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+// 🟢 5. Update admin profile (name, email, department, profile picture)
+export const updateProfile = async (req, res) => {
+  console.log("=== UPDATE OFFICE HEAD PROFILE REQUEST ===");
+  console.log("Params:", req.params);
+  console.log("Body:", req.body);
+
+  const { id } = req.params;
+  const { full_name, department, profile_picture } = req.body;
+
+  try {
+    if (!full_name && !department && !profile_picture) {
+      return res.status(400).json({ message: "No fields to update." });
+    }
+
+    // Only update fields that are defined
+    const updates = {};
+    if (full_name !== undefined) updates.full_name = full_name;
+    if (department !== undefined) updates.department = department;
+    if (profile_picture !== undefined) updates.profile_picture = profile_picture;
+
+    await sql`
+      UPDATE admin_accounts
+      SET ${sql(updates)}
+      WHERE id = ${id}
+    `;
+
+    res.json({ message: "✅ Office Head profile updated successfully!" });
+  } catch (err) {
+    console.error("❌ Error updating office head profile:", err);
+    res.status(500).json({ message: "Failed to update profile." });
+  }
+};
+
