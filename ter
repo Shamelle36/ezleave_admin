@@ -1,0 +1,173 @@
+[33mcommit 863acdfa6461552cca57b4977bf893182f15af55[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Tue Nov 18 16:25:18 2025 +0800
+
+    working in the leave form
+
+[33mcommit 02f6eafc9ff4a7189abc0b2fd283de7c2723ba4b[m[33m ([m[1;31morigin/master[m[33m)[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sun Oct 26 20:48:42 2025 +0800
+
+    added feature
+
+[33mcommit 632d72e9f08208ea96760a51cf06a446693b939a[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sat Oct 11 21:21:10 2025 +0800
+
+    initial commit
+
+[33mcommit 7bcf9bddbdc205189f511b4a5efa2078185fad89[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Mon Sep 22 13:59:21 2025 +0800
+
+    Added Leave Approval
+
+[33mcommit 8bd035b28df5925de15571dec0bb63e7c2b0290a[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Thu Sep 18 16:20:11 2025 +0800
+
+    commit this
+
+[33mcommit 532e898b577a81a5bd38e75882eb3c1fc32365d8[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Fri Sep 12 20:37:29 2025 +0800
+
+    uploading of file and image
+
+[33mcommit faaee6c4df8e267b5aef1e4af678a166ec84c11b[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Fri Sep 12 13:31:56 2025 +0800
+
+    nothing
+
+[33mcommit 3b6c19da3804953439504fa5e43b9da5d8630c2f[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Thu Sep 11 21:08:46 2025 +0800
+
+    adding employee count into dashboard
+
+[33mcommit 378efec4d91cb7bf883e9e2ec02366fe5b539963[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Wed Sep 10 10:58:53 2025 +0800
+
+    polishing announcement
+
+[33mcommit 9f73b1ae79e60e10e5e0299a80edd276ac0122b1[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Tue Sep 9 17:07:58 2025 +0800
+
+    adding annoucement function
+
+[33mcommit c8eda344c503efa81995f655aec585e84d7732da[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Mon Sep 8 21:23:38 2025 +0800
+
+    announcement feature adding
+
+[33mcommit 32a135d251be76a6424dc7de534603ab12438bba[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sat Sep 6 23:18:57 2025 +0800
+
+    delete supabase, change it into neon
+
+[33mcommit b439e82d5aaa05c57177a45370c0086ab6be0b86[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sun Jul 27 21:58:26 2025 +0800
+
+    leave calendar
+
+[33mcommit 78db0a2fa09ef9b1b90669c0f7320f582debaef1[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sun Jul 27 12:16:33 2025 +0800
+
+    leave credit adding
+
+[33mcommit c1276e513d57c3c1de20958ed68f9955f6c19e56[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sun Jul 27 08:49:13 2025 +0800
+
+    Adding employee directory
+
+[33mcommit 48ac27d9d86a99632eaf34724b0c852fdfb03470[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Mon Jul 21 16:59:22 2025 +0800
+
+    adding employee
+
+[33mcommit b6e3eb1c2ecf2d83ba787d35326571a1c05327b1[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Fri Jul 18 08:33:51 2025 +0800
+
+    edit employee js
+
+[33mcommit aabd87827fb80db788a7e17476b4f1a38bf30236[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Fri Jul 4 12:51:37 2025 +0800
+
+    employee edit
+
+[33mcommit 2716be3fb11cf948130034049da9ff5963304197[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Wed Jul 2 17:02:44 2025 +0800
+
+    add employee
+
+[33mcommit 6be139abe51cf01d39b302609b51df5f570f4a46[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Wed Jul 2 11:45:12 2025 +0800
+
+    edit
+
+[33mcommit e4928da22cc6036de62ae5bf4745bf6d1f2c57dc[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Tue Jun 24 13:09:56 2025 +0800
+
+    add function-announcement
+
+[33mcommit 151c346d886fb5f8c2f5706877fa569371ca4938[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Mon Jun 23 13:29:25 2025 +0800
+
+    add functio-login-signup
+
+[33mcommit 6150f9150b123cc9e1fcfbae8e6837868a582ea9[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Mon Jun 23 09:57:32 2025 +0800
+
+    edit
+
+[33mcommit f0b51f10b696511b890b62e5b0f602493ce0660f[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Wed Jun 18 08:51:08 2025 +0800
+
+    edit
+
+[33mcommit 661d87aac93c4815fc0c1df75dbd55bda384da50[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Mon Jun 16 23:22:13 2025 +0800
+
+    edit
+
+[33mcommit 3307a3f038ca2249f3f82ae05ea8887b9a1d4383[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Sun Jun 15 21:08:43 2025 +0800
+
+    edit
+
+[33mcommit c01f6c0f75afcbb4ee6b9125f3ef355dcac90817[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Thu Jun 12 18:36:42 2025 +0800
+
+    edit
+
+[33mcommit 2256671b62271e0999c3bea6b3d8415df00b56fb[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Wed Jun 11 18:32:07 2025 +0800
+
+    edit
+
+[33mcommit f18896401c73378906098b3a13a49e360b1f65cd[m
+Author: Shamelle <shamelletadeja10@gmail.com>
+Date:   Wed Jun 11 12:03:11 2025 +0800
+
+    Initialize project using Create React App
