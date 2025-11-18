@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -29,6 +29,8 @@ import {
   faRefresh,
   faFilter,
   faUpload,
+  faSignature,
+  faFilePdf,
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -57,53 +59,128 @@ function LeaveManagement() {
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState(null);
     const [leaveRecords, setLeaveRecords] = useState([]);
+    const [userRole, setUserRole] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [filteredRequests, setFilteredRequests] = useState([]);
 
-     const [showLogoutModal, setShowLogoutModal] = useState(false);
-        const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+const [signatureMethod, setSignatureMethod] = useState(""); // "e-sign" or "traditional"
+    const [signatureData, setSignatureData] = useState("");
+    const [isSigning, setIsSigning] = useState(false);
+    const [showActualCSForm, setShowActualCSForm] = useState(false);
+    const [csFormData, setCsFormData] = useState(null);
+    const [daysWithPay, setDaysWithPay] = useState(0); // NEW: Days with pay state
+    const [showSignatureChoice, setShowSignatureChoice] = useState(false); // NEW: Show signature choice modal
+    const [realTimeFormData, setRealTimeFormData] = useState({
+  action_type: "",
+  action_remarks: "",
+  days_with_pay: 0
+});
+const [isGeneratingCSForm, setIsGeneratingCSForm] = useState(false);
+const [isGeneratingForm, setIsGeneratingForm] = useState(false);
+const [formGenerationTimeout, setFormGenerationTimeout] = useState(null);
+const [isTyping, setIsTyping] = useState(false);
+
+    useEffect(() => {
+        let role = localStorage.getItem("role") || "";
+        // Normalize: lowercase and replace underscores with spaces
+        role = role.toLowerCase().replace("_", " ");
+        setUserRole(role);
+    }, []);
+
+const debouncedGenerateCSForm = useCallback(() => {
+  if (formGenerationTimeout) {
+    clearTimeout(formGenerationTimeout);
+  }
+  
+  const timeout = setTimeout(() => {
+    generateAndShowCSForm();
+  }, 1000); // Wait 1 second after last change
+  
+  setFormGenerationTimeout(timeout);
+}, [formGenerationTimeout]);
+
+
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  
+    const menuItems = [
+      { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+      { name: "Employees", icon: faUsers, to: "/employee" },
+      { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+      { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+      { name: "Message", icon: faEnvelope, to: "/messages" },
+      { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+      { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+      { name: "User Management", icon: faUserCog, to: "/userManagement" },
+      { name: "Settings", icon: faCog, to: "#" },
+    ];
+  
+    const allowedMenus = menuItems.filter((item) => {
+      if (role === "admin") return true;
+      if (role === "mayor" || role === "office_head") {
+        return [
+          "Dashboard",
+          "Employees",
+          "Attendance",
+          "Leave Management",
+          "Message",
+          "Announcement",
+        ].includes(item.name);
+      }
+      return false;
+    });
+
+    const handleLogout = async () => {
+        const user = JSON.parse(localStorage.getItem("admin"));
+        if (user) {
+            await fetch("http://localhost:5000/api/auth/logout", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: user.id, role: user.role }),
+            });
+        }
+        localStorage.removeItem("admin");
+        navigate("/");
+    };
+
+    useEffect(() => {
+        if (requests && requests.length > 0) {
+            let filtered = requests;
+            if (searchQuery.trim()) {
+                filtered = filtered.filter(req => 
+                    req.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    req.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    req.middle_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    req.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    req.leave_type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    req.id_number?.toString().includes(searchQuery)
+                );
+            }
+            if (statusFilter !== "all") {
+                filtered = filtered.filter(req => 
+                    req.status?.toLowerCase() === statusFilter.toLowerCase()
+                );
+            }
+            setFilteredRequests(filtered);
+        } else {
+            setFilteredRequests(requests || []);
+        }
+    }, [requests, searchQuery, statusFilter]);
+
+    const handleSearch = (e) => {
+        setSearchQuery(e.target.value);
+    };
+
+    const handleStatusFilter = (e) => {
+        setStatusFilter(e.target.value);
+    };
+
+    const clearFilters = () => {
+        setSearchQuery("");
+        setStatusFilter("all");
+    };
       
-        const menuItems = [
-          { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
-          { name: "Employees", icon: faUsers, to: "/employee" },
-          { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
-          { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-          { name: "Message", icon: faEnvelope, to: "/messages" },
-          { name: "Announcement", icon: faBullhorn, to: "/announcement" },
-          { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
-          { name: "User Management", icon: faUserCog, to: "/userManagement" },
-          { name: "Settings", icon: faCog, to: "#" },
-        ];
-      
-        const allowedMenus = menuItems.filter((item) => {
-          if (role === "admin") return true;
-          if (role === "mayor" || role === "office_head") {
-            return [
-              "Dashboard",
-              "Employees",
-              "Attendance",
-              "Leave Management",
-              "Message",
-              "Announcement",
-            ].includes(item.name);
-          }
-          return false;
-        });
-
-         const handleLogout = async () => {
-    const user = JSON.parse(localStorage.getItem("admin")); // get current session
-
-    if (user) {
-      await fetch("http://localhost:5000/api/auth/logout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, role: user.role }),
-      });
-    }
-
-    localStorage.removeItem("admin"); // clear session
-    navigate("/"); // redirect to login
-  };
-      
-
     const formatDate = (date) =>
         date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -113,11 +190,11 @@ function LeaveManagement() {
         setDate(prev);
     };
 
-  const goToNextDay = () => {
-    const next = new Date(date);
-    next.setDate(next.getDate() + 1);
-    setDate(next);
-  };
+    const goToNextDay = () => {
+        const next = new Date(date);
+        next.setDate(next.getDate() + 1);
+        setDate(next);
+    };
 
     const handlePrint = () => {
         window.print();
@@ -131,189 +208,479 @@ function LeaveManagement() {
         navigate('/leaveCalendar');
     }
     
-const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const parsed = results.data;
-        setCsvData(parsed);
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const parsed = results.data;
+                setCsvData(parsed);
+                setLeaveBalances((prev) => [...prev, ...parsed]);
+                alert('CSV uploaded and merged into leave balances (frontend only).');
+            },
+        });
+    };
 
-        // ✅ Instead of saving to DB, merge into local state
-        setLeaveBalances((prev) => [...prev, ...parsed]);
+    const fetchLeaveBalances = () => {
+        setLoading(true);
+        setTimeout(() => {
+            setLeaveBalances([
+                {
+                    id: 1,
+                    id_number: '20230001',
+                    leave_type: 'Vacation Leave',
+                    entitled: 15,
+                    used: 5,
+                    employees: { full_name: 'Juan Dela Cruz' },
+                },
+                {
+                    id: 2,
+                    id_number: '20230002',
+                    leave_type: 'Sick Leave',
+                    entitled: 10,
+                    used: 2,
+                    employees: { full_name: 'Maria Santos' },
+                },
+            ]);
+            setLoading(false);
+        }, 800);
+    };
 
-        alert('CSV uploaded and merged into leave balances (frontend only).');
-      },
-    });
-  };
+    useEffect(() => {
+        fetchLeaveBalances();
+    }, []);
 
+    useEffect(() => {
+        if (activeTab === "summary") {
+            fetch("http://localhost:5000/api/leave-requests")
+                .then((res) => res.json())
+                .then((data) => {
+                    const formatted = data.map((req) => {
+                        let from = null;
+                        let to = null;
+                        if (req.inclusive_dates) {
+                            const match = req.inclusive_dates.match(/\[(.*?),(.*?)[)\]]/);
+                            if (match) {
+                                from = new Date(match[1]);
+                                to = new Date(match[2]);
+                            }
+                        }
+                        return {
+                            name: req.first_name && req.last_name
+                                ? `${req.first_name} ${req.last_name}`
+                                : req.user_id,
+                            department: req.office_department,
+                            leaveType: req.leave_type,
+                            entitled: 0,
+                            used: 0,
+                            remaining: 0,
+                            status: req.status,
+                            approvedBy: req.approved_by || "N/A",
+                            dateFiled: new Date(req.date_filing),
+                            range: { from, to }
+                        };
+                    });
+                    setLeaveRecords(formatted);
+                })
+                .catch((err) => console.error("Error fetching summary:", err));
+        }
+    }, [activeTab]);
 
-  const fetchLeaveBalances = () => {
-    // ✅ Demo/mock leave balances instead of Supabase fetch
-    setLoading(true);
-    setTimeout(() => {
-      setLeaveBalances([
-        {
-          id: 1,
-          id_number: '20230001',
-          leave_type: 'Vacation Leave',
-          entitled: 15,
-          used: 5,
-          employees: { full_name: 'Juan Dela Cruz' },
-        },
-        {
-          id: 2,
-          id_number: '20230002',
-          leave_type: 'Sick Leave',
-          entitled: 10,
-          used: 2,
-          employees: { full_name: 'Maria Santos' },
-        },
-      ]);
-      setLoading(false);
-    }, 800); // simulate async
-  };
+    useEffect(() => {
+        const dayStr = date.toISOString().split("T")[0];
+        const filtered = leaveRecords.filter((record) => {
+            if (!record.range.from || !record.range.to) return false;
+            const fromStr = record.range.from.toISOString().split("T")[0];
+            const toStr = record.range.to.toISOString().split("T")[0];
+            return dayStr >= fromStr && dayStr <= toStr;
+        });
+        setFilteredRecords(filtered);
+    }, [date, leaveRecords]);
 
-  useEffect(() => {
-    fetchLeaveBalances();
-  }, []);
-
-
-  useEffect(() => {
-    if (activeTab === "summary") {
-      fetch("http://localhost:5000/api/leave-requests")
-        .then((res) => res.json())
-        .then((data) => {
-          const formatted = data.map((req) => {
-            let from = null;
-            let to = null;
-
-            if (req.inclusive_dates) {
-                // Example: "[2025-09-18,2025-09-19)"
-                const match = req.inclusive_dates.match(/\[(.*?),(.*?)[)\]]/);
-                if (match) {
-                from = new Date(match[1]); // ✅ convert to Date
-                to = new Date(match[2]);   // ✅ convert to Date
-                }
-            }
-
-            return {
-                name: req.first_name && req.last_name
-                ? `${req.first_name} ${req.last_name}`
-                : req.user_id,
-                department: req.office_department,
-                leaveType: req.leave_type,
-                entitled: 0,
-                used: 0,
-                remaining: 0,
-                status: req.status,
-                approvedBy: req.approved_by || "N/A",
-                dateFiled: new Date(req.date_filing),
-                range: { from, to }
-            };
-            });
-
-
-          setLeaveRecords(formatted);
-        })
-        .catch((err) => console.error("Error fetching summary:", err));
-    }
-  }, [activeTab]);
-
-  // Whenever date or records change → filter
-  useEffect(() => {
-  const dayStr = date.toISOString().split("T")[0]; // "YYYY-MM-DD"
-
-  const filtered = leaveRecords.filter((record) => {
-    if (!record.range.from || !record.range.to) return false;
-
-    const fromStr = record.range.from.toISOString().split("T")[0];
-    const toStr = record.range.to.toISOString().split("T")[0];
-
-    // ✅ check if selected day falls in range
-    return dayStr >= fromStr && dayStr <= toStr;
-  });
-
-  setFilteredRecords(filtered);
-}, [date, leaveRecords]);
-
-
-  useEffect(() => {
-    if (activeTab === "requests") {
-      fetch("http://localhost:5000/api/leave-requests")
-        .then((res) => res.json())
-        .then((data) => setRequests(data))
-        .catch((err) => console.error("Error fetching requests:", err));
-    }
-  }, [activeTab]);
-
+    useEffect(() => {
+        if (activeTab === "requests") {
+            fetch("http://localhost:5000/api/leave-requests")
+                .then((res) => res.json())
+                .then((data) => setRequests(data))
+                .catch((err) => console.error("Error fetching requests:", err));
+        }
+    }, [activeTab]);
 
 const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
-  try {
-    const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actionBy: "Admin", remarks }),
-    });
-    const data = await res.json();
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    if (!admin) return alert("No admin logged in!");
 
-    if (res.ok) {
-      // Update the request list with the full updated object from backend
-      setRequests((prev) =>
-        prev.map((req) => (req.id === requestId ? { ...req, ...data } : req))
-      );
+    const role = admin.role?.toLowerCase().replace(" ", "_");
 
-      // Update the selected request if it’s the same one
-      setSelectedRequest((prev) =>
-        prev && prev.id === requestId ? { ...prev, ...data } : prev
-      );
-
-      alert("Leave request approved!");
-    } else {
-      alert(data.error || "Failed to approve request");
+    // If mayor, office head, or HR admin, show actual CS form directly
+    if (role === "mayor" || role === "office_head" || role === "admin") {
+        const request = requests.find(req => req.id === requestId);
+        if (request) {
+            setSelectedRequest(request);
+            setDaysWithPay(request.number_of_days || 0);
+            
+            // Set action type and remarks first
+            setActionType("approve");
+            setActionRemarks(remarks);
+            
+            // Update realTimeFormData immediately
+            setRealTimeFormData({
+                action_type: "approve",
+                action_remarks: remarks,
+                days_with_pay: request.number_of_days || 0
+            });
+            
+            // Show loading state
+            setIsGeneratingCSForm(true);
+            
+            // Generate form immediately with all data
+            setTimeout(() => {
+                generateAndShowCSForm();
+            }, 100);
+        }
+        return;
     }
-  } catch (err) {
-    console.error(err);
-    alert("Error approving leave request");
-  }
+
+    // Original approval logic for other roles
+    try {
+        const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                actionBy: admin.id || admin.email,
+                remarks,
+                role,
+            }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            setRequests(prev =>
+                prev.map(req =>
+                    req.id === requestId
+                        ? {
+                            ...req,
+                            status: role === "mayor" ? "Approved" : req.status,
+                            [`${role}_status`]: "Approved",
+                            approver_name: data.approver_name,
+                            remarks,
+                        }
+                        : req
+                )
+            );
+            alert(`Leave request approved by ${data.approver_name} (${role.replace("_", " ")})`);
+        } else {
+            alert(data.error || "Failed to approve request");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Error approving leave request");
+    }
 };
 
 
-// Reject a leave request
+const generateAndShowCSForm = async () => {
+  // Prevent multiple simultaneous generations
+  if (isGeneratingForm) {
+    console.log("Form generation already in progress, skipping...");
+    return;
+  }
+
+  try {
+    setIsGeneratingForm(true);
+    
+    if (!selectedRequest || !selectedRequest.id) {
+      alert("No leave request data available");
+      setIsGeneratingForm(false);
+      return;
+    }
+
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    const role = admin.role?.toLowerCase().replace(" ", "_");
+
+    const data = {
+      leave_application_id: selectedRequest.id,
+      days_with_pay: daysWithPay,
+      requesting_role: role,
+      action_type: actionType,
+      action_remarks: actionRemarks,
+      real_time_data: {
+        action_type: actionType,
+        action_remarks: actionRemarks,
+        days_with_pay: daysWithPay
+      }
+    };
+
+    console.log("Generating CS Form with:", data);
+
+    const res = await fetch("http://localhost:5000/api/generate-cs-form", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    
+    setCsFormData({
+      blob: blob,
+      url: url,
+      timestamp: Date.now()
+    });
+    
+    // Hide loading and show the form
+    setIsGeneratingCSForm(false);
+    setShowActualCSForm(true);
+    
+  } catch (err) {
+    console.error("Error generating CS Form:", err);
+    alert("Failed generating CS Form: " + err.message);
+    setIsGeneratingCSForm(false);
+  } finally {
+    setIsGeneratingForm(false);
+  }
+};
+
+    // NEW: Handle signature method selection
+    const handleSignatureMethod = (method) => {
+        setSignatureMethod(method);
+        setShowSignatureChoice(false);
+        
+        if (method === "e-sign") {
+            setIsSigning(true);
+            setTimeout(() => {
+                setSignatureData("Mayor_E_Signature_" + Date.now());
+                setIsSigning(false);
+                completeCSFormApproval();
+            }, 2000);
+        } else {
+            // For traditional signing, print first then complete approval
+            if (csFormData) {
+                const newWindow = window.open(csFormData.url);
+                if (newWindow) {
+                    newWindow.onload = () => {
+                        newWindow.print();
+                    };
+                }
+            }
+            completeCSFormApproval();
+        }
+    };
+
+    // UPDATED: Complete CS Form approval with days with pay
+    const completeCSFormApproval = async () => {
+        try {
+            const admin = JSON.parse(localStorage.getItem("admin"));
+            const role = admin.role?.toLowerCase().replace(" ", "_");
+
+            const res = await fetch(`http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    actionBy: admin.id || admin.email,
+                    remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
+                    role,
+                    cs_form_signed: true,
+                    signature_method: signatureMethod,
+                    signature_data: signatureMethod === "e-sign" ? signatureData : null,
+                    days_with_pay: daysWithPay
+                }),
+            });
+
+            if (res.ok) {
+                setRequests(prev =>
+                    prev.map(req =>
+                        req.id === selectedRequest.id
+                            ? {
+                                ...req,
+                                status: "Approved",
+                                mayor_status: "Approved",
+                                approver_name: admin.name || admin.email,
+                                remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
+                                days_with_pay: daysWithPay
+                            }
+                            : req
+                    )
+                );
+
+                alert(`Leave request approved with ${signatureMethod === "e-sign" ? "E-Signature" : "Traditional Signature"} - ${daysWithPay} days with pay`);
+                
+                // Close all modals
+                setShowActualCSForm(false);
+                setCsFormData(null);
+                setShowSignatureChoice(false);
+                
+                // Refresh requests
+                fetchRequests();
+            }
+        } catch (err) {
+            console.error("Error approving with CS Form:", err);
+            alert("Error approving leave request");
+        }
+    };
+
+    // NEW: Handle confirm button click - show signature choice
+    const handleConfirmApproval = () => {
+        setShowSignatureChoice(true);
+    };
+
+    const handlePrintCSForm = async (requestData) => {
+        try {
+            if (!requestData || !requestData.id) {
+                console.error("No request data provided");
+                alert("No leave request data available");
+                return;
+            }
+
+            const data = {
+                leave_application_id: requestData.id,
+                agency_name: "MUNICIPALITY OF PALUAN",
+                agency_address: "Brgy. 10-Alipaoy, Paluan, Occidental Mindoro"
+            };
+
+            console.log("Sending request with data:", data);
+
+            const res = await fetch("http://localhost:5000/api/generate-cs-form", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const newWindow = window.open(url);
+            
+            if (newWindow) {
+                newWindow.onload = () => {
+                    newWindow.print();
+                };
+            }
+        } catch (err) {
+            console.error("Error generating PDF:", err);
+            alert("Failed generating PDF: " + err.message);
+        }
+    };
+
+    const handleRejectWithCSForm = async (requestId, remarks) => {
+        try {
+            const admin = JSON.parse(localStorage.getItem("admin"));
+            const role = admin.role?.toLowerCase().replace(" ", "_");
+
+            const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    actionBy: admin.id || admin.email,
+                    remarks,
+                    role,
+                }),
+            });
+
+            if (res.ok) {
+                setRequests(prev =>
+                    prev.map(req =>
+                        req.id === requestId
+                            ? {
+                                ...req,
+                                status: "Rejected",
+                                [`${role}_status`]: "Rejected",
+                                approver_name: admin.name || admin.email,
+                                remarks,
+                            }
+                            : req
+                    )
+                );
+                alert(`Leave request rejected by ${admin.name || admin.email}`);
+                setShowActionModal(false);
+                fetchRequests();
+            }
+        } catch (err) {
+            console.error("Error rejecting request:", err);
+            alert("Error rejecting leave request");
+        }
+    };
+
+    // Add this function to fetch requests
+    const fetchRequests = () => {
+        fetch("http://localhost:5000/api/leave-requests")
+            .then((res) => res.json())
+            .then((data) => setRequests(data))
+            .catch((err) => console.error("Error fetching requests:", err));
+    };
+
 const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
-  try {
-    const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actionBy: "Admin", remarks }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setRequests((prev) =>
-        prev.map((req) =>
-          req.id === requestId
-            ? { ...req, status: "Rejected", action_by: "Admin", updated_at: new Date(), remarks }
-            : req
-        )
-      );
-      setSelectedRequest((prev) =>
-        prev && prev.id === requestId
-          ? { ...prev, status: "Rejected", action_by: "Admin", updated_at: new Date(), remarks }
-          : prev
-      );
-      alert("Leave request rejected!");
-    } else {
-      alert(data.error || "Failed to reject request");
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    if (!admin) return alert("No admin logged in!");
+
+    const role = admin.role?.toLowerCase().replace(" ", "_");
+
+    // If mayor, office head, or HR admin, show CS form for rejection
+    if (role === "mayor" || role === "office_head" || role === "admin") {
+        const request = requests.find(req => req.id === requestId);
+        if (request) {
+            setSelectedRequest(request);
+            setActionType("reject");
+            setActionRemarks(remarks || "Rejected via CS Form");
+            
+            // Show loading state and generate CS form directly
+            setIsGeneratingCSForm(true);
+            setTimeout(() => {
+                generateAndShowCSForm();
+            }, 100);
+        }
+        return;
     }
-  } catch (err) {
-    console.error(err);
-    alert("Error rejecting leave request");
-  }
+
+    // Original rejection logic for other roles (if needed)
+    try {
+        const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                actionBy: admin.id || admin.email,
+                remarks,
+                role,
+            }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            setRequests(prev =>
+                prev.map(req =>
+                    req.id === requestId
+                        ? {
+                            ...req,
+                            status: "Rejected",
+                            [`${role}_status`]: "Rejected",
+                            approver_name: data.approver_name,
+                            approved_by: role,
+                            approver_date: new Date(),
+                            remarks,
+                        }
+                        : req
+                )
+            );
+            alert(`Leave request rejected by ${data.approver_name} (${role.replace("_", " ")})`);
+        } else {
+            alert(data.error || "Failed to reject request");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Error rejecting leave request");
+    }
 };
 
-  
-  
   return (
     <div style={styles.dashboardContainer}>
 
@@ -522,7 +889,6 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
                     </div>
                 </div> 
                 
-
                 <div style={styles.row2}>
                     <button style={styles.btn1}>
                         <FontAwesomeIcon icon={faUpload} style={styles.iconBtn}/>
@@ -600,258 +966,677 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
             </>
             )}
 
-            {activeTab === "requests" && (
+                {activeTab === "requests" && (
                 <div style={styles.leaveRequests}>
+                    {/* HEADER WITH SEARCH AND FILTERS */}
+                    <div style={styles.requestsHeader}>
+                    <div style={styles.headerTitle}>
+                        <h2 style={styles.requestsTitle}>Leave Requests</h2>
+                        <p style={styles.requestsSubtitle}>Review and manage employee leave applications</p>
+                    </div>
+                    <div style={styles.headerControls}>
+                        <div style={styles.searchBox}>
+                            <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+                            <input 
+                                type="text" 
+                                placeholder="Search requests..." 
+                                style={styles.searchInput}
+                                value={searchQuery}
+                                onChange={handleSearch}
+                            />
+                        </div>
+                        <select 
+                            style={styles.statusFilter}
+                            value={statusFilter}
+                            onChange={handleStatusFilter}
+                        >
+                            <option value="all">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                        {/* Add Clear Filters button */}
+                        <button 
+                            style={styles.clearFilterBtn}
+                            onClick={clearFilters}
+                            disabled={!searchQuery && statusFilter === "all"}
+                        >
+                            Clear Filters
+                        </button>
+                    </div>
+                    </div>
+
+                    {/* MAIN CONTENT */}
+                    <div style={styles.requestsContent}>
+                    {/* LEFT TABLE - IMPROVED DESIGN */}
                     <div style={styles.leftSection}>
+                        <div style={styles.tableHeader}>
+                            <h3 style={styles.tableTitle}>
+                                Pending Requests ({filteredRequests.filter(req => req.status === 'Pending').length})
+                                {filteredRequests.length !== requests.length && ` (Filtered: ${filteredRequests.length})`}
+                            </h3>
+                            <div style={styles.tableActions}>
+                                <button style={styles.refreshBtn} onClick={handleRefresh}>
+                                    <FontAwesomeIcon icon={faRefresh} />
+                                </button>
+                            </div>
+                        </div> 
+
+                        <div style={styles.tableContainer}>
                         <table style={styles.leaveRequestsTable}>
                             <thead style={styles.leaveRequeststhead}>
-                                <tr>
-                                    <th style={styles.leaveRequestsColumn}>ID</th>
-                                    <th style={styles.leaveRequestsColumn}>Name</th>
-                                    <th style={styles.leaveRequestsColumn}>Department</th>
-                                    <th style={styles.leaveRequestsColumn}>Position</th>
-                                    <th style={styles.leaveRequestsColumn}>Leave Type</th>
-                                    <th style={styles.leaveRequestsColumn}>Dates</th>
-                                    <th style={styles.leaveRequestsColumn}>Days</th>
-                                    <th style={styles.leaveRequestsColumn}>Status</th>
-                                </tr>
+                            <tr>
+                                <th style={styles.leaveRequestsColumn}>Employee</th>
+                                <th style={styles.leaveRequestsColumn}>Leave Type</th>
+                                <th style={styles.leaveRequestsColumn}>Duration</th>
+                                <th style={styles.leaveRequestsColumn}>Status</th>
+                                <th style={styles.leaveRequestsColumn}>Date Filed</th>
+                            </tr>
                             </thead>
                             <tbody>
-                                {Array.isArray(requests) && requests.length > 0 ? (
-                                    requests.map((req) => (
-                                    <tr 
-                                        key={req.id}
-                                        onClick={() => setSelectedRequest(req)} 
-                                        style={{ cursor: "pointer" }}
-                                    >
-                                        <td style={styles.leaveRequestsRows}>{req.id_number}</td>
-                                        <td style={styles.leaveRequestsRows}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                            <img
-                                            src={req.profile_picture || "/default-avatar.png"}
-                                            alt={`${req.first_name} ${req.last_name}`}
-                                            style={{
-                                                width: "55px",
-                                                height: "55px",
-                                                borderRadius: "5px",
-                                                objectFit: "cover",
-                                            }}
-                                            />
-                                            <span>
-                                            {req.first_name} {req.middle_name} {req.last_name}
-                                            </span>
-                                        </div>
-                                        </td>
-                                        <td style={styles.leaveRequestsRows}>{req.department}</td>
-                                        <td style={styles.leaveRequestsRows}>{req.position}</td>
-                                        <td style={styles.leaveRequestsRows}>{req.leave_type}</td>
-                                        <td style={styles.leaveRequestsRows}>
-                                        {`${req.inclusive_date_start} - ${req.inclusive_date_end}`}
-                                        </td>                                        
-                                        <td style={styles.leaveRequestsRows}>{req.number_of_days}</td>
-                                        <td style={styles.leaveRequestsRows}>{req.status}</td>
-                                    </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                    <td>No leave requests found</td>
-                                    </tr>
-                                )}
-                                </tbody>
-
-                            </table>
-                        </div>
-
-                        <div style={styles.rightSection}>
-                                {selectedRequest ? (
-                                    <>
-                                    <div style={styles.employeeCard}>
-                                        <img 
-                                        src={selectedRequest.profile_picture || "/default-avatar.png"}
-                                        alt="profile"
-                                        style={styles.profile_picture}
+                            {Array.isArray(filteredRequests) && filteredRequests.length > 0 ? (
+                                filteredRequests.map((req) => (
+                                <tr
+                                    key={req.id}
+                                    onClick={() => setSelectedRequest(req)}
+                                    style={{ 
+                                    ...styles.leaveRequestsRow,
+                                    backgroundColor: selectedRequest?.id === req.id ? '#f0f9ff' : 'transparent'
+                                    }}
+                                >
+                                    <td style={styles.leaveRequestsRows}>
+                                    <div style={styles.employeeCell}>
+                                        <img
+                                        src={req.profile_picture || "/default-avatar.png"}
+                                        alt={`${req.first_name} ${req.last_name}`}
+                                        style={styles.employeeAvatar}
                                         />
-                                        <div style={styles.employeeInfo}>
-                                            <p>{selectedRequest.first_name} {selectedRequest.middle_name} {selectedRequest.last_name}</p>
-                                            <p style={{color: 'rgba(151, 151, 151, 1)', fontWeight: 'regular'}}>{selectedRequest.position}</p>
+                                        <div style={styles.employeeDetails}>
+                                        <div style={styles.employeeName}>
+                                            {req.first_name} {req.middle_name} {req.last_name}
+                                        </div>
+                                        <div style={styles.employeeDept}>{req.department}</div>
                                         </div>
                                     </div>
-
-                                    <div style={styles.moreInfo}>
-                                        <div style={styles.infoRow}>
-                                        <p style={styles.infoLabel}>Employee ID:</p>
-                                        <p style={styles.infoValue}>{selectedRequest.id_number}</p>
+                                    </td>
+                                    <td style={styles.leaveRequestsRows}>
+                                    <span style={styles.leaveTypeTag}>
+                                        {req.leave_type}
+                                    </span>
+                                    </td>
+                                    <td style={styles.leaveRequestsRows}>
+                                    <div style={styles.durationCell}>
+                                        <div style={styles.durationDates}>
+                                        {req.inclusive_date_start} - {req.inclusive_date_end}
                                         </div>
-
-                                        <div style={styles.infoRow}>
-                                        <p style={styles.infoLabel}>Department:</p>
-                                        <p style={styles.infoValue}>{selectedRequest.department}</p>
-                                        </div>
-
-                                        <div style={styles.infoRow}>
-                                        <p style={styles.infoLabel}>Email:</p>
-                                        <p style={styles.infoValue}>{selectedRequest.email}</p>
+                                        <div style={styles.durationDays}>
+                                        {req.number_of_days} day{req.number_of_days > 1 ? 's' : ''}
                                         </div>
                                     </div>
-
-                                    <div style={styles.moreDetails}>
-                                        <div style={styles.columnLeave}>
-                                        <div style={styles.leaveRow1}>
-                                            <p>{selectedRequest.number_of_days}</p>
-                                            <p>Days</p>
-                                        </div>
-
-                                        <div style={styles.leaveRow}>
-                                            <p style={styles.leaveColumnName}>Duration</p>
-                                            <p style={styles.leaveRowValue}>
-                                            {`${selectedRequest.inclusive_date_start} - ${selectedRequest.inclusive_date_end}`}
-                                            </p>
-                                        </div>
-
-                                        <div style={styles.leaveRow}>
-                                            <p style={styles.leaveColumnName}>Leave Type</p>
-                                            <p style={styles.leaveRowValue}>{selectedRequest.leave_type}</p>
-                                        </div>
-
-                                        <div style={styles.leaveRow}>
-                                            <p style={styles.leaveColumnName}>Status</p>
-                                            <p style={styles.leaveRowValueStatus}>{selectedRequest.status}</p>
-                                        </div>
-                                        </div>
-
-                                        <div style={styles.reasonDetails}>
-                                        <p style={styles.reasonTxt}>Reason</p>
-                                        <p style={styles.reasonTxtMore}>{selectedRequest.reason || "No reason provided"}</p>
-                                        </div>
+                                    </td>
+                                    <td style={styles.leaveRequestsRows}>
+                                    <span style={{
+                                        ...styles.statusBadge,
+                                        ...(req.status === 'Approved' ? styles.statusApproved : 
+                                            req.status === 'Rejected' ? styles.statusRejected : 
+                                            styles.statusPending)
+                                    }}>
+                                        {req.status}
+                                    </span>
+                                    </td>
+                                    <td style={styles.leaveRequestsRows}>
+                                    {new Date(req.date_filing).toLocaleDateString()}
+                                    </td>
+                                </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                <td colSpan="5" style={styles.noRequests}>
+                                    <div style={styles.emptyState}>
+                                    <FontAwesomeIcon icon={faCalendarAlt} style={styles.emptyIcon} />
+                                    <p style={styles.emptyText}>No leave requests found</p>
                                     </div>
+                                </td>
+                                </tr>
+                            )}
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
 
-                                    <div style={styles.leaveBalanceDetails}>
-                                        <h3>{selectedRequest.leave_type}</h3>
-                                        <div style={styles.leaveBalanceInfo}>
-                                        <div style={styles.leaveBalanceRow}>
-                                            <p style={styles.balanceTxtUsed}>{selectedRequest.used ?? 0}</p>
-                                            <p style={styles.lblBalance}>Used</p>
-                                        </div>
+                    {/* RIGHT PANEL - IMPROVED DESIGN */}
+                    <div style={styles.rightSection}>
+                        {selectedRequest ? (
+                        <>
+                            {/* EMPLOYEE HEADER */}
+                            <div style={styles.employeeHeader}>
+                            <div style={styles.employeeCard}>
+                                <img
+                                src={selectedRequest.profile_picture || "/default-avatar.png"}
+                                alt="profile"
+                                style={styles.profilePicture}
+                                />
+                                <div style={styles.employeeInfo}>
+                                <h3 style={styles.employeeName}>
+                                    {selectedRequest.first_name} {selectedRequest.middle_name} {selectedRequest.last_name}
+                                </h3>
+                                <p style={styles.employeePosition}>{selectedRequest.position}</p>
+                                <div style={styles.employeeMeta}>
+                                    <span style={styles.employeeId}>ID: {selectedRequest.id_number}</span>
+                                    <span style={styles.employeeDept}>{selectedRequest.department}</span>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
 
-                                        <div style={styles.leaveBalanceRow}>
-                                            <p style={styles.balanceTxtRemain}>
-                                            {(selectedRequest.entitled ?? 0) - (selectedRequest.used ?? 0)}
-                                            </p>
-                                            <p style={styles.lblBalance}>Balance</p>
-                                        </div>
-                                        </div>
+                            {/* LEAVE DETAILS */}
+                            <div style={styles.detailsSection}>
+                            <h4 style={styles.sectionTitle}>Leave Details</h4>
+                            
+                            <div style={styles.detailsGrid}>
+                                <div style={styles.detailItem}>
+                                <label style={styles.detailLabel}>Leave Type</label>
+                                <span style={styles.detailValue}>{selectedRequest.leave_type}</span>
+                                </div>
+                                <div style={styles.detailItem}>
+                                <label style={styles.detailLabel}>Duration</label>
+                                <span style={styles.detailValue}>
+                                    {selectedRequest.inclusive_date_start} to {selectedRequest.inclusive_date_end}
+                                </span>
+                                </div>
+                                <div style={styles.detailItem}>
+                                <label style={styles.detailLabel}>Total Days</label>
+                                <span style={styles.detailValue}>
+                                    {selectedRequest.number_of_days} day{selectedRequest.number_of_days > 1 ? 's' : ''}
+                                </span>
+                                </div>
+                                <div style={styles.detailItem}>
+                                <label style={styles.detailLabel}>Date Filed</label>
+                                <span style={styles.detailValue}>
+                                    {new Date(selectedRequest.date_filing).toLocaleDateString()}
+                                </span>
+                                </div>
+                            </div>
+
+                            {/* REASON SECTION */}
+                            <div style={styles.reasonSection}>
+                                <label style={styles.detailLabel}>Reason for Leave</label>
+                                <div style={styles.reasonBox}>
+                                <p style={styles.reasonText}>
+                                    {selectedRequest.reason || "No reason provided"}
+                                </p>
+                                </div>
+                            </div>
+
+                            {/* APPROVAL PROGRESS */}
+                            <div style={styles.approvalSection}>
+                                <h4 style={styles.sectionTitle}>Approval Progress</h4>
+                                <div style={styles.approvalSteps}>
+                                <div style={styles.approvalStep}>
+                                    <div style={{
+                                    ...styles.stepIndicator,
+                                    ...(selectedRequest.office_head_status === 'Approved' ? styles.stepCompleted : 
+                                        selectedRequest.office_head_status === 'Rejected' ? styles.stepRejected : 
+                                        styles.stepPending)
+                                    }}>
+                                    {selectedRequest.office_head_status === 'Approved' ? '✓' : 
+                                    selectedRequest.office_head_status === 'Rejected' ? '✗' : '1'}
                                     </div>
-
-                                    <div style={styles.actionButtons}>
-                                        {selectedRequest.status === "Pending" ? (
-                                            <>
-                                                <button
-                                                style={styles.approveBtn}
-                                                onClick={() => {
-                                                    setActionType("approve");
-                                                    setActionRemarks(""); // optional notes
-                                                    setShowActionModal(true);
-                                                }}
-                                                >
-                                                <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
-                                                Approve
-                                                </button>
-                                                <button
-                                                style={styles.rejectBtn}
-                                                onClick={() => {
-                                                    setActionType("reject");
-                                                    setActionRemarks(""); // must enter reason
-                                                    setShowActionModal(true);
-                                                }}                                                >
-                                                <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
-                                                Reject
-                                                </button>
-                                            </>
-                                            ) : (
-                                            <div style={styles.approvalInfo}>
-                                                <div style={styles.approvalDetails}>
-                                                <p style={styles.approvalTxt}>
-                                                    {selectedRequest.status} by {selectedRequest.action_by || "Admin"} on{" "}
-                                                    {new Date(selectedRequest.updated_at).toLocaleDateString()}
-                                                </p>
-                                                {selectedRequest.remarks && (
-                                                    <p style={{ fontSize: "14px", color: "#777", marginTop: "4px" }}>
-                                                    Remarks: {selectedRequest.remarks}
-                                                    </p>
-                                                )}
-                                                </div>
-                                                <div style={styles.approvalDetails}>
-                                                <button style={styles.historyBtn}>View History</button>
-                                                </div>
-                                            </div>
-                                            )}
-
-                                        </div>
-                                    </>
-                                ) : (
-                                    <p style={{ textAlign: "center", marginTop: "50px" }}>Select a leave request to view details</p>
-                                )}
+                                    <div style={styles.stepInfo}>
+                                    <span style={styles.stepTitle}>Office Head</span>
+                                    <span style={styles.stepStatus}>
+                                        {selectedRequest.office_head_status || 'Pending'}
+                                        {selectedRequest.office_head_date && ` • ${new Date(selectedRequest.office_head_date).toLocaleDateString()}`}
+                                    </span>
+                                    </div>
                                 </div>
 
-
-                                {showActionModal && (
-                                    <div style={styles.modalOverlay}>
-                                        <div style={styles.modalContent}>
-                                        <h3>{actionType === "approve" ? "Approve Leave Request" : "Reject Leave Request"}</h3>
-
-                                        {actionType === "reject" && (
-                                            <div style={{ margin: "12px 0" }}>
-                                            <label>Reason for Rejection:</label>
-                                            <textarea
-                                                style={styles.textarea}
-                                                value={actionRemarks}
-                                                onChange={(e) => setActionRemarks(e.target.value)}
-                                                placeholder="Enter reason..."
-                                            />
-                                            </div>
-                                        )}
-
-                                        {actionType === "approve" && (
-                                            <div style={{ margin: "12px 0" }}>
-                                            <label>Optional Note:</label>
-                                            <textarea
-                                                style={styles.textarea}
-                                                value={actionRemarks}
-                                                onChange={(e) => setActionRemarks(e.target.value)}
-                                                placeholder="Optional remarks..."
-                                            />
-                                            </div>
-                                        )}
-
-                                        <div style={styles.modalActions}>
-                                            <button
-                                            style={styles.confirmBtn}
-                                            onClick={() => {
-                                                if (actionType === "approve") {
-                                                handleApprove(selectedRequest.id, actionRemarks);
-                                                } else {
-                                                handleReject(selectedRequest.id, actionRemarks);
-                                                }
-                                                setShowActionModal(false);
-                                            }}
-                                            disabled={actionType === "reject" && !actionRemarks.trim()} // require reason for reject
-                                            >
-                                            Confirm
-                                            </button>
-                                            <button
-                                            style={styles.cancelBtn}
-                                            onClick={() => setShowActionModal(false)}
-                                            >
-                                            Cancel
-                                            </button>
-                                        </div>
-                                        </div>
+                                <div style={styles.approvalStep}>
+                                    <div style={{
+                                    ...styles.stepIndicator,
+                                    ...(selectedRequest.hr_status === 'Approved' ? styles.stepCompleted : 
+                                        selectedRequest.hr_status === 'Rejected' ? styles.stepRejected : 
+                                        selectedRequest.office_head_status === 'Approved' ? styles.stepCurrent : 
+                                        styles.stepPending)
+                                    }}>
+                                    {selectedRequest.hr_status === 'Approved' ? '✓' : 
+                                    selectedRequest.hr_status === 'Rejected' ? '✗' : '2'}
                                     </div>
-                                    )}
+                                    <div style={styles.stepInfo}>
+                                    <span style={styles.stepTitle}>HR Department</span>
+                                    <span style={styles.stepStatus}>
+                                        {selectedRequest.hr_status || 'Pending'}
+                                        {selectedRequest.hr_date && ` • ${new Date(selectedRequest.hr_date).toLocaleDateString()}`}
+                                    </span>
+                                    </div>
+                                </div>
 
+                                <div style={styles.approvalStep}>
+                                    <div style={{
+                                    ...styles.stepIndicator,
+                                    ...(selectedRequest.mayor_status === 'Approved' ? styles.stepCompleted : 
+                                        selectedRequest.mayor_status === 'Rejected' ? styles.stepRejected : 
+                                        selectedRequest.hr_status === 'Approved' ? styles.stepCurrent : 
+                                        styles.stepPending)
+                                    }}>
+                                    {selectedRequest.mayor_status === 'Approved' ? '✓' : 
+                                    selectedRequest.mayor_status === 'Rejected' ? '✗' : '3'}
+                                    </div>
+                                    <div style={styles.stepInfo}>
+                                    <span style={styles.stepTitle}>Mayor's Office</span>
+                                    <span style={styles.stepStatus}>
+                                        {selectedRequest.mayor_status || 'Pending'}
+                                        {selectedRequest.mayor_date && ` • ${new Date(selectedRequest.mayor_date).toLocaleDateString()}`}
+                                    </span>
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+
+                            {/* ACTION BUTTONS - MODIFIED FOR MAYOR, OFFICE HEAD, AND HR ADMIN */}
+                            <div style={styles.actionSection}>
+                                {(userRole === "office head" && 
+                                (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
+                                (userRole === "admin" && 
+                                selectedRequest.office_head_status === "Approved" && 
+                                (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
+                                (userRole === "mayor" && 
+                                selectedRequest.hr_status === "Approved" && 
+                                (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending")) ? (
+                                <div style={styles.actionButtons}>
+                                    <button
+                                    style={styles.approveBtn}
+                                    onClick={() => {
+                                        // Set action type and remarks first
+                                        setActionType("approve");
+                                        setActionRemarks("Approved via dashboard");
+                                        // For mayor, office head, and HR admin, show CS form
+                                        if (userRole === "mayor" || userRole === "office head" || userRole === "admin") {
+                                            handleApprove(selectedRequest.id, "Approved via dashboard");
+                                        } else {
+                                            setShowActionModal(true);
+                                        }
+                                    }}
+                                    >
+                                    <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
+                                    {(userRole === "mayor" || userRole === "office head" || userRole === "admin") 
+                                        ? "Approve with CS Form" 
+                                        : "Approve Request"}
+                                    </button>
+                                    <button
+                                        style={styles.rejectBtn}
+                                        onClick={() => {
+                                            // Set action type and generate CS form directly
+                                            setActionType("reject");
+                                            setActionRemarks("Pending rejection reason..."); // Default text
+                                            handleReject(selectedRequest.id, "Pending rejection reason...");
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
+                                        {(userRole === "mayor" || userRole === "office head" || userRole === "admin") 
+                                            ? "Reject with CS Form" 
+                                            : "Reject Request"}
+                                    </button>
+                                </div>
+                                ) : (
+                                <div style={styles.finalStatus}>
+                                    <div style={{
+                                    ...styles.finalStatusBadge,
+                                    ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
+                                        selectedRequest.status === 'Rejected' ? styles.statusRejected : 
+                                        styles.statusPending)
+                                    }}>
+                                    {selectedRequest.status}
+                                    </div>
+                                    <p style={styles.finalStatusText}>
+                                    Processed by {selectedRequest.approver_name} on {" "}
+                                    {new Date(selectedRequest.approver_date).toLocaleDateString()}
+                                    </p>
+                                    {selectedRequest.remarks && (
+                                    <p style={styles.remarksText}>
+                                        <strong>Remarks:</strong> {selectedRequest.remarks}
+                                    </p>
+                                    )}
+                                </div>
+                                )}
+                            </div>
+
+                            </div>
+                        </>
+                        ) : (
+                        <div style={styles.noSelection}>
+                            <FontAwesomeIcon icon={faUsers} style={styles.noSelectionIcon} />
+                            <h3 style={styles.noSelectionTitle}>Select a Request</h3>
+                            <p style={styles.noSelectionText}>
+                            Click on a leave request from the list to view details and take action
+                            </p>
+                        </div>
+                        )}
+                    </div>
+                    </div>
+
+                    {/* CS FORM MODAL */}
+{showActualCSForm && csFormData && selectedRequest && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.actualFormModal}>
+      <h3 style={styles.modalTitle}>CS Form No. 6 - Application for Leave</h3>
+      
+      {/* Show role-specific information */}
+      <div style={styles.roleInfo}>
+        <p style={styles.roleText}>
+          Acting as: <strong>{userRole}</strong>
+          {userRole === "admin" && " (HR Department)"}
+          {userRole === "office head" && " (Department Head)"}
+          {userRole === "mayor" && " (Mayor's Office)"}
+        </p>
+        <p style={styles.roleText}>
+          Action: <strong>{actionType === "approve" ? "APPROVAL" : "REJECTION"}</strong>
+        </p>
+      </div>
+      
+      {/* REAL-TIME FORM CONTROLS */}
+      <div style={styles.realTimeControls}>
+        <h4>Form Details</h4>
+        
+        {/* Show different sections based on action type */}
+        {actionType === "approve" && (
+          <>
+            {/* APPROVAL SECTION */}
+            <div style={styles.approvalSection}>
+              <h5 style={styles.sectionSubtitle}>Approval Details</h5>
+              
+              {/* Remarks Section for Approval */}
+              <div style={styles.remarksSection}>
+                <label style={styles.remarksLabel}>Approval Remarks:</label>
+             <textarea
+  style={styles.remarksTextarea}
+  value={actionRemarks}
+  onChange={(e) => {
+    const newValue = e.target.value;
+    setActionRemarks(newValue);
+    
+    // Update realTimeFormData immediately for UI
+    setRealTimeFormData(prev => ({
+      ...prev,
+      action_remarks: newValue
+    }));
+    
+    // Clear any existing timeout
+    if (window.remarksTimeout) {
+      clearTimeout(window.remarksTimeout);
+    }
+    
+    // Show typing indicator
+    setIsTyping(true);
+    
+    // Set new timeout - generate form only after user stops typing for 1.5 seconds
+    window.remarksTimeout = setTimeout(() => {
+      setIsTyping(false);
+      generateAndShowCSForm();
+    }, 1500);
+  }}
+  placeholder="Enter approval remarks..."
+  rows={3}
+/>
+
+     {isTyping && (
+      <p style={{color: '#666', fontSize: '12px', margin: '5px 0'}}>
+        Form will update when you stop typing...
+      </p>
+    )}
+              </div>
+              
+              {/* Days with Pay for approval - Only show for Mayor */}
+              {userRole === "mayor" && (
+                <div style={styles.daysWithPaySection}>
+                  <h5>Days with Pay</h5>
+                  <div style={styles.daysInputContainer}>
+                    <input
+                      type="number"
+                      style={styles.daysInput}
+                      value={daysWithPay}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 0;
+                        setDaysWithPay(value);
+                        setRealTimeFormData(prev => ({
+                          ...prev,
+                          days_with_pay: value
+                        }));
+                        // Update form immediately when days change
+                        setTimeout(() => generateAndShowCSForm(), 100);
+                      }}
+                      min="0"
+                      max={selectedRequest.number_of_days}
+                    />
+                    <span style={styles.daysNote}>out of {selectedRequest.number_of_days} total days</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Special note for HR admin */}
+              {userRole === "admin" && (
+                <div style={styles.hrNote}>
+                  <p style={styles.noteText}>
+                    <strong>Note:</strong> As HR Admin, your approval will populate the leave credit values in Section 7.A
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+        
+        {actionType === "reject" && (
+          <>
+            {/* REJECTION SECTION */}
+            <div style={styles.rejectionSection}>
+              <h5 style={styles.sectionSubtitle}>Rejection Details</h5>
+              
+              {/* Reason for Rejection */}
+              <div style={styles.remarksSection}>
+                <label style={styles.remarksLabel}>Reason for Disapproval:</label>
+                <textarea
+      style={styles.remarksTextarea}
+      value={actionRemarks}
+      onChange={(e) => {
+        const newValue = e.target.value;
+        setActionRemarks(newValue);
+        
+        // Update realTimeFormData immediately for UI
+        setRealTimeFormData(prev => ({
+          ...prev,
+          action_remarks: newValue
+        }));
+        
+        // Clear any existing timeout
+        if (window.remarksTimeout) {
+          clearTimeout(window.remarksTimeout);
+        }
+        
+        // Set new timeout - generate form only after user stops typing for 1.5 seconds
+        window.remarksTimeout = setTimeout(() => {
+          generateAndShowCSForm();
+        }, 2000);
+        
+        // Show typing indicator
+        setIsTyping(true);
+        setTimeout(() => setIsTyping(false), 1500);
+      }}
+      placeholder="Enter reason for disapproval..."
+      rows={3}
+    />
+    {isTyping && (
+      <p style={{color: '#666', fontSize: '12px', margin: '5px 0'}}>
+        Form will update when you stop typing...
+      </p>
+    )}
+                {!actionRemarks.trim() && (
+                  <p style={{color: 'red', fontSize: '12px', margin: '5px 0'}}>
+                    Please provide a reason for rejection
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+        
+        {/* Manual Refresh Button */}
+        <button
+          style={styles.refreshFormBtn}
+          onClick={() => generateAndShowCSForm()}
+        >
+          <FontAwesomeIcon icon={faRefresh} />
+          Refresh Form Preview
+        </button>
+      </div>
+
+      
+
+      {/* PDF Preview */}
+<div style={styles.formPreviewContainer}>
+  {isTyping ? (
+    <div style={styles.typingIndicator}>
+      <p>Updating form... (waiting for you to finish typing)</p>
+    </div>
+  ) : isGeneratingForm ? (
+    <div style={styles.generatingPreview}>
+      <div style={styles.loadingSpinner}></div>
+      <p>Generating form preview...</p>
+    </div>
+  ) : csFormData ? (
+    <iframe 
+      src={csFormData.url} 
+      style={styles.formIframe}
+      title="CS Form No. 6"
+      key={csFormData.timestamp}
+    />
+  ) : (
+    <div style={styles.loadingPreview}>
+      <p>Generating form preview...</p>
+    </div>
+  )}
+</div>
+
+      <div style={styles.formActions}>
+        <button
+          style={styles.printFormBtn}
+          onClick={() => {
+            const newWindow = window.open(csFormData.url);
+            if (newWindow) {
+              newWindow.onload = () => {
+                newWindow.print();
+              };
+            }
+          }}
+        >
+          <FontAwesomeIcon icon={faPrint} />
+          Print Form
+        </button>
+        
+        <button
+          style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
+          onClick={() => {
+            if (actionType === "approve") {
+              handleConfirmApproval();
+            } else {
+              // For rejection, make sure we have the remarks before proceeding
+              if (actionRemarks.trim()) {
+                handleConfirmApproval();
+              } else {
+                alert("Please provide a reason for rejection");
+              }
+            }
+          }}
+          disabled={actionType === "reject" && !actionRemarks.trim()}
+        >
+          {actionType === "approve" ? "Approve Request" : "Reject Request"}
+        </button>
+        
+        <button
+          style={styles.cancelBtn}
+          onClick={() => {
+            setShowActualCSForm(false);
+            setCsFormData(null);
+            setActionType(null);
+            setActionRemarks("");
+            setRealTimeFormData({
+              action_type: "",
+              action_remarks: "",
+              days_with_pay: 0
+            });
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* LOADING MODAL */}
+{isGeneratingCSForm && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.loadingModal}>
+      <div style={styles.loadingSpinner}></div>
+      <h3 style={styles.loadingTitle}>Generating CS Form</h3>
+      <p style={styles.loadingText}>Please wait while we prepare your form...</p>
+    </div>
+  </div>
+)}
+
+<style>{spinAnimation}</style>
+
+
+            {showSignatureChoice && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.signatureChoiceModal}>
+                        <h3 style={styles.modalTitle}>Select Signature Method</h3>
+                        
+                        <div style={styles.signatureOptions}>
+                            <p style={styles.signatureDescription}>
+                                How would you like to sign the CS Form No. 6?
+                            </p>
+                            
+                            <div style={styles.signatureButtons}>
+                                <button
+                                    style={styles.eSignBtn}
+                                    onClick={() => handleSignatureMethod("e-sign")}
+                                    disabled={isSigning}
+                                >
+                                    <FontAwesomeIcon icon={faSignature} />
+                                    {isSigning ? " Signing..." : " E-Signature"}
+                                    <span style={styles.methodDescription}>Sign digitally using your electronic signature</span>
+                                </button>
+                                
+                                <button
+                                    style={styles.traditionalSignBtn}
+                                    onClick={() => handleSignatureMethod("traditional")}
+                                >
+                                    <FontAwesomeIcon icon={faPrint} />
+                                    Print & Sign
+                                    <span style={styles.methodDescription}>Print the form and sign manually</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style={styles.modalActions}>
+                            <button
+                                style={styles.cancelBtn}
+                                onClick={() => {
+                                    setShowSignatureChoice(false);
+                                }}
+                            >
+                                Back
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
+
+                    
+
+                </div>
+                )}
             
 
             {activeTab === 'leave_balances' && (
@@ -1160,6 +1945,13 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
       </div>
   );
 }
+
+const spinAnimation = `
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+`;
 
 const tabButtonStyle = (active) => ({
   backgroundColor: active ? '#5ab049ff' : '#ffffffff',
@@ -1741,11 +2533,6 @@ const styles = {
         padding: '0 5px',
         fontSize: '12px'
     },
-    leaveRequests: {
-        display: 'flex',
-        flexDirection: 'row',
-    },
-
     leftSection: {
         flex: 4,
         marginRight: 24,
@@ -1959,44 +2746,6 @@ const styles = {
         backgroundColor: '#f3f4f6',
     },
 
-    actionButtons: {
-        display: 'flex',
-        gap: 12,
-        marginTop: 16,
-    },
-
-    approveBtn: {
-        backgroundColor: '#00d54eff',
-        color: '#ffffff',
-        border: 'none',
-        borderRadius: 8,
-        padding: '8px 12px',
-        fontSize: '14px',
-        fontWeight: 500,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        boxShadow: '1px 1px 1px rgba(0, 0, 0, 0.3)',
-    },
-
-    rejectBtn: {
-        backgroundColor: '#ff3d3dff',
-        color: '#ffffff',
-        border: 'none',
-        borderRadius: 8,
-        padding: '8px 12px',
-        fontSize: '14px',
-        fontWeight: 500,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        boxShadow: '1px 1px 1px rgba(0, 0, 0, 0.3)',
-    },
-
     iconApprove: {
         fontSize: '16px',
         marginRight: '4px',
@@ -2125,6 +2874,830 @@ closeModalButton: {
   cursor: "pointer",
   marginTop: "10px",
 },
+
+leaveRequests: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  requestsHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: '20px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+  },
+  headerTitle: {
+    flex: 1,
+  },
+  requestsTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#1F2937',
+    margin: '0 0 4px 0',
+  },
+  requestsSubtitle: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: 0,
+  },
+  headerControls: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'center',
+  },
+  searchBox: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '12px',
+    color: '#6B7280',
+    fontSize: '14px',
+  },
+  searchInput: {
+    padding: '10px 12px 10px 36px',
+    border: '1px solid #E5E7EB',
+    borderRadius: '8px',
+    fontSize: '14px',
+    width: '250px',
+    backgroundColor: '#F9FAFB',
+  },
+  statusFilter: {
+    padding: '10px 12px',
+    border: '1px solid #E5E7EB',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: '#ffffff',
+  },
+  requestsContent: {
+    display: 'flex',
+    gap: '24px',
+    height: 'calc(100vh - 200px)',
+  },
+  leftSection: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  tableHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '20px 20px 0 20px',
+    borderBottom: '1px solid #F3F4F6',
+  },
+  tableTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#1F2937',
+    margin: 0,
+  },
+  tableActions: {
+    display: 'flex',
+    gap: '8px',
+  },
+  refreshBtn: {
+    padding: '8px',
+    border: '1px solid #E5E7EB',
+    borderRadius: '6px',
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    color: '#6B7280',
+  },
+  tableContainer: {
+    flex: 1,
+    overflow: 'auto',
+  },
+  leaveRequestsTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  leaveRequeststhead: {
+    backgroundColor: '#F9FAFB',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10,
+  },
+  leaveRequestsColumn: {
+    padding: '16px 20px',
+    textAlign: 'left',
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid #E5E7EB',
+  },
+  leaveRequestsRow: {
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
+    borderBottom: '1px solid #F3F4F6',
+  },
+  leaveRequestsRows: {
+    padding: '16px 20px',
+    fontSize: '14px',
+    color: '#1F2937',
+    verticalAlign: 'middle',
+  },
+  employeeCell: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  employeeAvatar: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    objectFit: 'cover',
+  },
+  employeeDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  employeeName: {
+    fontWeight: '600',
+    fontSize: '14px',
+    color: '#1F2937',
+  },
+  employeeDept: {
+    fontSize: '12px',
+    color: '#6B7280',
+  },
+  leaveTypeTag: {
+    padding: '4px 8px',
+    backgroundColor: '#EFF6FF',
+    color: '#1D4ED8',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '500',
+  },
+  durationCell: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  durationDates: {
+    fontSize: '14px',
+    color: '#1F2937',
+  },
+  durationDays: {
+    fontSize: '12px',
+    color: '#6B7280',
+  },
+  statusBadge: {
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  statusApproved: {
+    backgroundColor: '#D1FAE5',
+    color: '#065F46',
+  },
+  statusRejected: {
+    backgroundColor: '#FEE2E2',
+    color: '#991B1B',
+  },
+  statusPending: {
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
+  },
+  noRequests: {
+    textAlign: 'center',
+    padding: '60px 20px',
+  },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    color: '#6B7280',
+  },
+  emptyIcon: {
+    fontSize: '48px',
+    marginBottom: '8px',
+  },
+  emptyText: {
+    fontSize: '14px',
+    margin: 0,
+  },
+  rightSection: {
+    width: '400px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    overflow: 'auto',
+  },
+  employeeHeader: {
+    padding: '24px',
+    borderBottom: '1px solid #F3F4F6',
+  },
+  employeeCard: {
+    display: 'flex',
+    gap: '16px',
+    alignItems: 'flex-start',
+  },
+  profilePicture: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '12px',
+    objectFit: 'cover',
+  },
+  employeeInfo: {
+    flex: 1,
+  },
+  employeeName: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#1F2937',
+    margin: '0 0 4px 0',
+  },
+  employeePosition: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: '0 0 8px 0',
+  },
+  employeeMeta: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  employeeId: {
+    fontSize: '12px',
+    color: '#6B7280',
+  },
+  detailsSection: {
+    padding: '24px',
+  },
+  sectionTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#1F2937',
+    margin: '0 0 16px 0',
+  },
+  detailsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    marginBottom: '20px',
+  },
+  detailItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  detailLabel: {
+    fontSize: '12px',
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: '14px',
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  reasonSection: {
+    marginBottom: '24px',
+  },
+  reasonBox: {
+    padding: '12px',
+    backgroundColor: '#F9FAFB',
+    borderRadius: '8px',
+    border: '1px solid #E5E7EB',
+  },
+  reasonText: {
+    fontSize: '14px',
+    color: '#4B5563',
+    lineHeight: '1.5',
+    margin: 0,
+  },
+  approvalSection: {
+    marginBottom: '24px',
+  },
+  approvalSteps: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  approvalStep: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  stepIndicator: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: '600',
+  },
+  stepCompleted: {
+    backgroundColor: '#10B981',
+    color: '#ffffff',
+  },
+  stepRejected: {
+    backgroundColor: '#EF4444',
+    color: '#ffffff',
+  },
+  stepCurrent: {
+    backgroundColor: '#3B82F6',
+    color: '#ffffff',
+  },
+  stepPending: {
+    backgroundColor: '#F3F4F6',
+    color: '#6B7280',
+  },
+  stepInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  stepTitle: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  stepStatus: {
+    fontSize: '12px',
+    color: '#6B7280',
+  },
+  actionSection: {
+    padding: '20px',
+    borderTop: '1px solid #F3F4F6',
+  },
+  actionButtons: {
+    display: 'flex',
+    gap: '12px',
+  },
+  approveBtn: {
+    flex: 1,
+    padding: '12px 16px',
+    backgroundColor: '#10B981',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'background-color 0.2s ease',
+  },
+  rejectBtn: {
+    flex: 1,
+    padding: '12px 16px',
+    backgroundColor: '#EF4444',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'background-color 0.2s ease',
+  },
+  finalStatus: {
+    textAlign: 'center',
+  },
+  finalStatusBadge: {
+    display: 'inline-block',
+    padding: '8px 16px',
+    borderRadius: '20px',
+    fontSize: '14px',
+    fontWeight: '600',
+    marginBottom: '8px',
+  },
+  finalStatusText: {
+    fontSize: '12px',
+    color: '#6B7280',
+    margin: '0 0 8px 0',
+  },
+  remarksText: {
+    fontSize: '12px',
+    color: '#4B5563',
+    margin: 0,
+    fontStyle: 'italic',
+  },
+  noSelection: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '400px',
+    textAlign: 'center',
+    color: '#6B7280',
+  },
+  noSelectionIcon: {
+    fontSize: '48px',
+    marginBottom: '16px',
+  },
+  noSelectionTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    margin: '0 0 8px 0',
+  },
+  noSelectionText: {
+    fontSize: '14px',
+    margin: 0,
+    lineHeight: '1.5',
+  },
+  modalTitle: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#1F2937',
+    margin: '0 0 16px 0',
+  },
+  modalBody: {
+    marginBottom: '24px',
+  },
+  modalText: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: '0 0 16px 0',
+    lineHeight: '1.5',
+  },
+  confirmApproveBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#10B981',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  confirmRejectBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#EF4444',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  clearFilterBtn: {
+    padding: '10px 12px',
+    border: '1px solid #E5E7EB',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: '#6B7280',
+    color: '#ffffff',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+},
+
+// NEW STYLES FOR CS FORM
+csFormModal: {
+    backgroundColor: '#fff',
+    padding: '30px',
+    borderRadius: '12px',
+    width: '600px',
+    maxHeight: '80vh',
+    overflowY: 'auto',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+csFormPreview: {
+    border: '2px solid #333',
+    padding: '20px',
+    marginBottom: '20px',
+    backgroundColor: '#f9f9f9',
+    borderRadius: '8px',
+},
+formSection: {
+    marginBottom: '20px',
+    paddingBottom: '15px',
+    borderBottom: '1px solid #ddd',
+},
+formRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginBottom: '8px',
+    padding: '5px 0',
+},
+formLabel: {
+    fontWeight: 'bold',
+    color: '#333',
+    minWidth: '150px',
+},
+formValue: {
+    color: '#555',
+    flex: 1,
+    textAlign: 'right',
+},
+signatureOptions: {
+    marginBottom: '20px',
+    textAlign: 'center',
+},
+signatureButtons: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center',
+    marginTop: '15px',
+},
+eSignBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+traditionalSignBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+printBtn: {
+    padding: '10px 16px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+},
+
+// Add to your styles object
+actionTypeSection: {
+    marginBottom: '20px',
+    textAlign: 'center',
+},
+actionTypeButtons: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center',
+    marginTop: '15px',
+},
+approveActionBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+},
+rejectActionBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+},
+rejectionOptions: {
+    marginBottom: '20px',
+},
+
+// Add these new styles
+actualFormModal: {
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '12px',
+    width: '90%',
+    height: '90%',
+    maxWidth: '1200px',
+    maxHeight: '90vh',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+    display: 'flex',
+    flexDirection: 'column',
+},
+formPreviewContainer: {
+    flex: 1,
+    border: '2px solid #333',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    marginBottom: '20px',
+},
+formIframe: {
+    width: '100%',
+    height: '100%',
+    border: 'none',
+},
+formActions: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center',
+    alignItems: 'center',
+},
+printFormBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+confirmApproveBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+
+daysWithPaySection: {
+        marginBottom: '20px',
+        padding: '15px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px',
+        border: '1px solid #dee2e6',
+    },
+    daysInputContainer: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        marginTop: '10px',
+    },
+    daysInput: {
+        width: '80px',
+        padding: '8px',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        fontSize: '14px',
+        textAlign: 'center',
+    },
+    daysNote: {
+        fontSize: '12px',
+        color: '#666',
+        fontStyle: 'italic',
+    },
+    signatureChoiceModal: {
+        backgroundColor: '#fff',
+        padding: '30px',
+        borderRadius: '12px',
+        width: '500px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+    },
+    signatureDescription: {
+        textAlign: 'center',
+        marginBottom: '20px',
+        color: '#666',
+        fontSize: '14px',
+    },
+    signatureButtons: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '15px',
+        marginBottom: '20px',
+    },
+    eSignBtn: {
+        padding: '20px',
+        backgroundColor: '#28a745',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        fontSize: '16px',
+        fontWeight: '600',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
+        transition: 'all 0.2s ease',
+    },
+    traditionalSignBtn: {
+        padding: '20px',
+        backgroundColor: '#007bff',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        fontSize: '16px',
+        fontWeight: '600',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
+        transition: 'all 0.2s ease',
+    },
+    methodDescription: {
+        fontSize: '12px',
+        fontWeight: 'normal',
+        opacity: '0.9',
+    },
+
+    roleInfo: {
+        padding: '10px',
+        backgroundColor: '#e8f4fd',
+        border: '1px solid #b8daff',
+        borderRadius: '4px',
+        marginBottom: '15px'
+    },
+    roleText: {
+        margin: '0',
+        fontSize: '14px',
+        color: '#004085'
+    },
+    hrNote: {
+        padding: '10px',
+        backgroundColor: '#fff3cd',
+        border: '1px solid #ffeaa7',
+        borderRadius: '4px',
+        marginTop: '10px'
+    },
+    noteText: {
+        margin: '0',
+        fontSize: '13px',
+        color: '#856404'
+    },
+    loadingModal: {
+  backgroundColor: '#fff',
+  padding: '40px',
+  borderRadius: '12px',
+  width: '400px',
+  textAlign: 'center',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+loadingSpinner: {
+  border: '4px solid #f3f3f3',
+  borderTop: '4px solid #5ab049ff',
+  borderRadius: '50%',
+  width: '50px',
+  height: '50px',
+  animation: 'spin 1s linear infinite',
+  margin: '0 auto 20px',
+},
+loadingTitle: {
+  fontSize: '20px',
+  fontWeight: '600',
+  color: '#1F2937',
+  margin: '0 0 10px 0',
+},
+loadingText: {
+  fontSize: '14px',
+  color: '#6B7280',
+  margin: 0,
+},
+
+typingIndicator: {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  color: '#666',
+  fontStyle: 'italic',
+},
+generatingPreview: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  color: '#666',
+},
+
+
 
 
 };

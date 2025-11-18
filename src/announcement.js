@@ -13,6 +13,9 @@ import {
   faCog,
   faSignOutAlt,
   faBell,
+  faImage,
+  faTimes,
+  faSpinner,
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -29,81 +32,103 @@ function Announcement() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
-
-  const [files, setFiles] = useState([]);  
   const [images, setImages] = useState([]);
   const [previewImage, setPreviewImage] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const toggleExpand = () => setExpanded(!expanded);
   const [menuOpen, setMenuOpen] = useState(null);
 
-
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
-   const [showLogoutModal, setShowLogoutModal] = useState(false);
-      const [role, setRole] = useState(localStorage.getItem("role") || "admin");
-        
-      const menuItems = [
-        { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
-        { name: "Employees", icon: faUsers, to: "/employee" },
-        { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
-        { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-        { name: "Message", icon: faEnvelope, to: "/messages" },
-        { name: "Announcement", icon: faBullhorn, to: "/announcement" },
-        { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
-        { name: "User Management", icon: faUserCog, to: "/userManagement" },
-        { name: "Settings", icon: faCog, to: "#" },
-      ];
-        
-          const allowedMenus = menuItems.filter((item) => {
-            if (role === "admin") return true;
-            if (role === "mayor" || role === "office_head") {
-              return [
-                "Dashboard",
-                "Employees",
-                "Attendance",
-                "Leave Management",
-                "Message",
-                "Announcement",
-              ].includes(item.name);
-            }
-            return false;
-          });
-    
-      const handleLogout = async () => {
-        const user = JSON.parse(localStorage.getItem("admin")); // get current session
-    
-        if (user) {
-          await fetch("http://localhost:5000/api/auth/logout", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user.id, role: user.role }),
-          });
-        }
-    
-        localStorage.removeItem("admin"); // clear session
-        navigate("/"); // redirect to login
-      };
+  // Loading states
+  const [loading, setLoading] = useState({
+    post: false,
+    update: false,
+    delete: false,
+    fetch: false
+  });
 
-  
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+    
+  const menuItems = [
+    { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+    { name: "Employees", icon: faUsers, to: "/employee" },
+    { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+    { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+    { name: "Message", icon: faEnvelope, to: "/messages" },
+    { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+    { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+    { name: "User Management", icon: faUserCog, to: "/userManagement" },
+    { name: "Settings", icon: faCog, to: "#" },
+  ];
+    
+  const allowedMenus = menuItems.filter((item) => {
+    if (role === "admin") return true;
+    if (role === "mayor" || role === "office_head") {
+      return [
+        "Dashboard",
+        "Employees",
+        "Attendance",
+        "Leave Management",
+        "Message",
+        "Announcement",
+      ].includes(item.name);
+    }
+    return false;
+  });
+
+  const handleLogout = async () => {
+    const user = JSON.parse(localStorage.getItem("admin"));
+
+    if (user) {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, role: user.role }),
+      });
+    }
+
+    localStorage.removeItem("admin");
+    navigate("/");
+  };
+
+  // Fetch announcements with loading state
   useEffect(() => {
-  fetch("http://localhost:5000/api/announcements")
-    .then((res) => res.json())
-    .then((data) => {
-      const cleanData = (Array.isArray(data) ? data : data.data || []).map((a) => ({
-        ...a,
-        images: typeof a.images === "string" ? JSON.parse(a.images) : a.images || [],
-        files: typeof a.files === "string" ? JSON.parse(a.files) : a.files || [],
-      }));
-      setAnnouncements(cleanData);
-    })
-    .catch((err) => console.error("Error fetching announcements:", err));
-}, []);
+    const fetchAnnouncements = async () => {
+      setLoading(prev => ({ ...prev, fetch: true }));
+      try {
+        const res = await fetch("http://localhost:5000/api/announcements");
+        const data = await res.json();
+        
+        // Process data - only handle images now
+        const cleanData = (Array.isArray(data) ? data : data.data || []).map((a) => {
+          // Process images
+          let processedImages = [];
+          if (Array.isArray(a.images)) {
+            processedImages = a.images;
+          } else if (a.images) {
+            processedImages = [a.images];
+          }
 
+          return {
+            ...a,
+            images: processedImages,
+          };
+        });
+        setAnnouncements(cleanData);
+      } catch (err) {
+        console.error("Error fetching announcements:", err);
+      } finally {
+        setLoading(prev => ({ ...prev, fetch: false }));
+      }
+    };
+
+    fetchAnnouncements();
+  }, []);
 
   useEffect(() => {
     if (previewImage) {
@@ -122,12 +147,7 @@ function Announcement() {
     setNewAnnouncement((prev) => ({ ...prev, [name]: value }));
   };
 
- const handleFileClick = () => fileInputRef.current.click();
   const handleImageClick = () => imageInputRef.current.click();
-
-  const handleFileChange = (e) => {
-    setFiles((prev) => [...prev, ...Array.from(e.target.files)]);
-  };
 
   const handleImageChange = (e) => {
     setImages((prev) => [...prev, ...Array.from(e.target.files)]);
@@ -137,25 +157,21 @@ function Announcement() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const removeFile = (index) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-
   const addAnnouncement = async () => {
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    
     const formData = new FormData();
     formData.append("title", newAnnouncement.title);
     formData.append("details", newAnnouncement.details);
     formData.append("priority", newAnnouncement.priority);
-    formData.append("created_by", 1);
+    formData.append("created_by", admin.id);
 
-    files.forEach((file) => {
-      formData.append("files", file);
-    });
-
+    // Only append images
     images.forEach((img) => {
       formData.append("images", img);
     });
+
+    setLoading(prev => ({ ...prev, post: true }));
 
     try {
       const res = await fetch("http://localhost:5000/api/announcements", {
@@ -168,11 +184,12 @@ function Announcement() {
       const savedAnnouncement = await res.json();
       setAnnouncements([savedAnnouncement, ...announcements]);
       setNewAnnouncement({ title: "", details: "", priority: "Normal" });
-      setFiles([]);
       setImages([]);
       setShowModal(false);
     } catch (error) {
       console.error("Error posting announcement:", error);
+    } finally {
+      setLoading(prev => ({ ...prev, post: false }));
     }
   };
 
@@ -183,7 +200,6 @@ function Announcement() {
       details: announcementToEdit.details,
       priority: announcementToEdit.priority,
     });
-    setFiles([]);   
     setImages([]);
     setEditingAnnouncement(announcementToEdit);
     setIsEditMode(true); 
@@ -197,13 +213,15 @@ function Announcement() {
   };
 
   const saveEditedAnnouncement = async () => {
+    setLoading(prev => ({ ...prev, update: true }));
+
     try {
       const formData = new FormData();
       formData.append("title", newAnnouncement.title);
       formData.append("details", newAnnouncement.details);
       formData.append("priority", newAnnouncement.priority);
       
-      files.forEach((file) => formData.append("files", file));
+      // Only append images
       images.forEach((img) => formData.append("images", img));
 
       const res = await fetch(`http://localhost:5000/api/announcements/${editingAnnouncement.id}`, {
@@ -219,15 +237,17 @@ function Announcement() {
       setIsEditMode(false);
       setEditingAnnouncement(null);
       setNewAnnouncement({ title: "", details: "", priority: "" });
-      setFiles([]);
       setImages([]);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(prev => ({ ...prev, update: false }));
     }
   };
 
-
   const confirmDeleteAnnouncement = async () => {
+    setLoading(prev => ({ ...prev, delete: true }));
+
     try {
       const res = await fetch(`http://localhost:5000/api/announcements/${editingAnnouncement.id}`, {
         method: "DELETE",
@@ -238,11 +258,27 @@ function Announcement() {
       setEditingAnnouncement(null);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(prev => ({ ...prev, delete: false }));
     }
   };
 
   return (
     <div style={styles.dashboardContainer}>
+      {/* Global Loading Overlay */}
+      {(loading.post || loading.update || loading.delete) && (
+        <div style={styles.globalLoadingOverlay}>
+          <div style={styles.globalLoadingContent}>
+            <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
+            <p style={styles.loadingText}>
+              {loading.post && "Posting announcement..."}
+              {loading.update && "Updating announcement..."}
+              {loading.delete && "Deleting announcement..."}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div style={styles.header}>
         <input type="text" placeholder="Search..." style={styles.search} />
         <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
@@ -250,70 +286,68 @@ function Announcement() {
 
       <div style={styles.sidebar}>
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-            <ul style={styles.sidebarList}>
-  {allowedMenus.map((item) => {
-    const isActive = location.pathname === item.to; // Check if current route matches
+        <ul style={styles.sidebarList}>
+          {allowedMenus.map((item) => {
+            const isActive = location.pathname === item.to;
 
-    return (
-      <li
-        key={item.name}
-        style={{
-          ...(isActive ? styles.btnActive : {}), // Apply active tab background
-        }}
-      >
-        <Link
-          style={{
-            ...styles.sb,
-            ...(isActive ? styles.btnActive : {}),
-          }}
-          to={item.to}
-        >
-          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-        </Link>
-      </li>
-    );
-  })}
+            return (
+              <li
+                key={item.name}
+                style={{
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+              >
+                <Link
+                  style={{
+                    ...styles.sb,
+                    ...(isActive ? styles.btnActive : {}),
+                  }}
+                  to={item.to}
+                >
+                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+                </Link>
+              </li>
+            );
+          })}
 
-  <li>
-    <Link
-      style={styles.sb}
-      to="#"
-      onClick={(e) => {
-        e.preventDefault();
-        setShowLogoutModal(true);
-      }}
-    >
-      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-    </Link>
-  </li>
-</ul>
+          <li>
+            <Link
+              style={styles.sb}
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowLogoutModal(true);
+              }}
+            >
+              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+            </Link>
+          </li>
+        </ul>
       </div>
 
       <div style={styles.content}>
-
-               {showLogoutModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <h3>Confirm Logout</h3>
-            <p>Are you sure you want to log out?</p>
-            <div style={styles.modalActions}>
-              <button
-                style={styles.cancelBtn}
-                onClick={() => setShowLogoutModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                style={styles.confirmBtn}
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
+        {showLogoutModal && (
+          <div style={styles.modalOverlay}>
+            <div style={styles.modalContent}>
+              <h3>Confirm Logout</h3>
+              <p>Are you sure you want to log out?</p>
+              <div style={styles.modalActions}>
+                <button
+                  style={styles.cancelBtn}
+                  onClick={() => setShowLogoutModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={styles.confirmBtn}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
+        )}
 
         <div style={styles.announcementBoard}>
           <p style={{ fontSize: '20px', fontWeight: '600' }}>Announcement</p>
@@ -332,226 +366,222 @@ function Announcement() {
               </select>
             </div>
             <div>
-              <button style={styles.postBtn} onClick={() => setShowModal(true)}>Post</button>
+              <button 
+                style={styles.postBtn} 
+                onClick={() => setShowModal(true)}
+                disabled={loading.post || loading.update || loading.delete}
+              >
+                {loading.post ? 'Posting...' : 'Post'}
+              </button>
             </div>
           </div>
 
-          {announcements.length === 0 ? (
-              <p style={styles.noAnnouncementText}>
-                No announcements have been posted yet.
-              </p>
-            ) : (
-              announcements.map((announcement, index) => (
-                <div
-                  key={index}
-                  style={{
-                    ...styles.announcementCardContent,
-                    borderLeft: `10px solid ${getPriorityColor(announcement.priority)}`,
-                  }}
-                >
-                  <div style={styles.announcementRow1}>
-                    <div style={styles.announcementSender}>
-                      <div style={styles.announcementProfile}></div>
-                      <div style={styles.announcementName}>
-                        <p style={styles.lblName}>{announcement.posted_by}</p>
-                        <p style={styles.lblPosition}>{announcement.position}</p>
-                      </div>
-                    </div>
-                    <div style={styles.announcementDate}>
-                      <p style={styles.lblDate}>{announcement.created_at}</p>
-                      <p style={styles.lblPriority}>{announcement.priority}</p>
-
-                      <div style={{ position: "relative", display: "inline-block" }}>
-                        <button
-                          style={styles.menuDots}
-                          onClick={() =>
-                            setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
-                          }
-                          onBlur={() => setMenuOpen(null)} 
-                        >
-                          <FaEllipsisV />
-                        </button>
-
-                        {menuOpen === announcement.id && (
-                          <div style={styles.menu}>
-                            <button
-                              style={styles.buttonMenu1}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => editAnnouncement(announcement.id)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              style={styles.buttonMenu}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => deleteAnnouncement(announcement.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-
+          {loading.fetch ? (
+            <div style={styles.loadingContainer}>
+              <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
+              <p>Loading announcements...</p>
+            </div>
+          ) : announcements.length === 0 ? (
+            <p style={styles.noAnnouncementText}>
+              No announcements have been posted yet.
+            </p>
+          ) : (
+            announcements.map((announcement, index) => (
+              <div
+                key={index}
+                style={{
+                  ...styles.announcementCardContent,
+                  borderLeft: `10px solid ${getPriorityColor(announcement.priority)}`,
+                }}
+              >
+                <div style={styles.announcementRow1}>
+                  <div style={styles.announcementSender}>
+                    <div style={styles.announcementProfile}></div>
+                    <div style={styles.announcementName}>
+                      <p style={styles.lblName}>{announcement.posted_by}</p>
+                      <p style={styles.lblPosition}>{announcement.position}</p>
                     </div>
                   </div>
+                  <div style={styles.announcementDate}>
+                    <p style={styles.lblDate}>{announcement.created_at}</p>
+                    <p style={styles.lblPriority}>{announcement.priority}</p>
 
-                  <div style={styles.announcementDetails}>
-                    <div style={styles.announcementText}>
-                      <p style={styles.lblTitle}>{announcement.title}</p>
-                      <p style={{
-                        ...styles.lblDetails,
-                        textAlign: "justify",
-                        display: "-webkit-box",
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        WebkitLineClamp: expanded ? "unset" : 2, 
-                      }}>
-                      {announcement.details}
-                      </p>
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                      <button
+                        style={{
+                          ...styles.menuDots,
+                          ...((loading.update || loading.delete) && styles.menuDotsDisabled)
+                        }}
+                        onClick={() =>
+                          setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
+                        }
+                        onBlur={() => setMenuOpen(null)}
+                        disabled={loading.update || loading.delete}
+                      >
+                        <FaEllipsisV />
+                      </button>
 
-                      {/* images */}
-                      {announcement.images && announcement.images.length > 0 && (
-                        <div style={{ marginTop: "10px" }}>
-                          {announcement.images.map((img, i) => (
-                            <img
-                              key={i}
-                              src={img} 
-                              alt={`attachment-${i}`}
-                              style={{ 
-                                maxWidth: "120px",
-                                maxHeight: "120px",
-                                marginRight: "10px",
-                                marginBottom: "10px",
-                                cursor: "pointer",
-                                borderRadius: "6px",
-                                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                              }}
-                              onClick={() =>
-                                setPreviewImage(img)
-                              }
-                            />
-                          ))}
+                      {menuOpen === announcement.id && (
+                        <div style={styles.menu}>
+                          <button
+                            style={styles.buttonMenu1}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => editAnnouncement(announcement.id)}
+                            disabled={loading.update}
+                          >
+                            {loading.update ? 'Editing...' : 'Edit'}
+                          </button>
+                          <button
+                            style={styles.buttonMenu}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => deleteAnnouncement(announcement.id)}
+                            disabled={loading.delete}
+                          >
+                            {loading.delete ? 'Deleting...' : 'Delete'}
+                          </button>
                         </div>
                       )}
-
-                      {/* Files */}
-                        {announcement.files && announcement.files.length > 0 && (
-                          <div style={{ marginTop: "10px" }}>
-                            {announcement.files.map((file, i) => {
-                              const fileName = file.split("/").pop(); 
-                              return (
-                                <a
-                                  key={i}
-                                  href={file}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: "inline-block",
-                                    padding: "8px 14px",
-                                    margin: "5px",
-                                    borderRadius: "6px",
-                                    backgroundColor: "#ffffffff",
-                                    color: "#000",
-                                    fontSize: "14px",
-                                    fontWeight: "500",
-                                    textDecoration: "none",
-                                    transition: "0.2s",
-                                    boxShadow: '1px 2px 1px rgba(34, 34, 34, 0.16)'
-                                  }}
-                                  onMouseEnter={(e) => (e.target.style.backgroundColor = "#f0f0f0ff")}
-                                  onMouseLeave={(e) => (e.target.style.backgroundColor = "#ffffffff")}
-                                >
-                                 {fileName}
-                                </a>
-                              );
-                            })}
-                          </div>
-                        )}
-
                     </div>
-                    
                   </div>
-
-                  <div style={styles.announcementRead}>
-                        {announcement.details.length > 100 && ( 
-                                  <button onClick={toggleExpand} style={styles.readBtn}>
-                                    {expanded ? "Show Less" : "Read More"}
-                                  </button>
-                                )}                    
-                      </div>
-
                 </div>
-              ))
-            )}
 
-            {previewImage && (
-              <div
-                style={{
-                  position: "fixed",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: "rgba(0,0,0,0.7)",
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  zIndex: 1000,
-                }}
-                onClick={() => setPreviewImage(null)} 
-              >
-                <img
-                  src={previewImage}
-                  alt="preview"
-                  style={{
-                    maxWidth: "90%",
-                    maxHeight: "90%",
-                    borderRadius: "8px",
-                    boxShadow: "0 0 20px rgba(0,0,0,0.5)",
-                  }}
-                />
+                <div style={styles.announcementDetails}>
+                  <div style={styles.announcementText}>
+                    <p style={styles.lblTitle}>{announcement.title}</p>
+                    <p style={{
+                      ...styles.lblDetails,
+                      textAlign: "justify",
+                      display: "-webkit-box",
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      WebkitLineClamp: expanded ? "unset" : 2, 
+                    }}>
+                    {announcement.details}
+                    </p>
 
-                <button
-                  onClick={() => setPreviewImage(null)}
-                  style={{
-                    position: "absolute",
-                    background: "red",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "50%",
-                    width: "30px",
-                    height: "30px",
-                    fontSize: "18px",
-                    cursor: "pointer",
-                    top: 10,
-                    right: 100,
-                    marginRight: '10px'
-                  }}
-                >
-                  ✕
-                </button>
+                    {/* Images */}
+                    {announcement.images && announcement.images.length > 0 && (
+                      <div style={{ marginTop: "10px" }}>
+                        {announcement.images.map((img, i) => (
+                          <img
+                            key={i}
+                            src={img} 
+                            alt={`attachment-${i}`}
+                            style={{ 
+                              maxWidth: "120px",
+                              maxHeight: "120px",
+                              marginRight: "10px",
+                              marginBottom: "10px",
+                              cursor: "pointer",
+                              borderRadius: "6px",
+                              boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                            }}
+                            onClick={() => setPreviewImage(img)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.announcementRead}>
+                  {announcement.details.length > 100 && ( 
+                    <button onClick={toggleExpand} style={styles.readBtn}>
+                      {expanded ? "Show Less" : "Read More"}
+                    </button>
+                  )}                    
+                </div>
               </div>
-            )}
+            ))
+          )}
+
+          {previewImage && (
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: "rgba(0,0,0,0.7)",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                zIndex: 1000,
+              }}
+              onClick={() => setPreviewImage(null)} 
+            >
+              <img
+                src={previewImage}
+                alt="preview"
+                style={{
+                  maxWidth: "90%",
+                  maxHeight: "90%",
+                  borderRadius: "8px",
+                  boxShadow: "0 0 20px rgba(0,0,0,0.5)",
+                }}
+              />
+
+              <button
+                onClick={() => setPreviewImage(null)}
+                style={{
+                  position: "absolute",
+                  background: "red",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "30px",
+                  height: "30px",
+                  fontSize: "18px",
+                  cursor: "pointer",
+                  top: 10,
+                  right: 100,
+                  marginRight: '10px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {showModal && (
             <div style={styles.modalOverlay}>
               <div style={styles.modalContainer}>
-                <p style={styles.postAnnouncement}>Post Announcement</p>
-                <div style={styles.modalInputs}>
-                  <div style={styles.inputsRow}>
-                    <div>
-                      <label>To:</label>
-                      <select style={styles.selects}>
+                <div style={styles.modalHeader}>
+                  <h2 style={styles.modalTitle}>
+                    {isEditMode ? 'Edit Announcement' : 'Post Announcement'}
+                  </h2>
+                  <button
+                    style={styles.closeButton}
+                    onClick={() => {
+                      setShowModal(false);
+                      setIsEditMode(false);
+                      setEditingAnnouncement(null);
+                      setNewAnnouncement({ title: "", details: "", priority: "" });
+                      setImages([]);
+                    }}
+                    disabled={loading.post || loading.update}
+                  >
+                    <FontAwesomeIcon icon={faTimes} />
+                  </button>
+                </div>
+
+                <div style={styles.modalBody}>
+                  <div style={styles.formGrid}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>To</label>
+                      <select style={styles.formSelect}>
                         <option>All Employee</option>
                       </select>
                     </div>
-                    <div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Priority</label>
                       <select
-                        style={styles.selects}
+                        style={styles.formSelect}
                         name="priority"
                         value={newAnnouncement.priority}
                         onChange={handleInputChange}
+                        disabled={loading.post || loading.update}
                       >
                         <option value="" disabled selected>Select Priority</option>
                         <option value="Normal">Normal</option>
@@ -559,157 +589,220 @@ function Announcement() {
                       </select>
                     </div>
                   </div>
-                  <div style={styles.inputsRow2}>
-                    <label>Title:</label>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Title</label>
                     <input
                       type="text"
                       name="title"
                       value={newAnnouncement.title}
                       onChange={handleInputChange}
-                      placeholder="Enter title..."
-                      style={{ padding: '5px', borderRadius: '5px', border: '1px solid #ccc' }}
+                      placeholder="Enter announcement title..."
+                      style={styles.formInput}
+                      disabled={loading.post || loading.update}
                     />
                   </div>
-                  <div style={styles.inputsRow2}>
-                    <label>Details:</label>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Details</label>
                     <textarea
                       name="details"
                       value={newAnnouncement.details}
                       onChange={handleInputChange}
-                      style={styles.txtArea}
+                      placeholder="Enter announcement details..."
+                      style={styles.formTextarea}
+                      rows={5}
+                      disabled={loading.post || loading.update}
                     />
                   </div>
 
-                   {files.length > 0 && (
-                        <ul style={{ marginTop: "10px" }}>
-                          {files.map((f, i) => (
-                            <li key={i} style={{ position: "relative", marginBottom: "5px" }}>
-                              {f.name}
-                              <button
-                                onClick={() => removeFile(i)}
-                                style={{
-                                  marginLeft: "10px",
-                                  background: "red",
-                                  color: "white",
-                                  border: "none",
-                                  borderRadius: "4px",
-                                  padding: "2px 6px",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                  {images.length > 0 && (
+                    <div style={styles.attachmentsSection}>
+                      <h4 style={styles.attachmentsTitle}>Image Attachments</h4>
+                      <div style={styles.imagesPreview}>
+                        {images.map((img, i) => (
+                          <div key={i} style={styles.imagePreviewItem}>
+                            <img
+                              src={URL.createObjectURL(img)}
+                              alt="preview"
+                              style={styles.previewImage}
+                            />
+                            <button
+                              onClick={() => removeImage(i)}
+                              style={styles.removeImageButton}
+                              disabled={loading.post || loading.update}
+                            >
+                              <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-
-                        {images.length > 0 && (
-                            <div style={{ display: "flex", gap: "10px", marginTop: "10px", flexWrap: "wrap" }}>
-                              {images.map((img, i) => (
-                                <div key={i} style={{ position: "relative" }}>
-                                  <img
-                                    src={URL.createObjectURL(img)}
-                                    alt="preview"
-                                    width="80"
-                                    height="80"
-                                    style={{ borderRadius: "5px", objectFit: "cover" }}
-                                  />
-                                  <button
-                                    onClick={() => removeImage(i)}
-                                    style={{
-                                      position: "absolute",
-                                      top: "-5px",
-                                      right: "-5px",
-                                      background: "rgba(0,0,0,0.6)",
-                                      color: "white",
-                                      border: "none",
-                                      borderRadius: "50%",
-                                      cursor: "pointer",
-                                      width: "20px",
-                                      height: "20px",
-                                      fontSize: "12px",
-                                      lineHeight: "20px",
-                                      textAlign: "center",
-                                    }}
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-
-                  <div style={styles.btnUploads}>
-                    <button style={styles.btnFile} onClick={handleFileClick}>Upload File</button>
-                    <button style={styles.btnImage} onClick={handleImageClick}>Upload Image</button>
+                  <div style={styles.uploadSection}>
+                    <button 
+                      style={{
+                        ...styles.uploadButton,
+                        ...((loading.post || loading.update) && styles.uploadButtonDisabled)
+                      }} 
+                      onClick={handleImageClick}
+                      disabled={loading.post || loading.update}
+                    >
+                      <FontAwesomeIcon icon={faImage} style={styles.uploadIcon} />
+                      Upload Image
+                    </button>
                   </div>
 
-                  {/* Hidden Input */}
-                        <input
-                          type="file"
-                          multiple
-                          ref={fileInputRef}
-                          style={{ display: "none" }}
-                          onChange={handleFileChange}
-                        />
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/*"
-                          ref={imageInputRef}
-                          style={{ display: "none" }}
-                          onChange={handleImageChange}
-                        />                       
-
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    ref={imageInputRef}
+                    style={{ display: "none" }}
+                    onChange={handleImageChange}
+                    disabled={loading.post || loading.update}
+                  />                       
                 </div>
-                <div style={styles.btnBottom}>
+
+                <div style={styles.modalFooter}>
                   <button
-                    style={styles.btnPost}
-                    onClick={isEditMode ? saveEditedAnnouncement : addAnnouncement}
-                  >
-                    {isEditMode ? "Save Changes" : "Post"}
-                  </button>
-                  <button
-                    style={styles.btnCancel}
+                    style={styles.cancelButton}
                     onClick={() => {
                       setShowModal(false);
                       setIsEditMode(false);
                       setEditingAnnouncement(null);
                       setNewAnnouncement({ title: "", details: "", priority: "" });
-                      setFiles([]);
                       setImages([]);
                     }}
+                    disabled={loading.post || loading.update}
                   >
                     Cancel
                   </button>
+                  <button
+                    style={{
+                      ...styles.submitButton,
+                      ...((loading.post || loading.update) && styles.submitButtonDisabled)
+                    }}
+                    onClick={isEditMode ? saveEditedAnnouncement : addAnnouncement}
+                    disabled={loading.post || loading.update}
+                  >
+                    {loading.post || loading.update ? (
+                      <>
+                        <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                        {isEditMode ? "Saving..." : "Posting..."}
+                      </>
+                    ) : (
+                      isEditMode ? "Save Changes" : "Post Announcement"
+                    )}
+                  </button>
                 </div>
-
               </div>
             </div>
           )}
         </div>
 
-
-      {showDeleteModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContainerDel}>
-            <p style={styles.questionDelete}>Are you sure you want to delete this announcement?</p>
-            <div style={styles.deleteButtons}>
-              <button style={styles.deleteBtn} onClick={confirmDeleteAnnouncement}>Delete</button>
-              <button style={styles.cnldeleteBtn} onClick={() => setShowDeleteModal(false)}>Cancel</button>
+        {showDeleteModal && (
+          <div style={styles.modalOverlay}>
+            <div style={styles.modalContainerDel}>
+              <p style={styles.questionDelete}>Are you sure you want to delete this announcement?</p>
+              <div style={styles.deleteButtons}>
+                <button 
+                  style={{
+                    ...styles.deleteBtn,
+                    ...(loading.delete && styles.deleteBtnDisabled)
+                  }} 
+                  onClick={confirmDeleteAnnouncement}
+                  disabled={loading.delete}
+                >
+                  {loading.delete ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
+                <button 
+                  style={styles.cnldeleteBtn} 
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={loading.delete}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-
+        )}
       </div>
     </div>
   );
 }
+
+
+// Add these new styles to your existing styles object
+const enhancedStyles = {
+  // Global Loading Overlay
+  globalLoadingOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  globalLoadingContent: {
+    backgroundColor: '#fff',
+    padding: '30px',
+    borderRadius: '12px',
+    textAlign: 'center',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+  },
+  loadingSpinner: {
+    fontSize: '24px',
+    color: '#009205',
+    marginBottom: '10px',
+  },
+  loadingText: {
+    margin: 0,
+    fontSize: '16px',
+    fontWeight: '500',
+    color: '#333',
+  },
+  
+  // Loading Container for announcements
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    color: '#666',
+  },
+  
+  // Disabled states
+  menuDotsDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  uploadButtonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  deleteBtnDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+};
 
 // Priority colors
 const getPriorityColor = (priority) => {
@@ -937,22 +1030,245 @@ const styles = {
     zIndex: 9999
   },
 
+  // IMPROVED MODAL STYLES
   modalContainer: {
     backgroundColor: '#ffffff',
-    width: '500px',
-    padding: '25px',
-    borderRadius: '12px',
-    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.2)',
+    width: '600px',
+    maxWidth: '90vw',
+    borderRadius: '16px',
+    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '24px',
+    borderBottom: '1px solid #e9ecef',
+    backgroundColor: '#f8f9fa',
+  },
+  modalTitle: {
+    fontSize: '1.5rem',
+    fontWeight: '600',
+    color: '#1a1a1a',
+    margin: 0,
+  },
+  closeButton: {
+    background: 'none',
+    border: 'none',
+    fontSize: '18px',
+    cursor: 'pointer',
+    color: '#666',
+    padding: '8px',
+    borderRadius: '6px',
+    transition: 'all 0.2s ease',
+    width: '36px',
+    height: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBody: {
+    padding: '24px',
+    flex: 1,
+    overflowY: 'auto',
+    maxHeight: '60vh',
+  },
+  modalFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
+    padding: '24px',
+    borderTop: '1px solid #e9ecef',
+    backgroundColor: '#f8f9fa',
   },
 
+  // IMPROVED FORM STYLES
+  formGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    marginBottom: '20px',
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    marginBottom: '20px',
+  },
+  formLabel: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: '8px',
+  },
+  formSelect: {
+    padding: '12px 16px',
+    borderRadius: '8px',
+    border: '2px solid #e9ecef',
+    fontSize: '14px',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  formInput: {
+    padding: '12px 16px',
+    borderRadius: '8px',
+    border: '2px solid #e9ecef',
+    fontSize: '14px',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+  formTextarea: {
+    padding: '12px 16px',
+    borderRadius: '8px',
+    border: '2px solid #e9ecef',
+    fontSize: '14px',
+    resize: 'vertical',
+    minHeight: '120px',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s ease',
+  },
+
+  // IMPROVED UPLOAD SECTION
+  uploadSection: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '20px',
+  },
+  uploadButton: {
+    padding: '12px 20px',
+    backgroundColor: '#f8f9fa',
+    color: '#333',
+    border: '2px dashed #e9ecef',
+    borderRadius: '8px',
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    fontWeight: '500',
+  },
+  uploadIcon: {
+    marginRight: '8px',
+    color: '#666',
+  },
+
+  // IMPROVED ATTACHMENTS SECTION
+  attachmentsSection: {
+    marginTop: '20px',
+    padding: '16px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    border: '1px solid #e9ecef',
+  },
+  attachmentsTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: '12px',
+  },
+  attachmentList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  attachmentItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px',
+    backgroundColor: '#fff',
+    borderRadius: '6px',
+    border: '1px solid #e9ecef',
+  },
+  attachmentIcon: {
+    marginRight: '8px',
+    color: '#666',
+  },
+  attachmentName: {
+    flex: 1,
+    fontSize: '14px',
+    color: '#333',
+  },
+  removeButton: {
+    background: 'none',
+    border: 'none',
+    color: '#ff4757',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '4px',
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // IMPROVED IMAGES PREVIEW
+  imagesPreview: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  imagePreviewItem: {
+    position: 'relative',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    border: '1px solid #e9ecef',
+  },
+  previewImage: {
+    width: '80px',
+    height: '80px',
+    objectFit: 'cover',
+    borderRadius: '8px',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: '4px',
+    right: '4px',
+    background: 'rgba(0,0,0,0.7)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '50%',
+    width: '20px',
+    height: '20px',
+    fontSize: '10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // IMPROVED BUTTONS
+  submitButton: {
+    padding: '12px 24px',
+    backgroundColor: '#009205',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  cancelButton: {
+    padding: '12px 24px',
+    backgroundColor: '#f8f9fa',
+    color: '#333',
+    border: '1px solid #e9ecef',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+
+  // Rest of the existing styles remain the same
   inputsColumn: {
     display: 'flex',
     justifyContent: 'space-between'
   },
-
   btnFile: {
     padding: '8px 15px',
     borderRadius: '6px',
@@ -964,7 +1280,6 @@ const styles = {
     boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.57)',
     fontWeight: '500'
   },
-
   btnImage: {
     padding: '8px 15px',
     borderRadius: '6px',
@@ -975,25 +1290,21 @@ const styles = {
     boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.57)',
     fontWeight: '500'
   },
-
   inputsRow: {
     display: 'flex',
     justifyContent: 'space-between',
     gap: '10px'
   },
-
   inputsRow2: {
     display: 'flex',
     flexDirection: 'column'
   },
-
   btnBottom: {
     display: 'flex',
     gap: '10px',
     marginTop: '10px',
     justifyContent: 'flex-end'
   },
-
   btnPost: {
     backgroundColor: '#001eff',
     color: '#fff',
@@ -1003,7 +1314,6 @@ const styles = {
     fontSize: '14px',
     cursor: 'pointer',
   },
-
   btnCancel: {
     backgroundColor: '#ccc',
     color: '#000',
@@ -1013,13 +1323,11 @@ const styles = {
     fontSize: '14px',
     cursor: 'pointer',
   },
-
   modalInputs: {
     display: 'flex',
     flexDirection: 'column',
     gap: '15px',
   },
-
   txtArea: {
     width: '100%',
     height: '100px',
@@ -1029,13 +1337,11 @@ const styles = {
     fontSize: '14px',
     resize: 'vertical',
   },
-
   selects: {
     padding: '3px 10px',
     marginLeft: '5px',
     borderRadius: '5px',
   },
-
   postAnnouncement: {
     borderBottom: '1px solid #dcdcdcff',
     fontSize: '20px',
@@ -1120,7 +1426,43 @@ const styles = {
     gap: '20px',
     alignItems: 'center'
   },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    padding: '32px',
+    borderRadius: '16px',
+    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+    textAlign: 'center',
+    maxWidth: '400px',
+    width: '90vw',
+  },
+  modalActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center',
+    marginTop: '24px',
+  },
+  cancelBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#f8f9fa',
+    color: '#333',
+    border: '1px solid #e9ecef',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+  },
+  confirmBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#009205',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+  },
 
+  ...enhancedStyles
 };
 
 

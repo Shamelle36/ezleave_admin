@@ -68,7 +68,7 @@ function UserManagement() {
   }, []);
 
   const handleCreateAccount = async () => {
-    if (!newAccount.full_name || !newAccount.email || !newAccount.role || !newAccount.department) {
+    if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "Mayor" && !newAccount.department)) {
       alert("Please fill out all fields.");
       return;
     }
@@ -235,26 +235,41 @@ function UserManagement() {
               <label>Role</label>
               <select
                 value={newAccount.role}
-                onChange={(e) => setNewAccount({ ...newAccount, role: e.target.value })}
+                onChange={(e) => {
+                  const role = e.target.value;
+                  setNewAccount({
+                    ...newAccount,
+                    role,
+                    department: role === "Mayor" ? "Office of the Municipal Mayor" : "",
+                  });
+                }}
                 style={styles.input}
               >
                 <option value="">Select Role</option>
                 <option value="Mayor">Mayor</option>
                 <option value="Office Head">Office Head</option>
               </select>
-              <label>Department</label>
-              <select
-                value={newAccount.department}
-                onChange={(e) => setNewAccount({ ...newAccount, department: e.target.value })}
-                style={styles.input}
-              >
-                <option value="">Select Department</option>
-                {departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+
+              {newAccount.role !== "Mayor" && (
+                <>
+                  <label>Department</label>
+                  <select
+                    value={newAccount.department}
+                    onChange={(e) =>
+                      setNewAccount({ ...newAccount, department: e.target.value })
+                    }
+                    style={styles.input}
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
               <div style={styles.modalButtons}>
                 <button onClick={handleCreateAccount} style={styles.saveBtn} disabled={loading}>
                   {loading ? "Creating..." : "Create"}

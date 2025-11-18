@@ -73,6 +73,7 @@ import * as XLSX from "xlsx";
 
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+    const [userDepartment, setUserDepartment] = useState(localStorage.getItem("department") || "");
     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   
@@ -132,23 +133,47 @@ import * as XLSX from "xlsx";
     }, []);
 
 const loadEmployees = async () => {
-  try {
+    try {
+      const role = localStorage.getItem("role") || "admin";
+      const department = localStorage.getItem("department") || "";
+
+      // For mayor: fetch all employees without department filter
+      const params = role === "mayor" 
+        ? new URLSearchParams({ role }).toString()
+        : new URLSearchParams({ role, department }).toString();
+      
+      const url = `http://localhost:5000/api/employees?${params}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      setEmployeeRecords(Array.isArray(data) ? data : [data]);
+    } catch (err) {
+      console.error("Error loading employees:", err);
+      setEmployeeRecords([]);
+    }
+  };
+
+  const canPerformActions = (employeeDepartment) => {
     const role = localStorage.getItem("role") || "admin";
-    const department = localStorage.getItem("department") || "";
+    
+    if (role === "admin") return true;
+    if (role === "mayor") return false; // Mayor cannot edit/delete any employees
+    if (role === "office_head") {
+      const userDept = localStorage.getItem("department") || "";
+      return employeeDepartment === userDept;
+    }
+    return false;
+  };
 
-    // Always include role and department in query params
-    const params = new URLSearchParams({ role, department }).toString();
-    const url = `http://localhost:5000/api/employees?${params}`;
+  const canAddEmployees = () => {
+    const role = localStorage.getItem("role") || "admin";
+    return role !== "mayor"; // Mayor cannot add employees
+  };
 
-    const res = await fetch(url);
-    const data = await res.json();
-
-    setEmployeeRecords(Array.isArray(data) ? data : [data]);
-  } catch (err) {
-    console.error("Error loading employees:", err);
-    setEmployeeRecords([]); // fallback
-  }
-};
+  const canImportCSV = () => {
+    const role = localStorage.getItem("role") || "admin";
+    return role !== "mayor"; // Mayor cannot import CSV
+  };
 
 
 
@@ -638,10 +663,12 @@ const handleBulkDelete = async () => {
                 </div>
 
                 <div style={styles.row1}>
-                  <button style={styles.importBtn} onClick={handleButtonClick}>
-                    <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
-                    Import CSV
-                  </button>
+                  {canImportCSV() && (
+                    <button style={styles.importBtn} onClick={handleButtonClick}>
+                      <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
+                      Import CSV
+                    </button>
+                  )}
                   <input
                     type="file"
                     accept=".csv,.xlsx,.xls"
@@ -649,12 +676,15 @@ const handleBulkDelete = async () => {
                     onChange={handleCSVUpload}
                     style={{ display: 'none' }}
                   />
-                  <button style={styles.btnAddEmployee} onClick={() => setShowAddModal(true)}>
-                    <FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd} />
-                    Add Employee
-                  </button>
 
-                  {selectedEmployees.length > 0 && (
+                  {canAddEmployees() && (
+                    <button style={styles.btnAddEmployee} onClick={() => setShowAddModal(true)}>
+                      <FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd} />
+                      Add Employee
+                    </button>
+                  )}
+
+                  {selectedEmployees.length > 0 && role !== "mayor" && (
                     <button
                       onClick={() => setShowBulkDeleteModal(true)}
                       style={{
@@ -763,14 +793,16 @@ const handleBulkDelete = async () => {
                   <table style={styles.employeeTable}>
                     <thead>
                       <tr>
-                        <th style={styles.columnName}>
-                          <input
-                            type="checkbox"
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                            style={styles.checkbox}
-                          />
-                        </th>
+                        {role !== "mayor" && (
+                          <th style={styles.columnName}>
+                            <input
+                              type="checkbox"
+                              checked={selectAll}
+                              onChange={handleSelectAll}
+                              style={styles.checkbox}
+                            />
+                          </th>
+                        )}
                         <th style={styles.columnName}>No.</th>
                         <th style={styles.columnName}>ID Number</th>
                         <th style={styles.columnName}>Name</th>
@@ -785,14 +817,16 @@ const handleBulkDelete = async () => {
                         .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
                         .map((record, index) => (
                           <tr key={record.id}>
-                            <td style={styles.rowName}>
-                              <input
-                                type="checkbox"
-                                checked={selectedEmployees.includes(record.id)}
-                                onChange={() => handleSelectEmployee(record.id)}
-                                style={styles.checkbox}
-                              />
-                            </td>
+                            {role !== "mayor" && (
+                              <td style={styles.rowName}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedEmployees.includes(record.id)}
+                                  onChange={() => handleSelectEmployee(record.id)}
+                                  style={styles.checkbox}
+                                />
+                              </td>
+                            )}
                             <td style={styles.rowName}>{index + 1 + (currentPage - 1) * listEmployeePerPage}</td>
                             <td style={styles.rowName}>{record.id_number || '—'}</td>
                             <td style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
@@ -811,12 +845,16 @@ const handleBulkDelete = async () => {
                               <button style={styles.viewBtn} onClick={() => handleViewClick(record)}>
                                 <FontAwesomeIcon icon={faEye} />
                               </button>
-                              <button style={styles.editBtn} onClick={() => handleEditClick(record)}>
-                                <FontAwesomeIcon icon={faPenToSquare} />
-                              </button>
-                              <button style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
-                                <FontAwesomeIcon icon={faTrash} />
-                              </button>
+                              {canPerformActions(record.department) && (
+                                <>
+                                  <button style={styles.editBtn} onClick={() => handleEditClick(record)}>
+                                    <FontAwesomeIcon icon={faPenToSquare} />
+                                  </button>
+                                  <button style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
+                                    <FontAwesomeIcon icon={faTrash} />
+                                  </button>
+                                </>
+                              )}
                             </td>
                           </tr>
                       ))}
