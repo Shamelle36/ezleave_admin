@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -80,6 +80,7 @@ const [isGeneratingCSForm, setIsGeneratingCSForm] = useState(false);
 const [isGeneratingForm, setIsGeneratingForm] = useState(false);
 const [formGenerationTimeout, setFormGenerationTimeout] = useState(null);
 const [isTyping, setIsTyping] = useState(false);
+const generationTriggerRef = useRef(false);
 
     useEffect(() => {
         let role = localStorage.getItem("role") || "";
@@ -87,19 +88,6 @@ const [isTyping, setIsTyping] = useState(false);
         role = role.toLowerCase().replace("_", " ");
         setUserRole(role);
     }, []);
-
-const debouncedGenerateCSForm = useCallback(() => {
-  if (formGenerationTimeout) {
-    clearTimeout(formGenerationTimeout);
-  }
-  
-  const timeout = setTimeout(() => {
-    generateAndShowCSForm();
-  }, 1000); // Wait 1 second after last change
-  
-  setFormGenerationTimeout(timeout);
-}, [formGenerationTimeout]);
-
 
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [role, setRole] = useState(localStorage.getItem("role") || "admin");
@@ -307,82 +295,159 @@ const debouncedGenerateCSForm = useCallback(() => {
         }
     }, [activeTab]);
 
-const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
-    const admin = JSON.parse(localStorage.getItem("admin"));
-    if (!admin) return alert("No admin logged in!");
+const handleApprove = (requestId, remarks = "Approved via dashboard") => {
+  const admin = JSON.parse(localStorage.getItem("admin"));
+  if (!admin) return alert("No admin logged in!");
 
-    const role = admin.role?.toLowerCase().replace(" ", "_");
+  const role = admin.role?.toLowerCase().replace(" ", "_");
 
-    // If mayor, office head, or HR admin, show actual CS form directly
-    if (role === "mayor" || role === "office_head" || role === "admin") {
-        const request = requests.find(req => req.id === requestId);
-        if (request) {
-            setSelectedRequest(request);
-            setDaysWithPay(request.number_of_days || 0);
-            
-            // Set action type and remarks first
-            setActionType("approve");
-            setActionRemarks(remarks);
-            
-            // Update realTimeFormData immediately
-            setRealTimeFormData({
-                action_type: "approve",
-                action_remarks: remarks,
-                days_with_pay: request.number_of_days || 0
-            });
-            
-            // Show loading state
-            setIsGeneratingCSForm(true);
-            
-            // Generate form immediately with all data
-            setTimeout(() => {
-                generateAndShowCSForm();
-            }, 100);
-        }
-        return;
+  // If mayor, office head, or HR admin, show actual CS form directly (but don't generate until state is set)
+  if (role === "mayor" || role === "office_head" || role === "admin") {
+    const request = requests.find(req => req.id === requestId);
+    if (request) {
+      // set all required state first
+      setSelectedRequest(request);
+      setDaysWithPay(request.number_of_days || 0);
+      setActionType("approve");
+      setActionRemarks(remarks);
+
+      // tell the effect to generate the form once those state updates commit
+      generationTriggerRef.current = true;
+
+      // also show loading for UX
+      setIsGeneratingCSForm(true);
     }
+    return;
+  }
 
-    // Original approval logic for other roles
+  // Original approval logic for other roles
+  (async () => {
     try {
-        const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                actionBy: admin.id || admin.email,
-                remarks,
-                role,
-            }),
-        });
+      const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionBy: admin.id || admin.email,
+          remarks,
+          role,
+        }),
+      });
 
-        const data = await res.json();
+      const data = await res.json();
 
-        if (res.ok) {
-            setRequests(prev =>
-                prev.map(req =>
-                    req.id === requestId
-                        ? {
-                            ...req,
-                            status: role === "mayor" ? "Approved" : req.status,
-                            [`${role}_status`]: "Approved",
-                            approver_name: data.approver_name,
-                            remarks,
-                        }
-                        : req
-                )
-            );
-            alert(`Leave request approved by ${data.approver_name} (${role.replace("_", " ")})`);
-        } else {
-            alert(data.error || "Failed to approve request");
-        }
+      if (res.ok) {
+        setRequests(prev =>
+          prev.map(req =>
+            req.id === requestId
+              ? {
+                  ...req,
+                  status: role === "mayor" ? "Approved" : req.status,
+                  [`${role}_status`]: "Approved",
+                  approver_name: data.approver_name,
+                  remarks,
+                }
+              : req
+          )
+        );
+        alert(`Leave request approved by ${data.approver_name} (${role.replace("_", " ")})`);
+      } else {
+        alert(data.error || "Failed to approve request");
+      }
     } catch (err) {
-        console.error(err);
-        alert("Error approving leave request");
+      console.error(err);
+      alert("Error approving leave request");
     }
+  })();
 };
 
+const handleReject = (requestId, remarks = "Rejected via dashboard") => {
+  const admin = JSON.parse(localStorage.getItem("admin"));
+  if (!admin) return alert("No admin logged in!");
+
+  const role = admin.role?.toLowerCase().replace(" ", "_");
+
+  // If mayor/office_head/admin, show CS form for rejection (but don't generate until state is set)
+  if (role === "mayor" || role === "office_head" || role === "admin") {
+    const request = requests.find(req => req.id === requestId);
+    if (request) {
+      setSelectedRequest(request);
+      setActionType("reject");
+      setActionRemarks(remarks || "Rejected via CS Form");
+
+      // mark for generation after state commit
+      generationTriggerRef.current = true;
+      setIsGeneratingCSForm(true);
+    }
+    return;
+  }
+
+  // Original rejection logic for other roles
+  (async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionBy: admin.id || admin.email,
+          remarks,
+          role,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setRequests(prev =>
+          prev.map(req =>
+            req.id === requestId
+              ? {
+                  ...req,
+                  status: "Rejected",
+                  [`${role}_status`]: "Rejected",
+                  approver_name: admin.name || admin.email,
+                  approved_by: role,
+                  approver_date: new Date(),
+                  remarks,
+                }
+              : req
+          )
+        );
+        alert(`Leave request rejected by ${admin.name || admin.email}`);
+      } else {
+        alert(data.error || "Failed to reject request");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error rejecting leave request");
+    }
+  })();
+};
+
+useEffect(() => {
+  // Only run when a generation was intentionally requested
+  if (!generationTriggerRef.current) return;
+
+  // Basic sanity checks
+  if (!selectedRequest || !actionType) {
+    // Cancel trigger if missing data
+    generationTriggerRef.current = false;
+    setIsGeneratingCSForm(false);
+    return;
+  }
+
+  // call the generator
+  generateAndShowCSForm()
+    .catch(err => {
+      console.error("generateAndShowCSForm error in effect:", err);
+    })
+    .finally(() => {
+      // Reset trigger so subsequent manual clicks require explicit handlers again
+      generationTriggerRef.current = false;
+    });
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedRequest, actionType, daysWithPay]);
 
 const generateAndShowCSForm = async () => {
-  // Prevent multiple simultaneous generations
   if (isGeneratingForm) {
     console.log("Form generation already in progress, skipping...");
     return;
@@ -390,17 +455,19 @@ const generateAndShowCSForm = async () => {
 
   try {
     setIsGeneratingForm(true);
-    
+
     if (!selectedRequest || !selectedRequest.id) {
       alert("No leave request data available");
       setIsGeneratingForm(false);
+      setIsGeneratingCSForm(false);
       return;
     }
 
     const admin = JSON.parse(localStorage.getItem("admin"));
     const role = admin.role?.toLowerCase().replace(" ", "_");
 
-    const data = {
+    // Build payload from the latest committed states
+    const payload = {
       leave_application_id: selectedRequest.id,
       days_with_pay: daysWithPay,
       requesting_role: role,
@@ -413,12 +480,12 @@ const generateAndShowCSForm = async () => {
       }
     };
 
-    console.log("Generating CS Form with:", data);
+    console.log("Generating CS Form with payload:", payload);
 
     const res = await fetch("http://localhost:5000/api/generate-cs-form", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -427,102 +494,119 @@ const generateAndShowCSForm = async () => {
 
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
-    
+
     setCsFormData({
-      blob: blob,
-      url: url,
+      blob,
+      url,
       timestamp: Date.now()
     });
-    
-    // Hide loading and show the form
-    setIsGeneratingCSForm(false);
+
+    // Show the actual form in the modal
     setShowActualCSForm(true);
-    
   } catch (err) {
     console.error("Error generating CS Form:", err);
     alert("Failed generating CS Form: " + err.message);
-    setIsGeneratingCSForm(false);
   } finally {
+    setIsGeneratingCSForm(false);
     setIsGeneratingForm(false);
   }
 };
 
-    // NEW: Handle signature method selection
     const handleSignatureMethod = (method) => {
-        setSignatureMethod(method);
-        setShowSignatureChoice(false);
-        
-        if (method === "e-sign") {
-            setIsSigning(true);
-            setTimeout(() => {
-                setSignatureData("Mayor_E_Signature_" + Date.now());
-                setIsSigning(false);
-                completeCSFormApproval();
-            }, 2000);
-        } else {
-            // For traditional signing, print first then complete approval
-            if (csFormData) {
-                const newWindow = window.open(csFormData.url);
-                if (newWindow) {
-                    newWindow.onload = () => {
-                        newWindow.print();
-                    };
-                }
-            }
-            completeCSFormApproval();
-        }
+  setSignatureMethod(method);
+  setShowSignatureChoice(false);
+
+  if (method === "e-sign") {
+    setIsSigning(true);
+    // emulate e-sign flow then complete approval
+    setTimeout(() => {
+      setSignatureData("Mayor_E_Signature_" + Date.now());
+      setIsSigning(false);
+      // Ensure we have selectedRequest; if not, abort
+      if (!selectedRequest) {
+        alert("No selected request for signing");
+        return;
+      }
+      completeCSFormApproval();
+    }, 2000);
+  } else {
+    // For traditional signing: open print and then complete
+    if (csFormData && csFormData.url) {
+      const newWindow = window.open(csFormData.url);
+      if (newWindow) {
+        newWindow.onload = () => {
+          newWindow.print();
+          // After print command, proceed to complete approval
+          completeCSFormApproval();
+        };
+      } else {
+        // If popup blocked or failed, still complete
+        completeCSFormApproval();
+      }
+    } else {
+      // If no form to print, still proceed (backend will record signature method null)
+      completeCSFormApproval();
+    }
+  }
     };
 
-    // UPDATED: Complete CS Form approval with days with pay
     const completeCSFormApproval = async () => {
-        try {
-            const admin = JSON.parse(localStorage.getItem("admin"));
-            const role = admin.role?.toLowerCase().replace(" ", "_");
+  try {
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    if (!admin || !selectedRequest) {
+      alert("Missing admin or selected request");
+      return;
+    }
 
-            const res = await fetch(`http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    actionBy: admin.id || admin.email,
-                    remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
-                    role,
-                    cs_form_signed: true,
-                    signature_method: signatureMethod,
-                    signature_data: signatureMethod === "e-sign" ? signatureData : null,
-                    days_with_pay: daysWithPay
-                }),
-            });
+    const role = admin.role?.toLowerCase().replace(" ", "_");
 
-            if (res.ok) {
-                setRequests(prev =>
-                    prev.map(req =>
-                        req.id === selectedRequest.id
-                            ? {
-                                ...req,
-                                status: "Approved",
-                                mayor_status: "Approved",
-                                approver_name: admin.name || admin.email,
-                                remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
-                                days_with_pay: daysWithPay
-                            }
-                            : req
-                    )
-                );
+    const res = await fetch(`http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actionBy: admin.id || admin.email,
+        remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
+        role,
+        cs_form_signed: true,
+        signature_method: signatureMethod,
+        signature_data: signatureMethod === "e-sign" ? signatureData : null,
+        days_with_pay: daysWithPay
+      }),
+    });
 
-                alert(`Leave request approved with ${signatureMethod === "e-sign" ? "E-Signature" : "Traditional Signature"} - ${daysWithPay} days with pay`);
-                
-                // Close all modals
-                setShowActualCSForm(false);
-                setCsFormData(null);
-                setShowSignatureChoice(false);
-                
-                // Refresh requests
-                fetchRequests();
-            }
-        } catch (err) {
-            console.error("Error approving with CS Form:", err);
-            alert("Error approving leave request");
-        }
+    if (res.ok) {
+      setRequests(prev =>
+        prev.map(req =>
+          req.id === selectedRequest.id
+            ? {
+                ...req,
+                status: "Approved",
+                mayor_status: "Approved",
+                approver_name: admin.name || admin.email,
+                remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
+                days_with_pay: daysWithPay
+              }
+            : req
+        )
+      );
+
+      alert(`Leave request approved with ${signatureMethod === "e-sign" ? "E-Signature" : "Traditional Signature"} - ${daysWithPay} days with pay`);
+
+      // Close modals and clear form data
+      setShowActualCSForm(false);
+      setCsFormData(null);
+      setShowSignatureChoice(false);
+
+      // Refresh latest requests from server
+      fetchRequests();
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to approve via CS Form");
+    }
+  } catch (err) {
+    console.error("Error approving with CS Form:", err);
+    alert("Error approving leave request");
+  }
     };
 
     // NEW: Handle confirm button click - show signature choice
@@ -618,68 +702,30 @@ const generateAndShowCSForm = async () => {
             .catch((err) => console.error("Error fetching requests:", err));
     };
 
-const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
-    const admin = JSON.parse(localStorage.getItem("admin"));
-    if (!admin) return alert("No admin logged in!");
+    useEffect(() => {
+  if (!isTyping) return; // only if user is typing
 
-    const role = admin.role?.toLowerCase().replace(" ", "_");
+  const timer = setTimeout(() => {
+    generateAndShowCSForm(); // the state is now UPDATED
+    setIsTyping(false);
+  }, 300);
 
-    // If mayor, office head, or HR admin, show CS form for rejection
-    if (role === "mayor" || role === "office_head" || role === "admin") {
-        const request = requests.find(req => req.id === requestId);
-        if (request) {
-            setSelectedRequest(request);
-            setActionType("reject");
-            setActionRemarks(remarks || "Rejected via CS Form");
-            
-            // Show loading state and generate CS form directly
-            setIsGeneratingCSForm(true);
-            setTimeout(() => {
-                generateAndShowCSForm();
-            }, 100);
-        }
-        return;
-    }
+  return () => clearTimeout(timer);
+}, [actionRemarks, daysWithPay]);
 
-    // Original rejection logic for other roles (if needed)
-    try {
-        const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                actionBy: admin.id || admin.email,
-                remarks,
-                role,
-            }),
-        });
 
-        const data = await res.json();
+const handleRemarksChange = (newValue) => {
+  setActionRemarks(newValue);
+  setRealTimeFormData(prev => ({
+    ...prev,
+    action_remarks: newValue,
+  }));
 
-        if (res.ok) {
-            setRequests(prev =>
-                prev.map(req =>
-                    req.id === requestId
-                        ? {
-                            ...req,
-                            status: "Rejected",
-                            [`${role}_status`]: "Rejected",
-                            approver_name: data.approver_name,
-                            approved_by: role,
-                            approver_date: new Date(),
-                            remarks,
-                        }
-                        : req
-                )
-            );
-            alert(`Leave request rejected by ${data.approver_name} (${role.replace("_", " ")})`);
-        } else {
-            alert(data.error || "Failed to reject request");
-        }
-    } catch (err) {
-        console.error(err);
-        alert("Error rejecting leave request");
-    }
+  setIsTyping(true);
 };
+
+
+
 
   return (
     <div style={styles.dashboardContainer}>
@@ -1351,33 +1397,11 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
              <textarea
   style={styles.remarksTextarea}
   value={actionRemarks}
-  onChange={(e) => {
-    const newValue = e.target.value;
-    setActionRemarks(newValue);
-    
-    // Update realTimeFormData immediately for UI
-    setRealTimeFormData(prev => ({
-      ...prev,
-      action_remarks: newValue
-    }));
-    
-    // Clear any existing timeout
-    if (window.remarksTimeout) {
-      clearTimeout(window.remarksTimeout);
-    }
-    
-    // Show typing indicator
-    setIsTyping(true);
-    
-    // Set new timeout - generate form only after user stops typing for 1.5 seconds
-    window.remarksTimeout = setTimeout(() => {
-      setIsTyping(false);
-      generateAndShowCSForm();
-    }, 1500);
-  }}
+  onChange={(e) => handleRemarksChange(e.target.value)}
   placeholder="Enter approval remarks..."
   rows={3}
 />
+
 
      {isTyping && (
       <p style={{color: '#666', fontSize: '12px', margin: '5px 0'}}>
@@ -1435,35 +1459,13 @@ const handleReject = async (requestId, remarks = "Rejected via dashboard") => {
               <div style={styles.remarksSection}>
                 <label style={styles.remarksLabel}>Reason for Disapproval:</label>
                 <textarea
-      style={styles.remarksTextarea}
-      value={actionRemarks}
-      onChange={(e) => {
-        const newValue = e.target.value;
-        setActionRemarks(newValue);
-        
-        // Update realTimeFormData immediately for UI
-        setRealTimeFormData(prev => ({
-          ...prev,
-          action_remarks: newValue
-        }));
-        
-        // Clear any existing timeout
-        if (window.remarksTimeout) {
-          clearTimeout(window.remarksTimeout);
-        }
-        
-        // Set new timeout - generate form only after user stops typing for 1.5 seconds
-        window.remarksTimeout = setTimeout(() => {
-          generateAndShowCSForm();
-        }, 2000);
-        
-        // Show typing indicator
-        setIsTyping(true);
-        setTimeout(() => setIsTyping(false), 1500);
-      }}
-      placeholder="Enter reason for disapproval..."
-      rows={3}
-    />
+  style={styles.remarksTextarea}
+  value={actionRemarks}
+  onChange={(e) => handleRemarksChange(e.target.value)}
+  placeholder="Enter reason for disapproval..."
+  rows={3}
+/>
+
     {isTyping && (
       <p style={{color: '#666', fontSize: '12px', margin: '5px 0'}}>
         Form will update when you stop typing...

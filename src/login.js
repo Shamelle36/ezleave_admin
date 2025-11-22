@@ -12,6 +12,12 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const API_URL =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "http://192.168.254.101:5000"; // replace with your laptop's local IP
+
+
   // Auto-check session
   useEffect(() => {
     const savedUser = localStorage.getItem("admin");
@@ -27,7 +33,7 @@ const handleLogin = async (e) => {
 
   try {
     // First try the main admin login
-    let res = await axios.post("http://localhost:5000/api/auth/login", {
+    let res = await axios.post(`${API_URL}/api/auth/login`, {
       email,
       password,
     });
@@ -42,7 +48,7 @@ const handleLogin = async (e) => {
   } catch (err) {
     // If admin login fails, try the department account login
     try {
-      const res = await axios.post("http://localhost:5000/api/authAdmin/login", {
+      const res = await axios.post(`${API_URL}/api/authAdmin/login`, {
         email,
         password,
       });

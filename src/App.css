@@ -180,4 +180,131 @@
   user-select: none;
 }
 
+@media screen and (max-width: 1024px) {
 
+  html, body {
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+  }
+
+  .container {
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    justify-content: flex-start; /* ← CHANGED */
+    background-color: #009205;
+  }
+
+  .wrapper {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    background-color: transparent !important;
+    min-height: 100vh; /* ← ADDED */
+  }
+
+  /* LOGO AREA */
+  .col1 {
+    background-color: transparent;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 50px 0 20px 0; /* ← REDUCED BOTTOM PADDING */
+    margin: 0;
+    flex-shrink: 0; /* ← ADDED */
+  }
+
+  /* WHITE LOGIN MODAL — FULL HEIGHT */
+  .col2 {
+    background-color: white;
+    width: 100vw;
+    border-radius: 40px 40px 0 0;
+    padding: 40px 20px;
+    margin: 0;
+    box-shadow: 0 -5px 25px rgba(0, 0, 0, 0.2);
+    flex-grow: 1; /* ← ADDED */
+    min-height: calc(100vh - 200px); /* ← ADDED */
+  }
+}
+
+
+@media screen and (max-width: 768px) {
+  .wrapper {
+    gap: 20px;
+  }
+
+  .col1 .circle {
+    width: 200px;
+    height: 200px;
+  }
+
+  .col1 .circle-inner {
+    width: 150px;
+    height: 150px;
+  }
+
+  .col2 {
+    padding: 30px 15px;
+  }
+
+  .col2 h2 {
+    font-size: 22px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .wrapper {
+    gap: 15px;
+  }
+
+  .col1 .circle {
+    width: 180px;
+    height: 180px;
+  }
+
+  .col1 .circle-inner {
+    width: 120px;
+    height: 120px;
+  }
+
+  .col2 {
+    padding: 20px 15px;
+  }
+
+  .col2 h2 {
+    font-size: 20px;
+  }
+
+  .col2 form input {
+    width: 100%;
+    font-size: 13px;
+    padding: 8px;
+  }
+
+  .col2 form button {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .forgot-password, .signup {
+    font-size: 12px;
+  }
+
+  .lines .or p {
+    font-size: 10px;
+  }
+
+  .social-login button {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  .col1 {
+    margin-bottom: 10px;
+  }
+}
