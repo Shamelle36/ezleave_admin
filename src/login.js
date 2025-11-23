@@ -15,7 +15,7 @@ function Login() {
   const API_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "http://10.242.224.197:5000"; // replace with your laptop's local IP
+    : "http://10.242.224.105:5000"; // replace with your laptop's local IP
 
     useEffect(() => {
     document.body.classList.add("login-no-scroll");

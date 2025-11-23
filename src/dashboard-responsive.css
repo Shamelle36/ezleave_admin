@@ -136,20 +136,22 @@
 
   /* Container for ALL 6 cards in horizontal scroll */
   .cards {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
     gap: 10px !important;
     padding: 12px !important;
-    overflow-x: auto !important; /* Disable horizontal scroll */
   }
 
+
   .card-box {
-    padding: 16px !important; /* Spacing without height */
+    flex: 0 0 calc(33.33% - 10px) !important;
     height: auto !important;
     border-radius: 12px !important;
     box-shadow: 0 3px 10px rgba(0,0,0,0.12) !important;
-    display: block !important;  /* prevent flex stretching */
+    padding: 16px !important;
   }
+
+
   .cards::-webkit-scrollbar {
     display: none !important;
   }

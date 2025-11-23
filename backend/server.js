@@ -20,7 +20,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: ["http://localhost:3001", "http://10.242.224.197:3001"],
+  origin: ["http://localhost:3001", "http://10.242.224.105:3001"],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true
 }));

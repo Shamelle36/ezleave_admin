@@ -119,7 +119,7 @@ function Dashboard() {
   const API_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "http://10.242.224.197:5000";
+    : "http://10.242.224.105:5000";
 
   // Fetch attendance statistics
   useEffect(() => {
