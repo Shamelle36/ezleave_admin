@@ -182,11 +182,11 @@
 
 @media screen and (max-width: 1024px) {
 
-  html, body {
+  body.login-no-scroll {
     overflow: hidden;
-    height: 100%;
-    width: 100%;
+    height: 100vh;
   }
+
 
   .container {
     height: 100%;

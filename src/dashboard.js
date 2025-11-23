@@ -18,11 +18,13 @@ import {
   faClock,
   faBars,
   faTimes,
+  faArrowRight
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { useState } from 'react';
 import './dashboardCalendar.css';
+import './dashboard-responsive.css'; // Import the responsive CSS
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 function Dashboard() {
@@ -62,6 +64,7 @@ function Dashboard() {
   const [department, setDepartment] = useState(localStorage.getItem("department") || "");
   const [officeHead, setOfficeHead] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTable, setActiveTable] = useState('attendance'); // 'attendance' or 'leave'
 
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -116,9 +119,45 @@ function Dashboard() {
   const API_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "http://192.168.254.101:5000"; // replace with your laptop's local IP
+    : "http://10.242.224.197:5000";
 
-  
+  // Fetch attendance statistics
+  useEffect(() => {
+    const fetchAttendanceStats = async () => {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const response = await fetch(`${API_URL}/api/attendance?date=${today}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Calculate stats from attendance data
+        const present = data.filter(log => log.am_checkin || log.pm_checkin).length;
+        const absent = data.filter(log => !log.am_checkin && !log.pm_checkin).length;
+        const late = data.filter(log => {
+          // Simple late calculation - you might want to adjust this logic
+          const amCheckinTime = log.am_checkin ? new Date(`1970-01-01T${log.am_checkin}`) : null;
+          const lateThreshold = new Date('1970-01-01T08:00:00'); // 8:00 AM as threshold
+          return amCheckinTime && amCheckinTime > lateThreshold;
+        }).length;
+
+        setAttendanceStats({
+          present,
+          absent,
+          late,
+          leave: 0, // You might need to fetch this separately
+        });
+      } catch (err) {
+        console.error("❌ Error fetching attendance stats:", err);
+      }
+    };
+
+    fetchAttendanceStats();
+  }, []);
+
   useEffect(() => {
     const counts = leaveRequests.reduce(
       (acc, curr) => {
@@ -243,21 +282,21 @@ function Dashboard() {
     {
       title: 'Present Employees',
       description: '2% increase more than last month',
-      value: 0,
+      value: attendanceStats.present,
       background: styles.card1,
       paddingTop: '5px',
     },
     {
       title: 'Absent Employees',
       description: '2% less than last month',
-      value: 0,
+      value: attendanceStats.absent,
       background: styles.card2,
       paddingTop: '20px',
     },
     {
       title: 'Late Employees',
       description: '2% less than last month',
-      value: 0,
+      value: attendanceStats.late,
       background: styles.card3,
       paddingTop: '20px',
     },
@@ -434,17 +473,17 @@ function Dashboard() {
   return (
     <div style={styles.dashboardContainer}>
       {/* Mobile Header with Hamburger */}
-      <div style={styles.mobileHeader}>
+      <div className="mobile-header">
         <button 
-          style={styles.hamburger}
+          className="hamburger"
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         >
           <FontAwesomeIcon icon={isSidebarOpen ? faTimes : faBars} />
         </button>
-        <img src={require('./images/logo_ez.png')} alt="logo" style={styles.mobileLogo} />
-        <div style={styles.mobileHeaderRight}>
-          <FontAwesomeIcon icon={faBell} style={styles.mobileIconBell} />
-          <div style={styles.mobileProfile} onClick={() => setShowProfileMenu(!showProfileMenu)}>
+        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+        <div className="mobile-header-right">
+          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
+          <div className="mobile-profile" onClick={() => setShowProfileMenu(!showProfileMenu)}>
             <img
               src={
                 admin?.profile_picture ||
@@ -452,7 +491,7 @@ function Dashboard() {
                 "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
               }
               alt="Profile"
-              style={styles.mobileProfileImage}
+              className="mobile-profile-image"
             />
           </div>
         </div>
@@ -460,7 +499,7 @@ function Dashboard() {
 
       {/* Mobile Profile Dropdown */}
       {showProfileMenu && (
-        <div style={styles.mobileProfileDropdown}>
+        <div className="mobile-profile-dropdown">
           <button style={styles.dropdownItem} onClick={() => setShowProfileModal(true)}>
             <FontAwesomeIcon icon={faUserCog} style={styles.dropdownIcon} /> My Profile
           </button>
@@ -478,13 +517,10 @@ function Dashboard() {
 
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
-        <div style={styles.mobileOverlay} onClick={() => setIsSidebarOpen(false)}></div>
+        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
-      <div style={{
-        ...styles.sidebar,
-        ...(isSidebarOpen ? styles.sidebarOpen : styles.sidebarClosed)
-      }}>
+      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
         <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
         <ul style={styles.sidebarList}>
           {allowedMenus.map((item) => {
@@ -528,7 +564,7 @@ function Dashboard() {
       </div>
 
       {/* Desktop Header */}
-      <div style={styles.header}>
+      <div className="desktop-header" style={styles.header}>
         <input type="text" placeholder="Search..." style={styles.search} />
 
         <div style={styles.headerRight}>
@@ -586,17 +622,17 @@ function Dashboard() {
             <h2 style={styles.modalTitle}>My Profile</h2>
 
             <div style={styles.profileSection}>
-              <div className="photoContainer">
+              <div className="photo-container">
                 <img
                   src={
                     profileData.profile_picture ||
                     "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
                   }
                   alt="Profile"
-                  className="modalProfileImage"
+                  className="modal-profile-image"
                 />
-                <div className="photoOverlay">
-                  <label htmlFor="profileUpload" className="overlayText">
+                <div className="photo-overlay">
+                  <label htmlFor="profileUpload" className="overlay-text">
                     {isUploading ? "Uploading..." : "Change Photo"}
                   </label>
                   <input
@@ -730,69 +766,11 @@ function Dashboard() {
                 Cancel
               </button>
             </div>
-
-            <style>
-              {`
-                .photoContainer {
-                  position: relative;
-                  width: 120px;
-                  height: 120px;
-                  border-radius: 50%;
-                  overflow: hidden;
-                  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-                  cursor: pointer;
-                }
-
-                .modalProfileImage {
-                  width: 100%;
-                  height: 100%;
-                  object-fit: cover;
-                  border-radius: 50%;
-                  transition: transform 0.3s ease;
-                }
-
-                .photoOverlay {
-                  position: absolute;
-                  top: 0;
-                  left: 0;
-                  width: 100%;
-                  height: 100%;
-                  background: rgba(0, 0, 0, 0.55);
-                  color: #fff;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  opacity: 0;
-                  transition: opacity 0.3s ease;
-                  border-radius: 50%;
-                }
-
-                .photoContainer:hover .photoOverlay {
-                  opacity: 1;
-                }
-
-                .photoContainer:hover .modalProfileImage {
-                  transform: scale(1.05);
-                }
-
-                .overlayText {
-                  font-size: 0.9rem;
-                  font-weight: 500;
-                }
-
-                @media (max-width: 768px) {
-                  .photoContainer {
-                    width: 100px;
-                    height: 100px;
-                  }
-                }
-              `}
-            </style>
           </div>
         </div>
       )}
 
-      <div style={styles.content}>
+      <div className="content" style={styles.content}>
         {showLogoutModal && (
           <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
@@ -816,20 +794,20 @@ function Dashboard() {
           </div>
         )}
 
-        <div style={styles.cnt1}>
-          <div style={styles.cards}>
+        <div className="cnt1" style={styles.cnt1}>
+          <div className="cards" style={styles.cards}>
             {cardsData.map((card, index) => (
-              <div key={index} style={card.background}>
-                <p style={{ fontSize: '15px', fontWeight: '500' }}>{card.title}</p>
-                <p style={{ fontSize: '12px', paddingTop: '5px' }}>{card.description}</p>
-                <p style={{ fontSize: '25px', paddingTop: card.paddingTop, fontWeight: '600' }}>
+              <div key={index} className="card-box" style={card.background}>
+                <p className="card-title">{card.title}</p>
+                <p className="card-desc">{card.description}</p>
+                <p className="card-value">
                   {card.value}
                 </p>
               </div>
             ))}
           </div>
 
-          <div style={styles.calendar}>
+          <div className="calendar" style={styles.calendar}>
             <Calendar
               onChange={setDate}
               value={date}
@@ -844,210 +822,462 @@ function Dashboard() {
           </div>
         </div>
 
-        <div style={styles.row2}>
-          <div style={styles.tableContainer}>
-            <h5 style={{ padding: "5px" }}>Attendance Status</h5>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>ID</th>
-                  <th style={styles.th}>Name</th>
-                  <th style={styles.th}>AM (In / Out)</th>
-                  <th style={styles.th}>PM (In / Out)</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attendance.length > 0 ? (
-                  attendance.slice(0, 7).map(emp => (
-                    <tr key={emp.id}>
-                      <td style={styles.td}>{emp.id}</td>
-                      <td style={styles.td}>{emp.name}</td>
-                      <td style={styles.td}>
-                        {emp.amCheckin || "-"} / {emp.amCheckout || "-"}
-                      </td>
-                      <td style={styles.td}>
-                        {emp.pmCheckin || "-"} / {emp.pmCheckout || "-"}
-                      </td>
-                      <td style={styles.td}>{emp.status}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan="6"
-                      style={{ textAlign: "center", padding: "10px", color: "#777" }}
-                    >
-                      No attendance records found for today.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* MOBILE: Table Toggle Section */}
+        <div className="table-toggle-section">
+          <div className="toggle-header">
+            <button 
+              className={`toggle-btn ${activeTable === 'attendance' ? 'active' : ''}`}
+              onClick={() => setActiveTable('attendance')}
+            >
+              Attendance Status
+            </button>
+            <button 
+              className={`toggle-btn ${activeTable === 'leave' ? 'active' : ''}`}
+              onClick={() => setActiveTable('leave')}
+            >
+              Leave Status
+            </button>
           </div>
 
-          <div style={styles.tableContainer}>
-            <h5 style={{ padding: '5px' }}>Leave Status</h5>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>ID</th>
-                  <th style={styles.th}>Name</th>
-                  <th style={styles.th}>Leave Type</th>
-                  <th style={styles.th}>Department</th>
-                  <th style={styles.th}>Date</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaveRequests.length > 0 ? (
-                  leaveRequests.map(item => (
-                    <tr key={item.id}>
-                      <td style={styles.td}>{item.id}</td>
-                      <td style={styles.td}>{item.first_name} {item.last_name}</td>
-                      <td style={styles.td}>{item.leave_type}</td>
-                      <td style={styles.td}>{item.department}</td>
-                      <td style={styles.td}>
-                        {item.inclusive_date_start || "-"} 
-                        {item.inclusive_date_end ? ` - ${item.inclusive_date_end}` : ""}
-                      </td>
-                      <td style={styles.td}>
-                        <span
-                          style={{
-                            color:
-                              item.status === "Approved"
-                                ? "green"
-                                : item.status === "Pending"
-                                ? "orange"
-                                : "red",
-                            fontWeight: "bold"
-                          }}
-                        >
-                          {item.status}
-                        </span>
+          {/* Attendance Table */}
+          <div className={`toggle-content ${activeTable === 'attendance' ? 'active' : ''}`}>
+            <div className="table-container" style={styles.tableContainer}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>ID</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>AM (In / Out)</th>
+                    <th style={styles.th}>PM (In / Out)</th>
+                    <th style={styles.th}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.length > 0 ? (
+                    attendance.slice(0, 7).map(emp => (
+                      <tr key={emp.id}>
+                        <td style={styles.td}>{emp.id}</td>
+                        <td style={styles.td}>{emp.name}</td>
+                        <td style={styles.td}>
+                          {emp.amCheckin || "-"} / {emp.amCheckout || "-"}
+                        </td>
+                        <td style={styles.td}>
+                          {emp.pmCheckin || "-"} / {emp.pmCheckout || "-"}
+                        </td>
+                        <td style={styles.td}>{emp.status}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: "center", padding: "20px", color: "#777" }}>
+                        No attendance records found for today.
                       </td>
                     </tr>
-                  ))
-                ) : (
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <button className="mobile-view-all-btn" onClick={() => navigate('/attendance')}>
+              View All Attendance <FontAwesomeIcon icon={faArrowRight} />
+            </button>
+          </div>
+
+          {/* Leave Status Table */}
+          <div className={`toggle-content ${activeTable === 'leave' ? 'active' : ''}`}>
+            <div className="table-container" style={styles.tableContainer}>
+              <table style={styles.table}>
+                <thead>
                   <tr>
-                    <td colSpan="6" style={{ textAlign: "center", padding: "10px", color: "#777" }}>
-                      No leave requests found.
-                    </td>
+                    <th style={styles.th}>ID</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>Leave Type</th>
+                    <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Date</th>
+                    <th style={styles.th}>Status</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {leaveRequests.length > 0 ? (
+                    leaveRequests.slice(0, 7).map(item => (
+                      <tr key={item.id}>
+                        <td style={styles.td}>{item.id}</td>
+                        <td style={styles.td}>{item.first_name} {item.last_name}</td>
+                        <td style={styles.td}>{item.leave_type}</td>
+                        <td style={styles.td}>{item.department}</td>
+                        <td style={styles.td}>
+                          {item.inclusive_date_start || "-"} 
+                          {item.inclusive_date_end ? ` - ${item.inclusive_date_end}` : ""}
+                        </td>
+                        <td style={styles.td}>
+                          <span
+                            style={{
+                              color:
+                                item.status === "Approved"
+                                  ? "green"
+                                  : item.status === "Pending"
+                                  ? "orange"
+                                  : "red",
+                              fontWeight: "bold"
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: "center", padding: "20px", color: "#777" }}>
+                        No leave requests found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <button className="mobile-view-all-btn" onClick={() => navigate('/leaveManagement')}>
+              View All Leave Requests <FontAwesomeIcon icon={faArrowRight} />
+            </button>
           </div>
         </div>
 
-        <div style={styles.row3}>
-          <div style={styles.chartContainer}>
-            <h4>Attendance Statistics</h4>
-            <div style={styles.pieAndLegend}>
-              <PieChart width={200} height={185}>
-                <Pie
-                  data={pieData}
-                  cx={90}
-                  cy={90}
-                  innerRadius={35}
-                  outerRadius={60}
-                  labelLine={false}
-                  label={pieData.length === 1 ? false : renderCustomizedLabel}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
+        {/* MOBILE: Charts and Notifications Row */}
+{/* MOBILE: Charts and Notifications Row */}
+<div className="row3">
+  {/* Attendance Chart Section */}
+  <div className="chart-section">
+    <div className="section-header">
+      <h3>Attendance Statistics</h3>
+      <button className="nav-arrow">→</button>
+    </div>
+    <div className="chart-container">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+        <PieChart width={200} height={185}>
+          <Pie
+            data={pieData}
+            cx={90}
+            cy={90}
+            innerRadius={35}
+            outerRadius={60}
+            labelLine={false}
+            label={pieData.length === 1 ? false : renderCustomizedLabel}
+            dataKey="value"
+          >
+            {pieData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+        {/* Mobile Legend */}
+        <div style={{ 
+          display: 'flex', 
+          flexWrap: 'wrap', 
+          justifyContent: 'center', 
+          gap: '8px', 
+          marginTop: '10px',
+          fontSize: '12px'
+        }}>
+          {pieData.map((entry, index) => (
+            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                backgroundColor: COLORS[index % COLORS.length],
+              }} />
+              <span>{entry.name}: {entry.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
 
-              <div style={styles.legendContainer}>
-                {pieData.map((entry, index) => (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                    <div style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      backgroundColor: COLORS[index % COLORS.length],
-                      marginRight: 8
-                    }} />
-                    <span style={{ fontSize: '13px' }}>{entry.name}</span>
-                  </div>
-                ))}
-              </div>
+  {/* Monthly Leaves Section */}
+  <div className="leaves-section">
+    <div className="section-header">
+      <h3>Monthly Leaves Filed</h3>
+      <button className="nav-arrow">→</button>
+    </div>
+    
+    {/* Mobile Dropdown */}
+    <div className="leaves-dropdown-container">
+      <div 
+        className={`leaves-dropdown ${isOpen ? 'leaves-dropdown-open' : ''}`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span>{selected}</span>
+        <span className={`leaves-dropdown-arrow ${isOpen ? 'open' : ''}`}>▼</span>
+      </div>
+      
+      {isOpen && (
+        <div className="leaves-dropdown-options">
+          {options.map((option, index) => (
+            <div
+              key={index}
+              className="leaves-dropdown-option"
+              onClick={() => handleSelect(option)}
+            >
+              {option}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div style={{ padding: '16px', width: '100%', height: '200px' }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={monthlyLeaves}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis 
+            dataKey="month" 
+            tick={{ fontSize: 10, fill: '#000' }} 
+            interval={0}
+          />
+          <YAxis tick={{ fontSize: 10, fill: '#000' }} />
+          <Tooltip />
+          <Bar dataKey="value" fill="#8884d8" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+
+  {/* Notifications Section */}
+  <div className="notification-section">
+    <div className="section-header">
+      <h3>Recent Notifications</h3>
+      <button className="nav-arrow">→</button>
+    </div>
+    <div className="notification-container">
+      <ul style={styles.notificationList}>
+        {notifications.map(notification => {
+          const { icon, color } = getNotificationStyle(notification.type);
+          return (
+            <li key={notification.id} style={styles.notificationItem}>
+              <FontAwesomeIcon
+                icon={icon}
+                style={{ ...styles.notificationIcon, color }}
+              />
+              <span style={styles.notificationText}>
+                {notification.message}
+              </span>
+              <button style={styles.viewButton}>View</button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  </div>
+</div>
+
+        {/* DESKTOP: Original Tables Layout */}
+        <div className="desktop-tables">
+          <div className="row2" style={styles.row2}>
+            <div className="table-container" style={styles.tableContainer}>
+              <h5 style={{ padding: "5px" }}>Attendance Status</h5>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>ID</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>AM (In / Out)</th>
+                    <th style={styles.th}>PM (In / Out)</th>
+                    <th style={styles.th}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.length > 0 ? (
+                    attendance.slice(0, 7).map(emp => (
+                      <tr key={emp.id}>
+                        <td style={styles.td}>{emp.id}</td>
+                        <td style={styles.td}>{emp.name}</td>
+                        <td style={styles.td}>
+                          {emp.amCheckin || "-"} / {emp.amCheckout || "-"}
+                        </td>
+                        <td style={styles.td}>
+                          {emp.pmCheckin || "-"} / {emp.pmCheckout || "-"}
+                        </td>
+                        <td style={styles.td}>{emp.status}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: "center", padding: "10px", color: "#777" }}>
+                        No attendance records found for today.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-container" style={styles.tableContainer}>
+              <h5 style={{ padding: '5px' }}>Leave Status</h5>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>ID</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>Leave Type</th>
+                    <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Date</th>
+                    <th style={styles.th}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaveRequests.length > 0 ? (
+                    leaveRequests.map(item => (
+                      <tr key={item.id}>
+                        <td style={styles.td}>{item.id}</td>
+                        <td style={styles.td}>{item.first_name} {item.last_name}</td>
+                        <td style={styles.td}>{item.leave_type}</td>
+                        <td style={styles.td}>{item.department}</td>
+                        <td style={styles.td}>
+                          {item.inclusive_date_start || "-"} 
+                          {item.inclusive_date_end ? ` - ${item.inclusive_date_end}` : ""}
+                        </td>
+                        <td style={styles.td}>
+                          <span
+                            style={{
+                              color:
+                                item.status === "Approved"
+                                  ? "green"
+                                  : item.status === "Pending"
+                                  ? "orange"
+                                  : "red",
+                              fontWeight: "bold"
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: "center", padding: "10px", color: "#777" }}>
+                        No leave requests found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
+        </div>
 
-          <div style={styles.cardBar}>
-            <div style={styles.header5}>
-              <h3 style={styles.title}>Monthly Leaves Filed</h3>
-
-              <div style={{ width: '200px', position: 'relative' }}>
-                <div
-                  onClick={() => setIsOpen(!isOpen)}
-                  style={styles.dropdown}
-                >
-                  {selected}
-                </div>
-
-                {isOpen && (
-                  <div
-                    style={styles.openDropdown}
+        {/* DESKTOP: Charts and Notifications */}
+        <div className="desktop-charts">
+          <div className="row3" style={styles.row3}>
+            <div style={styles.chartContainer}>
+              <h4>Attendance Statistics</h4>
+              <div style={styles.pieAndLegend}>
+                <PieChart width={200} height={185}>
+                  <Pie
+                    data={pieData}
+                    cx={90}
+                    cy={90}
+                    innerRadius={35}
+                    outerRadius={60}
+                    labelLine={false}
+                    label={pieData.length === 1 ? false : renderCustomizedLabel}
+                    dataKey="value"
                   >
-                    {options.map((option, index) => (
-                      <div
-                        key={index}
-                        onClick={() => handleSelect(option)}
-                        style={{
-                          padding: '10px',
-                          cursor: 'pointer',
-                          borderBottom: '1px solid #eee',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                      >
-                        {option}
-                      </div>
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
-                  </div>
-                )}
+                  </Pie>
+                </PieChart>
+
+                <div style={styles.legendContainer}>
+                  {pieData.map((entry, index) => (
+                    <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: COLORS[index % COLORS.length],
+                        marginRight: 8
+                      }} />
+                      <span style={{ fontSize: '13px' }}>{entry.name}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div style={{ width: '330px' }}>
-              <ResponsiveContainer width={"100%"} height={165}>
-                <BarChart data={monthlyLeaves}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#000' }} />
-                  <YAxis tick={{ fontSize: 12, fill: '#000' }} />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#8884d8" />
-                </BarChart>
-              </ResponsiveContainer>
+            <div style={styles.cardBar}>
+              <div style={styles.header5}>
+                <h3 style={styles.title}>Monthly Leaves Filed</h3>
+
+                <div style={{ width: '200px', position: 'relative' }}>
+                  <div
+                    onClick={() => setIsOpen(!isOpen)}
+                    style={styles.dropdown}
+                  >
+                    {selected}
+                  </div>
+
+                  {isOpen && (
+                    <div
+                      style={styles.openDropdown}
+                    >
+                      {options.map((option, index) => (
+                        <div
+                          key={index}
+                          onClick={() => handleSelect(option)}
+                          style={{
+                            padding: '10px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #eee',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                        >
+                          {option}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ width: '330px' }}>
+                <ResponsiveContainer width={"100%"} height={165}>
+                  <BarChart data={monthlyLeaves}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#000' }} />
+                    <YAxis tick={{ fontSize: 12, fill: '#000' }} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#8884d8" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
 
-          <div style={styles.notificationContainer}>
-            <ul style={styles.notificationList}>
-              {notifications.map(notification => {
-                const { icon, color } = getNotificationStyle(notification.type);
+            <div style={styles.notificationContainer}>
+              <ul style={styles.notificationList}>
+                {notifications.map(notification => {
+                  const { icon, color } = getNotificationStyle(notification.type);
 
-                return (
-                  <li key={notification.id} style={styles.notificationItem}>
-                    <FontAwesomeIcon
-                      icon={icon}
-                      style={{ ...styles.notificationIcon, color }}
-                    />
+                  return (
+                    <li key={notification.id} style={styles.notificationItem}>
+                      <FontAwesomeIcon
+                        icon={icon}
+                        style={{ ...styles.notificationIcon, color }}
+                      />
 
-                    <span style={styles.notificationText}>
-                      {notification.message}
-                    </span>
+                      <span style={styles.notificationText}>
+                        {notification.message}
+                      </span>
 
-                    <button style={styles.viewButton}>View Details</button>
-                  </li>
-                );
-              })}
-            </ul>
+                      <button style={styles.viewButton}>View Details</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -1062,80 +1292,6 @@ const styles = {
     backgroundColor: '#F8F8F8',
     position: 'relative',
   },
-  // Mobile Styles
-  mobileHeader: {
-    display: 'none',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 15px',
-    backgroundColor: '#009205',
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100%',
-    zIndex: 1001,
-    boxSizing: 'border-box',
-    '@media (max-width: 768px)': {
-      display: 'flex',
-    },
-  },
-  hamburger: {
-    background: 'none',
-    border: 'none',
-    color: '#fff',
-    fontSize: '20px',
-    cursor: 'pointer',
-    padding: '5px',
-  },
-  mobileLogo: {
-    width: '60px',
-    height: 'auto',
-  },
-  mobileHeaderRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '15px',
-  },
-  mobileIconBell: {
-    color: '#fff',
-    fontSize: '20px',
-  },
-  mobileProfile: {
-    cursor: 'pointer',
-  },
-  mobileProfileImage: {
-    width: '35px',
-    height: '35px',
-    borderRadius: '50%',
-    objectFit: 'cover',
-  },
-  mobileProfileDropdown: {
-    position: 'fixed',
-    top: '60px',
-    right: '15px',
-    backgroundColor: '#fff',
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-    borderRadius: '10px',
-    padding: '8px 0',
-    width: '150px',
-    zIndex: 1002,
-    '@media (max-width: 768px)': {
-      display: 'block',
-    },
-  },
-  mobileOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    zIndex: 998,
-    '@media (min-width: 769px)': {
-      display: 'none',
-    },
-  },
-  // Sidebar Styles
   sidebar: {
     backgroundColor: '#009205',
     width: '280px',
@@ -1145,28 +1301,12 @@ const styles = {
     boxSizing: 'border-box',
     transition: 'transform 0.3s ease',
     zIndex: 999,
-    '@media (max-width: 768px)': {
-      transform: 'translateX(-100%)',
-    },
-  },
-  sidebarOpen: {
-    '@media (max-width: 768px)': {
-      transform: 'translateX(0)',
-    },
-  },
-  sidebarClosed: {
-    '@media (max-width: 768px)': {
-      transform: 'translateX(-100%)',
-    },
   },
   logo: {
     width: '100px',
     height: 'auto',
     display: 'block',
     margin: '20px auto',
-    '@media (max-width: 768px)': {
-      margin: '10px auto 30px',
-    },
   },
   sidebarList: {
     listStyleType: 'none',
@@ -1182,14 +1322,10 @@ const styles = {
     fontSize: '16px',
     gap: '10px',
     transition: 'background-color 0.2s ease',
-    '@media (max-width: 768px)': {
-      padding: '12px 15px',
-    },
   },
   icon: {
     color: '#fff',
   },
-  // Desktop Header
   header: {
     display: 'flex',
     flexDirection: 'row',
@@ -1203,9 +1339,6 @@ const styles = {
     width: 'calc(100% - 280px)',
     zIndex: 1000,
     boxSizing: 'border-box',
-    '@media (max-width: 768px)': {
-      display: 'none',
-    },
   },
   search: {
     padding: '10px',
@@ -1283,7 +1416,6 @@ const styles = {
   dropdownIcon: {
     fontSize: "14px",
   },
-  // Content Area
   content: {
     marginLeft: '280px',
     minHeight: '100vh',
@@ -1291,11 +1423,6 @@ const styles = {
     paddingTop: '70px',
     width: 'calc(100% - 280px)',
     boxSizing: 'border-box',
-    '@media (max-width: 768px)': {
-      marginLeft: '0',
-      width: '100%',
-      paddingTop: '60px',
-    },
   },
   cnt1: {
     display: 'flex',
@@ -1305,11 +1432,6 @@ const styles = {
     gap: '20px',
     justifyContent: 'space-around',
     alignItems: 'flex-start',
-    '@media (max-width: 768px)': {
-      flexDirection: 'column',
-      padding: '15px',
-      gap: '15px',
-    },
   },
   cards: {
     display: 'flex',
@@ -1318,10 +1440,6 @@ const styles = {
     justifyContent: 'space-between',
     gap: '5px',
     flex: '1 1 600px',
-    '@media (max-width: 768px)': {
-      flex: 'none',
-      width: '100%',
-    },
   },
   card: {
     backgroundColor: '#fff',
@@ -1333,14 +1451,6 @@ const styles = {
     width: 'calc(33.333% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
-    '@media (max-width: 768px)': {
-      width: 'calc(50% - 10px)',
-      padding: '15px',
-      margin: '5px 0',
-    },
-    '@media (max-width: 480px)': {
-      width: '100%',
-    },
   },
   card1: {
     backgroundColor: '#07A5FA55',
@@ -1352,14 +1462,6 @@ const styles = {
     width: 'calc(33.333% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
-    '@media (max-width: 768px)': {
-      width: 'calc(50% - 10px)',
-      padding: '15px',
-      margin: '5px 0',
-    },
-    '@media (max-width: 480px)': {
-      width: '100%',
-    },
   },
   card2: {
     backgroundColor: '#EA050555',
@@ -1371,14 +1473,6 @@ const styles = {
     width: 'calc(33.333% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
-    '@media (max-width: 768px)': {
-      width: 'calc(50% - 10px)',
-      padding: '15px',
-      margin: '5px 0',
-    },
-    '@media (max-width: 480px)': {
-      width: '100%',
-    },
   },
   card3: {
     backgroundColor: '#FAAB0055',
@@ -1390,14 +1484,6 @@ const styles = {
     width: 'calc(33.333% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
-    '@media (max-width: 768px)': {
-      width: 'calc(50% - 10px)',
-      padding: '15px',
-      margin: '5px 0',
-    },
-    '@media (max-width: 480px)': {
-      width: '100%',
-    },
   },
   calendar: {
     borderRadius: '8px',
@@ -1407,10 +1493,6 @@ const styles = {
     flex: '1 1 auto',
     boxSizing: 'border-box',
     flex: '1 1 250px',
-    '@media (max-width: 768px)': {
-      width: '100%',
-      maxWidth: 'none',
-    },
   },
   row2: {
     display: 'flex',
@@ -1420,11 +1502,6 @@ const styles = {
     alignItems: 'flex-start',
     gap: '20px',
     flexWrap: 'wrap',
-    '@media (max-width: 768px)': {
-      flexDirection: 'column',
-      padding: '15px',
-      gap: '15px',
-    },
   },
   tableContainer: {
     flex: '1 1 60%',
@@ -1437,10 +1514,6 @@ const styles = {
     boxSizing: 'border-box',
     minHeight: '300px',
     overflowX: 'auto',
-    '@media (max-width: 768px)': {
-      width: '100%',
-      maxWidth: 'none',
-    },
   },
   table: {
     borderCollapse: 'collapse',
@@ -1467,11 +1540,6 @@ const styles = {
     alignItems: 'flex-start',
     gap: '20px',
     flexWrap: 'wrap',
-    '@media (max-width: 768px)': {
-      flexDirection: 'column',
-      padding: '15px',
-      gap: '15px',
-    },
   },
   chartContainer: {
     backgroundColor: '#fff',
@@ -1486,10 +1554,6 @@ const styles = {
     minWidth: '280px',
     maxWidth: '400px',
     boxSizing: 'border-box',
-    '@media (max-width: 768px)': {
-      width: '100%',
-      maxWidth: 'none',
-    },
   },
   pieAndLegend: {
     display: 'flex',
@@ -1513,21 +1577,12 @@ const styles = {
     minWidth: '300px',
     maxWidth: '450px',
     boxSizing: 'border-box',
-    '@media (max-width: 768px)': {
-      width: '100%',
-      maxWidth: 'none',
-    },
   },
   header5: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '10px',
-    '@media (max-width: 480px)': {
-      flexDirection: 'column',
-      gap: '10px',
-      alignItems: 'flex-start',
-    },
   },
   title: {
     margin: 0,
@@ -1561,10 +1616,6 @@ const styles = {
     minWidth: '300px',
     maxWidth: '550px',
     boxSizing: 'border-box',
-    '@media (max-width: 768px)': {
-      width: '100%',
-      maxWidth: 'none',
-    },
   },
   notificationList: {
     listStyle: 'none',
@@ -1629,10 +1680,6 @@ const styles = {
     width: "400px",
     textAlign: "center",
     boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-    '@media (max-width: 480px)': {
-      width: "90%",
-      padding: "15px",
-    },
   },
   modalActions: {
     marginTop: "20px",
@@ -1676,10 +1723,6 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     animation: "fadeIn 0.3s ease",
-    '@media (max-width: 480px)': {
-      width: "90%",
-      padding: "20px",
-    },
   },
   modalTitle: {
     fontSize: "1.6rem",
