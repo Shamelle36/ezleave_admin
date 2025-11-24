@@ -476,9 +476,9 @@ function Dashboard() {
       <div className="mobile-header">
         <button 
           className="hamburger"
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          onClick={() => setIsSidebarOpen(true)}
         >
-          <FontAwesomeIcon icon={isSidebarOpen ? faTimes : faBars} />
+          <FontAwesomeIcon icon={faBars} />
         </button>
         <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
         <div className="mobile-header-right">
@@ -520,48 +520,71 @@ function Dashboard() {
         <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
-      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
-        <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-        <ul style={styles.sidebarList}>
-          {allowedMenus.map((item) => {
-            const isActive = location.pathname === item.to;
+    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+      <div className="sidebar-header">
+        <button 
+          className="sidebar-close-btn"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+        {/* MOVED: Logo inside sidebar header */}
+        <img 
+          className='logo-sidebar' 
+          src={require('./images/logo_ez.png')} 
+          alt="logo" 
+        />
+      </div>
 
-            return (
-              <li
-                key={item.name}
-                style={{
-                  ...(isActive ? styles.btnActive : {}),
-                }}
-              >
-                <Link
-                  style={{
-                    ...styles.sb,
-                    ...(isActive ? styles.btnActive : {}),
-                  }}
-                  to={item.to}
-                  onClick={() => setIsSidebarOpen(false)}
-                >
-                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-                </Link>
-              </li>
-            );
-          })}
+       <img 
+        src={require('./images/logo_ez.png')} 
+        alt="logo" 
+        style={styles.logo} 
+        className='logo-desktop'
+      />
 
-          <li>
+      <ul className='sidebar-menu-link' style={styles.sidebarList}>
+       {allowedMenus.map((item) => {
+          const isActive = location.pathname === item.to;
+
+        return (
+          <li
+            key={item.name}
+          
+            style={{
+              ...(isActive ? styles.btnActive : {}),
+            }}
+          >
             <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-                setIsSidebarOpen(false);
+              style={{
+                ...styles.sb,
+                ...(isActive ? styles.btnActive : {}),
               }}
+              to={item.to}
+              onClick={() => setIsSidebarOpen(false)}
             >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+              <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
             </Link>
           </li>
-        </ul>
-      </div>
+        );
+      })}
+
+
+        <li>
+          <Link
+            style={styles.sb}
+            to="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setShowLogoutModal(true);
+              setIsSidebarOpen(false);
+            }}
+          >
+            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+          </Link>
+        </li>
+      </ul>
+    </div>
 
       {/* Desktop Header */}
       <div className="desktop-header" style={styles.header}>
@@ -617,8 +640,8 @@ function Dashboard() {
       </div>
 
       {showProfileModal && (
-        <div style={styles.modalOverlayProfile}>
-          <div style={styles.modalContentProfile}>
+        <div style={styles.modalOverlayProfile} className="profile-modal-overlay">
+          <div style={styles.modalContentProfile} className="profile-modal-content">
             <h2 style={styles.modalTitle}>My Profile</h2>
 
             <div style={styles.profileSection}>
@@ -630,49 +653,52 @@ function Dashboard() {
                   }
                   alt="Profile"
                   className="modal-profile-image"
+                  style={styles.modalImage}
+                  
                 />
-                <div className="photo-overlay">
-                  <label htmlFor="profileUpload" className="overlay-text">
-                    {isUploading ? "Uploading..." : "Change Photo"}
-                  </label>
-                  <input
-                    id="profileUpload"
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
+              <div className="photo-overlay">
+                <label htmlFor="profileUpload" className="change-photo-btn">
+                  {isUploading ? "Uploading..." : "Change Photo"}
+                </label>
 
-                      setIsUploading(true);
-                      const formData = new FormData();
-                      formData.append("file", file);
-                      formData.append("upload_preset", "profile_picture");
+                <input
+                  id="profileUpload"
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
 
-                      try {
-                        const res = await fetch(
-                          "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
-                          { method: "POST", body: formData }
-                        );
-                        const data = await res.json();
+                    setIsUploading(true);
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    formData.append("upload_preset", "profile_picture");
 
-                        if (data.secure_url) {
-                          setProfileData((prev) => ({
-                            ...prev,
-                            profile_picture: data.secure_url,
-                          }));
-                        } else {
-                          alert("Upload failed");
-                        }
-                      } catch (err) {
-                        console.error(err);
-                        alert("Upload error");
-                      } finally {
-                        setIsUploading(false);
+                    try {
+                      const res = await fetch(
+                        "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
+                        { method: "POST", body: formData }
+                      );
+                      const data = await res.json();
+
+                      if (data.secure_url) {
+                        setProfileData((prev) => ({
+                          ...prev,
+                          profile_picture: data.secure_url,
+                        }));
+                      } else {
+                        alert("Upload failed");
                       }
-                    }}
-                  />
-                </div>
+                    } catch (err) {
+                      console.error(err);
+                      alert("Upload error");
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }}
+                />
+              </div>
               </div>
             </div>
 
@@ -1300,7 +1326,6 @@ const styles = {
     padding: '20px',
     boxSizing: 'border-box',
     transition: 'transform 0.3s ease',
-    zIndex: 999,
   },
   logo: {
     width: '100px',
@@ -1797,6 +1822,13 @@ const styles = {
     fontWeight: "500",
     transition: "background 0.3s ease",
   },
+  modalImage: {
+    width: '140px',
+    height: '140px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    marginRight: '20px',
+  }
 };
 
 export default Dashboard;

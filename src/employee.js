@@ -22,18 +22,19 @@ import {
   faSearch,
   faTimes,
   faPenToSquare,
-  faUser
+  faUser,
+  faBars
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import Papa from 'papaparse';
 import * as XLSX from "xlsx";
+import './employee-responsive.css';
 
-
-  function Employees() {
- const [employeeRecord, setEmployeeRecords] = useState([]);
- const [filterEmploymentType, setFilterEmploymentType] = useState('');
- const location = useLocation();
+function Employees() {
+  const [employeeRecord, setEmployeeRecords] = useState([]);
+  const [filterEmploymentType, setFilterEmploymentType] = useState('');
+  const location = useLocation();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [employeesToUpload, setEmployeesToUpload] = useState([]);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
@@ -55,8 +56,8 @@ import * as XLSX from "xlsx";
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterEmploymentStatus, setFilterEmploymentStatus] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   
-
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
     email: '',
@@ -71,39 +72,40 @@ import * as XLSX from "xlsx";
     civil_status: '',
   });
 
-    const [showLogoutModal, setShowLogoutModal] = useState(false);
-    const [role, setRole] = useState(localStorage.getItem("role") || "admin");
-    const [userDepartment, setUserDepartment] = useState(localStorage.getItem("department") || "");
-    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  const [userDepartment, setUserDepartment] = useState(localStorage.getItem("department") || "");
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [admin, setAdmin] = useState(null);
 
-  
-    const menuItems = [
-      { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
-      { name: "Employees", icon: faUsers, to: "/employee" },
-      { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
-      { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-      { name: "Message", icon: faEnvelope, to: "/messages" },
-      { name: "Announcement", icon: faBullhorn, to: "/announcement" },
-      { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
-      { name: "User Management", icon: faUserCog, to: "/userManagement" },
-      { name: "Settings", icon: faCog, to: "#" },
-    ];
-  
-    const allowedMenus = menuItems.filter((item) => {
-      if (role === "admin") return true;
-      if (role === "mayor" || role === "office_head") {
-        return [
-          "Dashboard",
-          "Employees",
-          "Attendance",
-          "Leave Management",
-          "Message",
-          "Announcement",
-        ].includes(item.name);
-      }
-      return false;
-    });
-  
+  const menuItems = [
+    { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+    { name: "Employees", icon: faUsers, to: "/employee" },
+    { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+    { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+    { name: "Message", icon: faEnvelope, to: "/messages" },
+    { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+    { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+    { name: "User Management", icon: faUserCog, to: "/userManagement" },
+    { name: "Settings", icon: faCog, to: "#" },
+  ];
+
+  const allowedMenus = menuItems.filter((item) => {
+    if (role === "admin") return true;
+    if (role === "mayor" || role === "office_head") {
+      return [
+        "Dashboard",
+        "Employees",
+        "Attendance",
+        "Leave Management",
+        "Message",
+        "Announcement",
+      ].includes(item.name);
+    }
+    return false;
+  });
 
   const departments = [
     "Office of the Municipal Mayor",
@@ -122,17 +124,19 @@ import * as XLSX from "xlsx";
     "Municipal General Services Office",
     "Municipal Public Employment Service Office",
     "Municipal Health Office",
-    "Municipal Treasurer’s Office",
+    "Municipal Treasurer's Office",
   ];
 
+  useEffect(() => {
+    loadEmployees();
+  }, []);
 
-  
+  const API_URL =
+    window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "http://10.242.224.105:5000";
 
-    useEffect(() => {
-      loadEmployees();
-    }, []);
-
-const loadEmployees = async () => {
+  const loadEmployees = async () => {
     try {
       const role = localStorage.getItem("role") || "admin";
       const department = localStorage.getItem("department") || "";
@@ -142,7 +146,7 @@ const loadEmployees = async () => {
         ? new URLSearchParams({ role }).toString()
         : new URLSearchParams({ role, department }).toString();
       
-      const url = `http://localhost:5000/api/employees?${params}`;
+      const url = `${API_URL}/api/employees?${params}`;
       const res = await fetch(url);
       const data = await res.json();
 
@@ -175,212 +179,204 @@ const loadEmployees = async () => {
     return role !== "mayor"; // Mayor cannot import CSV
   };
 
-
-
   const handleButtonClick = () => {
     fileInputRef.current.click();
   };
 
-const handleCSVUpload = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const handleCSVUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-  const fileExt = file.name.split('.').pop().toLowerCase();
+    const fileExt = file.name.split('.').pop().toLowerCase();
 
-  if (fileExt === 'xlsx' || fileExt === 'xls') {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      
-      // Skip first 3 rows (index 0, 1, 2)
-      const rows = json.slice(3);
+    if (fileExt === 'xlsx' || fileExt === 'xls') {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        // Skip first 3 rows (index 0, 1, 2)
+        const rows = json.slice(3);
 
-      // Filter out empty rows (no first/last name or position)
-      const validRows = rows.filter(
-        (row) => row.some(cell => cell && String(cell).trim() !== "")
+        // Filter out empty rows (no first/last name or position)
+        const validRows = rows.filter(
+          (row) => row.some(cell => cell && String(cell).trim() !== "")
+        );
+
+        const employees = validRows.map((row) => ({
+          first_name: row[0]?.trim() || "",
+          last_name: row[2]?.trim() || "",
+          full_name: `${row[0] || ""} ${row[1] || ""} ${row[2] || ""}`.trim(),
+          position: row[4]?.trim() || "",
+          department: row[5]?.trim() || "",
+          employment_status:
+            row[6]?.toUpperCase().includes("PERMANENT") ? "Permanent" :
+            row[6]?.toUpperCase().includes("COS") || row[6]?.toUpperCase().includes("JO") ? "Contractual" :
+            row[6]?.toUpperCase().includes("ELECTIVE") || row[6]?.toUpperCase().includes("CO-TERM") ? "Temporary" :
+            "Permanent",
+          id_number: String(row[7] || "").replace(".0", ""),
+          email: row[8]?.trim() || "",
+          contact_number: String(row[9] || "").trim(),
+          date_hired: row[10] ? new Date(row[10]).toISOString().split("T")[0] : "",
+          gender: row[11]?.toLowerCase() === "female" ? "Female" : "Male",
+          civil_status: row[12]?.trim() || "Single",
+          status: "active",
+        }));
+
+        setEmployeesToUpload(employees);
+        setShowConfirmModal(true);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // fallback for CSV (existing Papa.parse)
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const employeesRaw = results.data
+            .filter(row => Object.values(row).some(cell => cell && cell.trim() !== "")) // skip fully empty
+            .map((row, index) => ({
+              first_name: row.first_name?.trim() || "",
+              last_name: row.last_name?.trim() || "",
+              full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
+              email: row.email?.trim() || "",
+              position: row.position?.trim() || "",
+              employment_status: row.employment_status?.trim() || "Permanent",
+              department: row.department?.trim() || "",
+              gender: row.gender?.trim() || "",
+              date_hired: row.date_hired?.trim() || "",
+              civil_status: row.civil_status?.trim() || "",
+              contact_number: row.contact_number?.trim() || "",
+              id_number: row.id_number?.trim() || "",
+              status: row.status?.trim() || "active",
+            }));
+
+          setEmployeesToUpload(employeesRaw);
+          setShowConfirmModal(true);
+        },
+      });
+    }
+  };
+
+  const confirmUpload = async () => {
+    if (employeesToUpload.length === 0) return;
+
+    // Hide the modal immediately
+    setShowConfirmModal(false);
+
+    // Show loading overlay
+    setIsDeleting(true);
+    await new Promise((resolve) => setTimeout(resolve, 50)); // allow render
+
+    try {
+      // Only filter out completely empty entries
+      const validEmployees = employeesToUpload.filter(
+        (emp) => Object.values(emp).some(value => value && String(value).trim() !== "")
       );
 
-      const employees = validRows.map((row) => ({
-        first_name: row[0]?.trim() || "",
-        last_name: row[2]?.trim() || "",
-        full_name: `${row[0] || ""} ${row[1] || ""} ${row[2] || ""}`.trim(),
-        position: row[4]?.trim() || "",
-        department: row[5]?.trim() || "",
-        employment_status:
-          row[6]?.toUpperCase().includes("PERMANENT") ? "Permanent" :
-          row[6]?.toUpperCase().includes("COS") || row[6]?.toUpperCase().includes("JO") ? "Contractual" :
-          row[6]?.toUpperCase().includes("ELECTIVE") || row[6]?.toUpperCase().includes("CO-TERM") ? "Temporary" :
-          "Permanent",
-        id_number: String(row[7] || "").replace(".0", ""),
-        email: row[8]?.trim() || "",
-        contact_number: String(row[9] || "").trim(),
-        date_hired: row[10] ? new Date(row[10]).toISOString().split("T")[0] : "",
-        gender: row[11]?.toLowerCase() === "female" ? "Female" : "Male",
-        civil_status: row[12]?.trim() || "Single",
-        status: "active",
-      }));
+      let importedCount = 0;
 
-      setEmployeesToUpload(employees);
-      setShowConfirmModal(true);
-    };
-    reader.readAsArrayBuffer(file);
-  } else {
-    // fallback for CSV (existing Papa.parse)
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const employeesRaw = results.data
-          .filter(row => Object.values(row).some(cell => cell && cell.trim() !== "")) // skip fully empty
-          .map((row, index) => ({
-            first_name: row.first_name?.trim() || "",
-            last_name: row.last_name?.trim() || "",
-            full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
-            email: row.email?.trim() || "",
-            position: row.position?.trim() || "",
-            employment_status: row.employment_status?.trim() || "Permanent",
-            department: row.department?.trim() || "",
-            gender: row.gender?.trim() || "",
-            date_hired: row.date_hired?.trim() || "",
-            civil_status: row.civil_status?.trim() || "",
-            contact_number: row.contact_number?.trim() || "",
-            id_number: row.id_number?.trim() || "",
-            status: row.status?.trim() || "active",
-          }));
+      for (const emp of validEmployees) {
+        try {
+          // Remove id_number if empty
+          const payload = { ...emp };
+          if (!payload.id_number) delete payload.id_number;
 
-        setEmployeesToUpload(employeesRaw);
-        setShowConfirmModal(true);
-      },
-    });
-  }
-};
+          const response = await fetch(`${API_URL}/api/employees`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
+          if (!response.ok) {
+            console.warn(`❌ Failed to import: ${emp.full_name}`);
+            continue;
+          }
 
-const confirmUpload = async () => {
-  if (employeesToUpload.length === 0) return;
+          const savedEmployee = await response.json();
+          setEmployeeRecords((prev) => [savedEmployee, ...prev]);
 
-  // Hide the modal immediately
-  setShowConfirmModal(false);
-
-  // Show loading overlay
-  setIsDeleting(true);
-  await new Promise((resolve) => setTimeout(resolve, 50)); // allow render
-
-  try {
-    // Only filter out completely empty entries
-    const validEmployees = employeesToUpload.filter(
-      (emp) => Object.values(emp).some(value => value && String(value).trim() !== "")
-    );
-
-
-    let importedCount = 0;
-
-    for (const emp of validEmployees) {
-      try {
-        // Remove id_number if empty
-        const payload = { ...emp };
-        if (!payload.id_number) delete payload.id_number;
-
-        const response = await fetch("http://localhost:5000/api/employees", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          console.warn(`❌ Failed to import: ${emp.full_name}`);
-          continue;
+          importedCount++;
+          console.log(`✅ Imported ${importedCount} / ${validEmployees.length}: ${emp.full_name}`);
+        } catch (err) {
+          console.warn(`⚠️ Skipped due to error: ${emp.full_name}`, err);
         }
-
-        const savedEmployee = await response.json();
-        setEmployeeRecords((prev) => [savedEmployee, ...prev]);
-
-        importedCount++;
-        console.log(`✅ Imported ${importedCount} / ${validEmployees.length}: ${emp.full_name}`);
-      } catch (err) {
-        console.warn(`⚠️ Skipped due to error: ${emp.full_name}`, err);
       }
+
+      console.log(`🎉 Finished importing ${importedCount} / ${validEmployees.length} employees`);
+    } catch (error) {
+      console.error("Error importing employees:", error);
+    } finally {
+      setEmployeesToUpload([]);
+      setTimeout(() => setIsDeleting(false), 400); // smooth fade
     }
-
-    console.log(`🎉 Finished importing ${importedCount} / ${validEmployees.length} employees`);
-  } catch (error) {
-    console.error("Error importing employees:", error);
-  } finally {
-    setEmployeesToUpload([]);
-    setTimeout(() => setIsDeleting(false), 400); // smooth fade
-  }
-};
-
+  };
 
   const handleDeleteClick = (employee) => {
     setEmployeeToDelete(employee);
     setShowDeleteModal(true);
   };
 
-const confirmDelete = async () => {
-  setIsDeleting(true);
-  await new Promise((resolve) => setTimeout(resolve, 50)); // let loader render
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    await new Promise((resolve) => setTimeout(resolve, 50)); // let loader render
 
-  try {
-    const res = await fetch(`http://localhost:5000/api/employees/${employeeToDelete.id}`, {
-      method: "DELETE",
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/employees/${employeeToDelete.id}`, {
+        method: "DELETE",
+      });
 
-    if (!res.ok) throw new Error("Failed to delete employee");
+      if (!res.ok) throw new Error("Failed to delete employee");
 
-    setEmployeeRecords((prev) =>
-      prev.filter((emp) => emp.id !== employeeToDelete.id)
-    );
+      setEmployeeRecords((prev) =>
+        prev.filter((emp) => emp.id !== employeeToDelete.id)
+      );
 
-    setShowDeleteModal(false);
-  } catch (error) {
-    console.error("Delete error:", error);
-  } finally {
-    setTimeout(() => setIsDeleting(false), 400); // small delay for smooth fade
-  }
-};
-
+      setShowDeleteModal(false);
+    } catch (error) {
+      console.error("Delete error:", error);
+    } finally {
+      setTimeout(() => setIsDeleting(false), 400); // small delay for smooth fade
+    }
+  };
 
   // 🗑️ BULK DELETE SELECTED EMPLOYEES
-const handleBulkDelete = async () => {
-  if (selectedEmployees.length === 0) return;
+  const handleBulkDelete = async () => {
+    if (selectedEmployees.length === 0) return;
 
-  const confirmBulk = window.confirm(
-    `Are you sure you want to delete ${selectedEmployees.length} selected employees?`
-  );
-  if (!confirmBulk) return;
-
-  setIsDeleting(true);
-  await new Promise((resolve) => setTimeout(resolve, 50)); // render loader
-
-  try {
-    for (const id of selectedEmployees) {
-      await fetch(`http://localhost:5000/api/employees/${id}`, { method: "DELETE" });
-    }
-
-    setEmployeeRecords((prev) =>
-      prev.filter((emp) => !selectedEmployees.includes(emp.id))
+    const confirmBulk = window.confirm(
+      `Are you sure you want to delete ${selectedEmployees.length} selected employees?`
     );
+    if (!confirmBulk) return;
 
-    setSelectedEmployees([]);
-    setSelectAll(false);
-  } catch (err) {
-    console.error("Bulk delete failed:", err);
-  } finally {
-    setTimeout(() => setIsDeleting(false), 400);
-  }
-};
+    setIsDeleting(true);
+    await new Promise((resolve) => setTimeout(resolve, 50)); // render loader
 
+    try {
+      for (const id of selectedEmployees) {
+        await fetch(`${API_URL}/api/employees/${id}`, { method: "DELETE" });
+      }
 
+      setEmployeeRecords((prev) =>
+        prev.filter((emp) => !selectedEmployees.includes(emp.id))
+      );
+
+      setSelectedEmployees([]);
+      setSelectAll(false);
+    } catch (err) {
+      console.error("Bulk delete failed:", err);
+    } finally {
+      setTimeout(() => setIsDeleting(false), 400);
+    }
+  };
 
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin")); // get current session
 
     if (user) {
-      await fetch("http://localhost:5000/api/auth/logout", {
+      await fetch(`${API_URL}/api/auth/logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, role: user.role }),
@@ -393,7 +389,7 @@ const handleBulkDelete = async () => {
 
   const handleAddEmployee = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/employees", {
+      const response = await fetch(`${API_URL}/api/employees`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -433,7 +429,6 @@ const handleBulkDelete = async () => {
     }
   };
 
-
   const handleViewClick = (employee) => {
     setSelectedEmployee(employee);
     setShowViewModal(true);
@@ -445,7 +440,7 @@ const handleBulkDelete = async () => {
   };
 
   const handleEditSave = async () => {
-    await fetch(`http://localhost:5000/api/employees/${employeesToEdit.id}`, {
+    await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(employeesToEdit),
@@ -478,7 +473,6 @@ const handleBulkDelete = async () => {
     }
   }, [selectedEmployees, employeeRecord]);
 
-
   const handleSelectEmployee = (id) => {
     setSelectedEmployees((prev) =>
       prev.includes(id)
@@ -509,7 +503,6 @@ const handleBulkDelete = async () => {
     .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
     .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true);
 
-
   const totalPages = Math.ceil(filteredEmployees.length / listEmployeePerPage); 
   // Helper function to generate pagination range
   const getPaginationRange = (currentPage, totalPages) => {
@@ -529,89 +522,198 @@ const handleBulkDelete = async () => {
     return pages;
   };
 
-
   return (
-    <div style={styles.dashboardContainer}>
+    <div className="dashboard-container" style={styles.dashboardContainer}>
 
-      <div style={styles.header}>
-        <input type="text" placeholder="Search..." style={styles.search} />
-        <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+      <div className="desktop-header" style={styles.header}>
+        <input type="text" placeholder="Search..." className="search-input" style={styles.search} />
+        <FontAwesomeIcon icon={faBell} className="bell-icon" style={styles.iconBell} />
       </div>
 
-      <div style={styles.sidebar}>
-        <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-        <ul style={styles.sidebarList}>
-  {allowedMenus.map((item) => {
-    const isActive = location.pathname === item.to; // Check if current route matches
+      <div className="sidebar" style={styles.sidebar}>
+        <img src={require('./images/logo_ez.png')} alt="logo" className="desktop-logo" style={styles.logo} />
+        <ul className="sidebar-list" style={styles.sidebarList}>
+          {allowedMenus.map((item) => {
+            const isActive = location.pathname === item.to; // Check if current route matches
 
-    return (
-      <li
-        key={item.name}
-        style={{
-          ...(isActive ? styles.btnActive : {}), // Apply active tab background
-        }}
-      >
-        <Link
-          style={{
-            ...styles.sb,
-            ...(isActive ? styles.btnActive : {}),
-          }}
-          to={item.to}
+            return (
+              <li
+                key={item.name}
+                className={`sidebar-item ${isActive ? 'active' : ''}`}
+                style={{
+                  ...(isActive ? styles.btnActive : {}), // Apply active tab background
+                }}
+              >
+                <Link
+                  className={`sidebar-link ${isActive ? 'active' : ''}`}
+                  style={{
+                    ...styles.sb,
+                    ...(isActive ? styles.btnActive : {}),
+                  }}
+                  to={item.to}
+                >
+                  <FontAwesomeIcon icon={item.icon} className="sidebar-icon" style={styles.icon} /> {item.name}
+                </Link>
+              </li>
+            );
+          })}
+
+          <li className="sidebar-item">
+            <Link
+              className="sidebar-link"
+              style={styles.sb}
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowLogoutModal(true);
+              }}
+            >
+              <FontAwesomeIcon icon={faSignOutAlt} className="sidebar-icon" style={styles.icon} /> Logout
+            </Link>
+          </li>
+        </ul>
+      </div>
+
+      <div className="mobile-header">
+        <button 
+          className="hamburger"
+          onClick={() => setIsSidebarOpen(true)}
         >
-          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-        </Link>
-      </li>
-    );
-  })}
-
-  <li>
-    <Link
-      style={styles.sb}
-      to="#"
-      onClick={(e) => {
-        e.preventDefault();
-        setShowLogoutModal(true);
-      }}
-    >
-      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-    </Link>
-  </li>
-</ul>
+          <FontAwesomeIcon icon={faBars} />
+        </button>
+        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+        <div className="mobile-header-right">
+          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
+          <div className="mobile-profile" onClick={() => setShowProfileMenu(!showProfileMenu)}>
+            <img
+              src={admin?.profile_picture || "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"}
+              alt="Profile"
+              className="mobile-profile-image"
+            />
+          </div>
+        </div>
       </div>
 
-      <div style={styles.content}>
-      
-      {showLogoutModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <h3>Confirm Logout</h3>
-            <p>Are you sure you want to log out?</p>
-            <div style={styles.modalActions}>
-              <button
-                style={styles.cancelBtn}
-                onClick={() => setShowLogoutModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                style={styles.confirmBtn}
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </div>
-          </div>
+      {/* Mobile Profile Dropdown */}
+      {showProfileMenu && (
+        <div className="mobile-profile-dropdown">
+          <button className="dropdown-item" style={styles.dropdownItem} onClick={() => setShowProfileModal(true)}>
+            <FontAwesomeIcon icon={faUserCog} className="dropdown-icon" style={styles.dropdownIcon} /> My Profile
+          </button>
+          <button className="dropdown-item" style={styles.dropdownItem}>
+            <FontAwesomeIcon icon={faCog} className="dropdown-icon" style={styles.dropdownIcon} /> Settings
+          </button>
+          <button
+            className="dropdown-item"
+            style={styles.dropdownItem}
+            onClick={() => setShowLogoutModal(true)}
+          >
+            <FontAwesomeIcon icon={faSignOutAlt} className="dropdown-icon" style={styles.dropdownIcon} /> Logout
+          </button>
         </div>
       )}
 
-        <div style={styles.buttons}>
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+
+      {/* Updated Sidebar with Mobile Header */}
+      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+        <div className="sidebar-header">
           <button 
+            className="sidebar-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+          <img 
+            className='logo-sidebar' 
+            src={require('./images/logo_ez.png')} 
+            alt="logo" 
+          />
+        </div>
+
+        {/* Desktop Logo - hidden on mobile */}
+        <img src={require('./images/logo_ez.png')} alt="logo" className="desktop-logo" style={styles.logo} />
+        
+        {/* Rest of your sidebar content remains the same */}
+        <ul className='sidebar-menu-link' style={styles.sidebarList}>
+          {allowedMenus.map((item) => {
+            const isActive = location.pathname === item.to;
+            return (
+              <li
+                key={item.name}
+                style={{
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+              >
+                <Link
+                  style={{
+                    ...styles.sb,
+                    ...(isActive ? styles.btnActive : {}),
+                  }}
+                  to={item.to}
+                  onClick={() => setIsSidebarOpen(false)}
+                >
+                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+                </Link>
+              </li>
+            );
+          })}
+          <li>
+            <Link
+              style={styles.sb}
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowLogoutModal(true);
+                setIsSidebarOpen(false);
+              }}
+            >
+              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+            </Link>
+          </li>
+        </ul>
+      </div>
+
+      <div className="content" style={styles.content}>
+      
+        {showLogoutModal && (
+          <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal-content" style={styles.modalContent}>
+              <h3>Confirm Logout</h3>
+              <p>Are you sure you want to log out?</p>
+              <div className="modal-actions" style={styles.modalActions}>
+                <button
+                  className="cancel-btn"
+                  style={styles.cancelBtn}
+                  onClick={() => setShowLogoutModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="confirm-btn"
+                  style={styles.confirmBtn}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="view-buttons" style={styles.buttons}>
+          <button 
+            className={`view-btn ${view === 'list' ? 'active' : ''}`}
             style={view === 'list' ? styles.btn1 : styles.btn}
             onClick={() => setView('list')}
           >
-          Manage Employees
+            Manage Employees
           </button>
           <button 
+            className={`view-btn ${view === 'directory' ? 'active' : ''}`}
             style={view === 'directory' ? styles.btn1 : styles.btn}
             onClick={() => setView('directory')}
           >
@@ -619,18 +721,18 @@ const handleBulkDelete = async () => {
           </button>
         </div>
 
-
         {view === 'list' && (
-          <div style={styles.content1}>
-            <div style={styles.firstRow}>
+          <div className="list-view" style={styles.content1}>
+            <div className="filters-row" style={styles.firstRow}>
 
                 {/* Search Input */}
-                <div style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px'}}>
+                <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px'}}>
                   <input
                     type="text"
                     placeholder="Search by name, email, or position..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    className="search-input"
                     style={{ ...styles.searchInput, width: '300px' }}
                   />
 
@@ -638,6 +740,7 @@ const handleBulkDelete = async () => {
                   <select
                     value={filterDepartment}
                     onChange={(e) => setFilterDepartment(e.target.value)}
+                    className="department-filter"
                     style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
                   >
                     <option value="">All Departments</option>
@@ -650,6 +753,7 @@ const handleBulkDelete = async () => {
                   <select
                     value={filterEmploymentStatus}
                     onChange={(e) => setFilterEmploymentStatus(e.target.value)}
+                    className="employment-status-filter"
                     style={{ ...styles.filterDropdown, padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc'}}
                   >
                     <option value="">All Employment Status</option>
@@ -662,10 +766,10 @@ const handleBulkDelete = async () => {
                   </select>
                 </div>
 
-                <div style={styles.row1}>
+                <div className="action-buttons" style={styles.row1}>
                   {canImportCSV() && (
-                    <button style={styles.importBtn} onClick={handleButtonClick}>
-                      <FontAwesomeIcon icon={faDownload} style={styles.iconImport} />
+                    <button className="import-btn" style={styles.importBtn} onClick={handleButtonClick}>
+                      <FontAwesomeIcon icon={faDownload} className="import-icon" style={styles.iconImport} />
                       Import CSV
                     </button>
                   )}
@@ -674,18 +778,20 @@ const handleBulkDelete = async () => {
                     accept=".csv,.xlsx,.xls"
                     ref={fileInputRef}
                     onChange={handleCSVUpload}
+                    className="file-input"
                     style={{ display: 'none' }}
                   />
 
                   {canAddEmployees() && (
-                    <button style={styles.btnAddEmployee} onClick={() => setShowAddModal(true)}>
-                      <FontAwesomeIcon icon={faPlus} style={styles.btnIconAdd} />
+                    <button className="add-employee-btn" style={styles.btnAddEmployee} onClick={() => setShowAddModal(true)}>
+                      <FontAwesomeIcon icon={faPlus} className="add-icon" style={styles.btnIconAdd} />
                       Add Employee
                     </button>
                   )}
 
                   {selectedEmployees.length > 0 && role !== "mayor" && (
                     <button
+                      className="bulk-delete-btn"
                       onClick={() => setShowBulkDeleteModal(true)}
                       style={{
                         background: 'linear-gradient(135deg, #e63946, #d62828)',
@@ -711,7 +817,7 @@ const handleBulkDelete = async () => {
                   )}
 
                   {showBulkDeleteModal && (
-                    <div style={{
+                    <div className="bulk-delete-modal" style={{
                       position: 'fixed',
                       top: 0,
                       left: 0,
@@ -723,7 +829,7 @@ const handleBulkDelete = async () => {
                       alignItems: 'center',
                       zIndex: 1000,
                     }}>
-                      <div style={{
+                      <div className="bulk-delete-content" style={{
                         background: '#fff',
                         padding: '30px 25px',
                         width: '420px',
@@ -743,6 +849,7 @@ const handleBulkDelete = async () => {
                         </p>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
                           <button
+                            className="confirm-bulk-delete"
                             onClick={() => {
                               setShowBulkDeleteModal(false);
                               handleBulkDelete();
@@ -760,6 +867,7 @@ const handleBulkDelete = async () => {
                             Confirm
                           </button>
                           <button
+                            className="cancel-bulk-delete"
                             onClick={() => setShowBulkDeleteModal(false)}
                             style={{
                               backgroundColor: '#ccc',
@@ -787,84 +895,86 @@ const handleBulkDelete = async () => {
 
             </div>
 
-
-              <div style={styles.tableContainer}>
-                <div style={styles.table}>
-                  <table style={styles.employeeTable}>
-                    <thead>
-                      <tr>
-                        {role !== "mayor" && (
-                          <th style={styles.columnName}>
-                            <input
-                              type="checkbox"
-                              checked={selectAll}
-                              onChange={handleSelectAll}
-                              style={styles.checkbox}
-                            />
-                          </th>
-                        )}
-                        <th style={styles.columnName}>No.</th>
-                        <th style={styles.columnName}>ID Number</th>
-                        <th style={styles.columnName}>Name</th>
-                        <th style={styles.columnName}>Position</th>
-                        <th style={styles.columnName}>Department</th>
-                        <th style={styles.columnName}>Status of Employment</th>
-                        <th style={styles.columnName}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredEmployees
-                        .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
-                        .map((record, index) => (
-                          <tr key={record.id}>
-                            {role !== "mayor" && (
-                              <td style={styles.rowName}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedEmployees.includes(record.id)}
-                                  onChange={() => handleSelectEmployee(record.id)}
-                                  style={styles.checkbox}
-                                />
-                              </td>
+            <div className="table-container" style={styles.tableContainer}>
+              <div className="table-wrapper" style={styles.table}>
+                <table className="employee-table" style={styles.employeeTable}>
+                  <thead>
+                    <tr>
+                      {role !== "mayor" && (
+                        <th className="column-checkbox" style={styles.columnName}>
+                          <input
+                            type="checkbox"
+                            checked={selectAll}
+                            onChange={handleSelectAll}
+                            className="select-all-checkbox"
+                            style={styles.checkbox}
+                          />
+                        </th>
+                      )}
+                      <th className="column-number" style={styles.columnName}>No.</th>
+                      <th className="column-id" style={styles.columnName}>ID Number</th>
+                      <th className="column-name" style={styles.columnName}>Name</th>
+                      <th className="column-position" style={styles.columnName}>Position</th>
+                      <th className="column-department" style={styles.columnName}>Department</th>
+                      <th className="column-employment-status" style={styles.columnName}>Status of Employment</th>
+                      <th className="column-actions" style={styles.columnName}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEmployees
+                      .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
+                      .map((record, index) => (
+                        <tr key={record.id} className="employee-row">
+                          {role !== "mayor" && (
+                            <td className="row-checkbox" style={styles.rowName}>
+                              <input
+                                type="checkbox"
+                                checked={selectedEmployees.includes(record.id)}
+                                onChange={() => handleSelectEmployee(record.id)}
+                                className="employee-checkbox"
+                                style={styles.checkbox}
+                              />
+                            </td>
+                          )}
+                          <td className="row-number" style={styles.rowName}>{index + 1 + (currentPage - 1) * listEmployeePerPage}</td>
+                          <td className="row-id" style={styles.rowName}>{record.id_number || '—'}</td>
+                          <td className="row-name" style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
+                          <td className="row-position" style={styles.rowName}>{record.position}</td>
+                          <td className="row-department" style={{ 
+                            ...styles.rowName, 
+                            maxWidth: '220px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            {record.department || '—'}
+                          </td>
+                          <td className="row-employment-status" style={styles.rowName}>{record.employment_status}</td>
+                          <td className="row-actions" style={styles.rowName}>
+                            <button className="view-btn" style={styles.viewBtn} onClick={() => handleViewClick(record)}>
+                              <FontAwesomeIcon icon={faEye} />
+                            </button>
+                            {canPerformActions(record.department) && (
+                              <>
+                                <button className="edit-btn" style={styles.editBtn} onClick={() => handleEditClick(record)}>
+                                  <FontAwesomeIcon icon={faPenToSquare} />
+                                </button>
+                                <button className="delete-btn" style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
+                                  <FontAwesomeIcon icon={faTrash} />
+                                </button>
+                              </>
                             )}
-                            <td style={styles.rowName}>{index + 1 + (currentPage - 1) * listEmployeePerPage}</td>
-                            <td style={styles.rowName}>{record.id_number || '—'}</td>
-                            <td style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
-                            <td style={styles.rowName}>{record.position}</td>
-                            <td style={{ 
-                              ...styles.rowName, 
-                              maxWidth: '220px',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}>
-                              {record.department || '—'}
-                            </td>
-                            <td style={styles.rowName}>{record.employment_status}</td>
-                            <td style={styles.rowName}>
-                              <button style={styles.viewBtn} onClick={() => handleViewClick(record)}>
-                                <FontAwesomeIcon icon={faEye} />
-                              </button>
-                              {canPerformActions(record.department) && (
-                                <>
-                                  <button style={styles.editBtn} onClick={() => handleEditClick(record)}>
-                                    <FontAwesomeIcon icon={faPenToSquare} />
-                                  </button>
-                                  <button style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
-                                    <FontAwesomeIcon icon={faTrash} />
-                                  </button>
-                                </>
-                              )}
-                            </td>
-                          </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-                  {/* Pagination */}
-                <div style={styles.paginationContainer}>
+                {/* Pagination */}
+                <div className="pagination-container" style={styles.paginationContainer}>
                   {/* Previous Button */}
                   <button
+                    className="page-btn prev-btn"
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     style={styles.pageBtn}
                   >
@@ -874,8 +984,8 @@ const handleBulkDelete = async () => {
                   {/* First page + ellipsis if needed */}
                   {getPaginationRange(currentPage, totalPages)[0] > 1 && (
                     <>
-                      <button onClick={() => setCurrentPage(1)} style={styles.pageBtn}>1</button>
-                      {getPaginationRange(currentPage, totalPages)[0] > 2 && <span style={{ padding: '0 8px' }}>…</span>}
+                      <button className="page-btn" onClick={() => setCurrentPage(1)} style={styles.pageBtn}>1</button>
+                      {getPaginationRange(currentPage, totalPages)[0] > 2 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
                     </>
                   )}
 
@@ -883,6 +993,7 @@ const handleBulkDelete = async () => {
                   {getPaginationRange(currentPage, totalPages).map((page) => (
                     <button
                       key={page}
+                      className={`page-btn ${currentPage === page ? 'active' : ''}`}
                       onClick={() => setCurrentPage(page)}
                       style={{
                         ...styles.pageBtn,
@@ -896,13 +1007,14 @@ const handleBulkDelete = async () => {
                   {/* Last page + ellipsis if needed */}
                   {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
                     <>
-                      {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && <span style={{ padding: '0 8px' }}>…</span>}
-                      <button onClick={() => setCurrentPage(totalPages)} style={styles.pageBtn}>{totalPages}</button>
+                      {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
+                      <button className="page-btn" onClick={() => setCurrentPage(totalPages)} style={styles.pageBtn}>{totalPages}</button>
                     </>
                   )}
 
                   {/* Next Button */}
                   <button
+                    className="page-btn next-btn"
                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                     style={styles.pageBtn}
                   >
@@ -910,48 +1022,48 @@ const handleBulkDelete = async () => {
                   </button>
                 </div>
                 
-                </div>
               </div>
-
-
-
+            </div>
 
             {showConfirmModal && (
-              <div style={styles.confirmModal}>
-                <div style={styles.questionModal}>
+              <div className="confirm-modal" style={styles.confirmModal}>
+                <div className="question-modal" style={styles.questionModal}>
                   <p style={{fontSize: '20px'}}>Are you sure you want to import {employeesToUpload.length} employees?</p>
-                  <button onClick={confirmUpload} style={styles.btnYes}>Yes</button>
-                  <button onClick={() => setShowConfirmModal(false)} style={styles.btnNo}>Cancel</button>
+                  <button className="btn-yes" onClick={confirmUpload} style={styles.btnYes}>Yes</button>
+                  <button className="btn-no" onClick={() => setShowConfirmModal(false)} style={styles.btnNo}>Cancel</button>
                 </div>
               </div>
             )}
 
             {showViewModal && selectedEmployee && (
-              <div style={styles.rightModalOverlay} onClick={() => setShowViewModal(false)}>
+              <div className="right-modal-overlay" style={styles.rightModalOverlay} onClick={() => setShowViewModal(false)}>
                 <div
+                  className="right-modal-card"
                   style={styles.rightModalCard}
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Header */}
-                  <div style={styles.rightModalHeader}>
-                    <h2 style={styles.viewModalHeader}>Employee Details</h2>
+                  <div className="right-modal-header" style={styles.rightModalHeader}>
+                    <h2 className="view-modal-header" style={styles.viewModalHeader}>Employee Details</h2>
                     <FontAwesomeIcon
                       icon={faTimes}
+                      className="close-icon"
                       style={styles.closeIcon}
                       onClick={() => setShowViewModal(false)}
                     />
                   </div>
 
                   {/* Top Profile Section */}
-                  <div style={styles.topSection}>
+                  <div className="top-section" style={styles.topSection}>
                     {selectedEmployee?.profile_picture ? (
                       <img
                         src={selectedEmployee.profile_picture}
                         alt="Profile"
+                        className="profile-image"
                         style={styles.profileImage}
                       />
                     ) : (
-                      <div style={{
+                      <div className="default-avatar" style={{
                         width: "80px",
                         height: "80px",
                         borderRadius: '50%',
@@ -963,60 +1075,60 @@ const handleBulkDelete = async () => {
                         <FontAwesomeIcon icon={faUser} size="3x" color="#888" />
                       </div>
                     )}
-                    <div style={styles.profileText}>
-                      <h3 style={styles.employeeName}>
+                    <div className="profile-text" style={styles.profileText}>
+                      <h3 className="employee-name" style={styles.employeeName}>
                         {selectedEmployee.full_name?.trim() || `${selectedEmployee.first_name || ''} ${selectedEmployee.last_name || ''}`.trim()}
                       </h3>
-                      <p style={styles.employeeID}>ID: {selectedEmployee.id_number}</p>
+                      <p className="employee-id" style={styles.employeeID}>ID: {selectedEmployee.id_number}</p>
                     </div>
                   </div>
 
                   {/* Details Grid */}
-                  <div style={styles.detailsContainer}>
-                    <div style={styles.detailCard}>
-                      <h4 style={styles.detailHeader}>Contact Information</h4>
-                      <div style={styles.twoColumnGrid}>
-                        <div>
+                  <div className="details-container" style={styles.detailsContainer}>
+                    <div className="detail-card" style={styles.detailCard}>
+                      <h4 className="detail-header" style={styles.detailHeader}>Contact Information</h4>
+                      <div className="two-column-grid" style={styles.twoColumnGrid}>
+                        <div className="detail-item">
                           <label>Email</label>
                           <p>{selectedEmployee.email}</p>
                         </div>
-                        <div>
+                        <div className="detail-item">
                           <label>Contact Number</label>
                           <p>{selectedEmployee.contact_number}</p>
                         </div>
                       </div>
                     </div>
 
-                    <div style={styles.detailCard}>
-                      <h4 style={styles.detailHeader}>Employment Details</h4>
-                      <div style={styles.twoColumnGrid}>
-                        <div>
+                    <div className="detail-card" style={styles.detailCard}>
+                      <h4 className="detail-header" style={styles.detailHeader}>Employment Details</h4>
+                      <div className="two-column-grid" style={styles.twoColumnGrid}>
+                        <div className="detail-item">
                           <label>Department</label>
                           <p>{selectedEmployee.department}</p>
                         </div>
-                        <div>
+                        <div className="detail-item">
                           <label>Employment Status</label>
                           <p>{selectedEmployee.employment_status}</p>
                         </div>
-                        <div>
+                        <div className="detail-item">
                           <label>Date Hired</label>
                           <p>{new Date(selectedEmployee.date_hired).toLocaleDateString()}</p>
                         </div>
                       </div>
                     </div>
 
-                    <div style={styles.detailCard}>
-                      <h4 style={styles.detailHeader}>Personal Information</h4>
-                      <div style={styles.twoColumnGrid}>
-                        <div>
+                    <div className="detail-card" style={styles.detailCard}>
+                      <h4 className="detail-header" style={styles.detailHeader}>Personal Information</h4>
+                      <div className="two-column-grid" style={styles.twoColumnGrid}>
+                        <div className="detail-item">
                           <label>Gender</label>
                           <p>{selectedEmployee.gender}</p>
                         </div>
-                        <div>
+                        <div className="detail-item">
                           <label>Civil Status</label>
                           <p>{selectedEmployee.civil_status}</p>
                         </div>
-                        <div>
+                        <div className="detail-item">
                           <label>Status</label>
                           <p>{selectedEmployee.status}</p>
                         </div>
@@ -1028,17 +1140,18 @@ const handleBulkDelete = async () => {
             )}
 
             {showEditModal && employeesToEdit && (
-              <div style={styles.modalOverlay}>
-                <div style={styles.modalContainer}>
-                  <h3 style={styles.modalTitle}>Edit Employee Information</h3>
-                  <p style={styles.modalSubtitle}>
+              <div className="modal-overlay" style={styles.modalOverlay}>
+                <div className="modal-container" style={styles.modalContainer}>
+                  <h3 className="modal-title" style={styles.modalTitle}>Edit Employee Information</h3>
+                  <p className="modal-subtitle" style={styles.modalSubtitle}>
                     Update the necessary details below and click <strong>Save</strong> to apply changes.
                   </p>
 
-                  <div style={styles.modalGrid}>
+                  <div className="modal-grid" style={styles.modalGrid}>
                     {/* First Name */}
                     <input
                       placeholder="First Name"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.first_name}
                       onChange={(e) =>
@@ -1049,6 +1162,7 @@ const handleBulkDelete = async () => {
                     {/* Last Name */}
                     <input
                       placeholder="Last Name"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.last_name}
                       onChange={(e) =>
@@ -1059,6 +1173,7 @@ const handleBulkDelete = async () => {
                     {/* Email */}
                     <input
                       placeholder="Email"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.email}
                       onChange={(e) =>
@@ -1069,6 +1184,7 @@ const handleBulkDelete = async () => {
                     {/* Position */}
                     <input
                       placeholder="Position"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.position}
                       onChange={(e) =>
@@ -1079,6 +1195,7 @@ const handleBulkDelete = async () => {
                     {/* ID Number */}
                     <input
                       placeholder="ID Number"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.id_number || ""}
                       onChange={(e) => {
@@ -1090,6 +1207,7 @@ const handleBulkDelete = async () => {
                     {/* Contact Number */}
                     <input
                       placeholder="Contact Number"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.contact_number || ""}
                       onChange={(e) => {
@@ -1099,12 +1217,13 @@ const handleBulkDelete = async () => {
                     />
 
                     {/* Gender */}
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={styles.label}>Gender</label>
-                      <div style={styles.genderContainer}>
+                    <div className="gender-section" style={{ gridColumn: '1 / -1' }}>
+                      <label className="input-label" style={styles.label}>Gender</label>
+                      <div className="gender-container" style={styles.genderContainer}>
                         {['Male', 'Female'].map((g) => (
                           <div
                             key={g}
+                            className={`gender-btn ${employeesToEdit.gender === g ? 'active' : ''}`}
                             style={{
                               ...styles.genderBtn,
                               ...(employeesToEdit.gender === g ? styles.genderBtnActive : {}),
@@ -1119,6 +1238,7 @@ const handleBulkDelete = async () => {
 
                     {/* Civil Status */}
                     <select
+                      className="select-input"
                       style={styles.selectInput}
                       value={employeesToEdit.civil_status || ""}
                       onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, civil_status: e.target.value })}
@@ -1133,6 +1253,7 @@ const handleBulkDelete = async () => {
 
                     {/* Department */}
                     <select
+                      className="select-input"
                       style={styles.selectInput}
                       value={employeesToEdit.department || ""}
                       onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, department: e.target.value })}
@@ -1144,12 +1265,13 @@ const handleBulkDelete = async () => {
                     </select>
 
                     {/* Employment Type */}
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={styles.label}>Employment Type</label>
-                      <div style={styles.genderContainer}>
+                    <div className="employment-type-section" style={{ gridColumn: '1 / -1' }}>
+                      <label className="input-label" style={styles.label}>Employment Type</label>
+                      <div className="employment-type-container" style={styles.genderContainer}>
                         {['Temporary', 'Permanent', 'Contractual', 'Casual'].map((type) => (
                           <div
                             key={type}
+                            className={`employment-type-btn ${employeesToEdit.employment_status === type ? 'active' : ''}`}
                             style={{
                               ...styles.genderBtn,
                               ...(employeesToEdit.employment_status === type ? styles.genderBtnActive : {}),
@@ -1164,6 +1286,7 @@ const handleBulkDelete = async () => {
 
                     {/* Status */}
                     <select
+                      className="select-input"
                       style={styles.selectInput}
                       value={employeesToEdit.status || ""}
                       onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, status: e.target.value })}
@@ -1176,6 +1299,7 @@ const handleBulkDelete = async () => {
                     {/* Date Hired */}
                     <input
                       type="date"
+                      className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.date_hired || ""}
                       onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, date_hired: e.target.value })}
@@ -1183,393 +1307,410 @@ const handleBulkDelete = async () => {
                   </div>
 
                   {/* Actions */}
-                  <div style={styles.modalActions}>
-                    <button style={styles.cancelBtn} onClick={() => setShowEditModal(false)}>Cancel</button>
-                    <button style={styles.saveBtn} onClick={handleEditSave}>Save</button>
+                  <div className="modal-actions" style={styles.modalActions}>
+                    <button className="cancel-btn" style={styles.cancelBtn} onClick={() => setShowEditModal(false)}>Cancel</button>
+                    <button className="save-btn" style={styles.saveBtn} onClick={handleEditSave}>Save</button>
                   </div>
                 </div>
               </div>
             )}
 
-
-
-              {showDeleteModal && (
-                <div style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  background: 'rgba(0,0,0,0.5)',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  zIndex: 1000
+            {showDeleteModal && (
+              <div className="delete-modal-overlay" style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                background: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 1000
+              }}>
+                <div className="delete-modal-content" style={{
+                  background: '#fff',
+                  padding: '30px 20px',
+                  width: '400px',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  textAlign: 'center'
                 }}>
-                  <div style={{
-                    background: '#fff',
-                    padding: '30px 20px',
-                    width: '400px',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                    textAlign: 'center'
-                  }}>
-                    <p style={{ marginBottom: '25px', fontSize: '16px' }}>
-                        This action will permanently remove <strong>{employeeToDelete?.full_name}</strong> from the employee list. Do you want to continue?                    
+                  <p style={{ marginBottom: '25px', fontSize: '16px' }}>
+                      This action will permanently remove <strong>{employeeToDelete?.full_name}</strong> from the employee list. Do you want to continue?                    
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
+                    <button 
+                      className="confirm-delete-btn"
+                      onClick={confirmDelete} 
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: 'red',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Delete
+                    </button>
+                    <button 
+                      className="cancel-delete-btn"
+                      onClick={() => setShowDeleteModal(false)} 
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#ccc',
+                        color: '#333',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showAddModal && (
+              <div className="modal-overlay" style={styles.modalOverlay}>
+                <div className="modal-container" style={styles.modalContainer}>
+                  <h3 className="modal-title" style={styles.modalTitle}>Add New Employee</h3>
+                    <p className="modal-subtitle" style={styles.modalSubtitle}>
+                      Fill out the details below to add a new employee record.
                     </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                      <button 
-                        onClick={confirmDelete} 
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: 'red',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        Delete
-                      </button>
-                      <button 
-                        onClick={() => setShowDeleteModal(false)} 
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: '#ccc',
-                          color: '#333',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
+                  <div className="modal-grid" style={styles.modalGrid}>
+                    <input
+                      placeholder="First Name"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.first_name}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, first_name: e.target.value.replace(/[0-9]/g, "") })}
+                    />
 
-              {showAddModal && (
-                <div style={styles.modalOverlay}>
-                  <div style={styles.modalContainer}>
-                    <h3 style={styles.modalTitle}>Add New Employee</h3>
-                      <p style={styles.modalSubtitle}>
-                        Fill out the details below to add a new employee record.
-                      </p>
+                    <input
+                      placeholder="Last Name"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.last_name}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, last_name: e.target.value.replace(/[0-9]/g, "") })}
+                    />
 
-                    <div style={styles.modalGrid}>
-                      <input
-                        placeholder="First Name"
-                        style={styles.modalInput}
-                        value={newEmployee.first_name}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, first_name: e.target.value.replace(/[0-9]/g, "") })}
-                      />
+                    <input
+                      placeholder="Email"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.email}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                    />
 
-                      <input
-                        placeholder="Last Name"
-                        style={styles.modalInput}
-                        value={newEmployee.last_name}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, last_name: e.target.value.replace(/[0-9]/g, "") })}
-                      />
+                    <input
+                      placeholder="Position"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.position}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, position: e.target.value.replace(/[0-9]/g, "") })}
+                    />
 
-                      <input
-                        placeholder="Email"
-                        style={styles.modalInput}
-                        value={newEmployee.email}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-                      />
+                    <input
+                      placeholder="ID Number"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.id_number}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (/^\d{0,8}$/.test(value)) setNewEmployee({ ...newEmployee, id_number: value });
+                      }}
+                    />
 
-                      <input
-                        placeholder="Position"
-                        style={styles.modalInput}
-                        value={newEmployee.position}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, position: e.target.value.replace(/[0-9]/g, "") })}
-                      />
+                    <input
+                      placeholder="Contact Number"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.contact_number}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (/^\d{0,11}$/.test(value)) setNewEmployee({ ...newEmployee, contact_number: value });
+                      }}
+                    />
 
-                      <input
-                        placeholder="ID Number"
-                        style={styles.modalInput}
-                        value={newEmployee.id_number}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (/^\d{0,8}$/.test(value)) setNewEmployee({ ...newEmployee, id_number: value });
-                        }}
-                      />
-
-                      <input
-                        placeholder="Contact Number"
-                        style={styles.modalInput}
-                        value={newEmployee.contact_number}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (/^\d{0,11}$/.test(value)) setNewEmployee({ ...newEmployee, contact_number: value });
-                        }}
-                      />
-
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={styles.label}>Gender</label>
-                        <div style={styles.genderContainer}>
-                          {['Male', 'Female'].map((g) => (
-                            <div
-                              key={g}
-                              style={{
-                                ...styles.genderBtn,
-                                ...(newEmployee.gender === g ? styles.genderBtnActive : {}),
-                              }}
-                              onClick={() => setNewEmployee({ ...newEmployee, gender: g })}
-                            >
-                              {g}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <select
-                        style={styles.selectInput}
-                        value={newEmployee.civil_status}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, civil_status: e.target.value })}
-                      >
-                        <option value="">Select Civil Status</option>
-                        <option value="Single">Single</option>
-                        <option value="Married">Married</option>
-                        <option value="Widowed">Widowed</option>
-                        <option value="Separated">Separated</option>
-                        <option value="Annulled">Annulled</option>
-                      </select>
-
-                      <select
-                        style={styles.selectInput}
-                        value={newEmployee.department}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-                      >
-                        <option value="">Select Department</option>
-                        {departments.map((dept, idx) => (
-                          <option key={idx} value={dept}>{dept}</option>
+                    <div className="gender-section" style={{ gridColumn: '1 / -1' }}>
+                      <label className="input-label" style={styles.label}>Gender</label>
+                      <div className="gender-container" style={styles.genderContainer}>
+                        {['Male', 'Female'].map((g) => (
+                          <div
+                            key={g}
+                            className={`gender-btn ${newEmployee.gender === g ? 'active' : ''}`}
+                            style={{
+                              ...styles.genderBtn,
+                              ...(newEmployee.gender === g ? styles.genderBtnActive : {}),
+                            }}
+                            onClick={() => setNewEmployee({ ...newEmployee, gender: g })}
+                          >
+                            {g}
+                          </div>
                         ))}
-                      </select>
-
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={styles.label}>Employment Type</label>
-                        <div style={styles.genderContainer}>
-                          {['Temporary', 'Permanent', 'Contractual', 'Casual', 'Job Order', 'Coterminous'].map((type) => (
-                            <div
-                              key={type}
-                              style={{
-                                ...styles.genderBtn,
-                                ...(newEmployee.employment_status === type ? styles.genderBtnActive : {}),
-                                fontSize: '12px',
-                              }}
-                              onClick={() => setNewEmployee({ ...newEmployee, employment_status: type })}
-                            >
-                              {type}
-                            </div>
-                          ))}
-                        </div>
                       </div>
-
-                      <select
-                        style={styles.selectInput}
-                        value={newEmployee.status}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, status: e.target.value })}
-                      >
-                        <option value="">Select Employment Status</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-
-                      <input
-                        type="date"
-                        style={styles.modalInput}
-                        value={newEmployee.date_hired || ''}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
-                      />
                     </div>
 
-                    <div style={styles.modalActions}>
-                      <button style={styles.cancelBtn} onClick={() => setShowAddModal(false)}>Cancel</button>
-                      <button style={styles.saveBtn} onClick={handleAddEmployee}>Save</button>
+                    <select
+                      className="select-input"
+                      style={styles.selectInput}
+                      value={newEmployee.civil_status}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, civil_status: e.target.value })}
+                    >
+                      <option value="">Select Civil Status</option>
+                      <option value="Single">Single</option>
+                      <option value="Married">Married</option>
+                      <option value="Widowed">Widowed</option>
+                      <option value="Separated">Separated</option>
+                      <option value="Annulled">Annulled</option>
+                    </select>
+
+                    <select
+                      className="select-input"
+                      style={styles.selectInput}
+                      value={newEmployee.department}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((dept, idx) => (
+                        <option key={idx} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+
+                    <div className="employment-type-section" style={{ gridColumn: '1 / -1' }}>
+                      <label className="input-label" style={styles.label}>Employment Type</label>
+                      <div className="employment-type-container" style={styles.genderContainer}>
+                        {['Temporary', 'Permanent', 'Contractual', 'Casual', 'Job Order', 'Coterminous'].map((type) => (
+                          <div
+                            key={type}
+                            className={`employment-type-btn ${newEmployee.employment_status === type ? 'active' : ''}`}
+                            style={{
+                              ...styles.genderBtn,
+                              ...(newEmployee.employment_status === type ? styles.genderBtnActive : {}),
+                              fontSize: '12px',
+                            }}
+                            onClick={() => setNewEmployee({ ...newEmployee, employment_status: type })}
+                          >
+                            {type}
+                          </div>
+                        ))}
+                      </div>
                     </div>
+
+                    <select
+                      className="select-input"
+                      style={styles.selectInput}
+                      value={newEmployee.status}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, status: e.target.value })}
+                    >
+                      <option value="">Select Employment Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+
+                    <input
+                      type="date"
+                      className="modal-input"
+                      style={styles.modalInput}
+                      value={newEmployee.date_hired || ''}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="modal-actions" style={styles.modalActions}>
+                    <button className="cancel-btn" style={styles.cancelBtn} onClick={() => setShowAddModal(false)}>Cancel</button>
+                    <button className="save-btn" style={styles.saveBtn} onClick={handleAddEmployee}>Save</button>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-        {isDeleting && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            background: 'rgba(255, 255, 255, 0.8)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000,
-            backdropFilter: 'blur(2px)',
-          }}>
-            <div className="spinner" style={{
-              width: 60,
-              height: 60,
-              border: '6px solid #ccc',
-              borderTop: '6px solid #007bff',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-            }} />
-            <p style={{
-              marginTop: 20,
-              fontSize: 18,
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              {employeesToUpload.length > 0
-                ? `Importing ${employeesToUpload.length} employees...`
-                : selectedEmployees.length > 1
-                  ? 'Deleting selected employees...'
-                  : 'Deleting employee...'}
-            </p>
-            <style>
-              {`@keyframes spin {
-                  0% { transform: rotate(0deg); }
-                  100% { transform: rotate(360deg); }
-                }`}
-            </style>
+            {isDeleting && (
+              <div className="loading-overlay" style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                background: 'rgba(255, 255, 255, 0.8)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 2000,
+                backdropFilter: 'blur(2px)',
+              }}>
+                <div className="spinner" style={{
+                  width: 60,
+                  height: 60,
+                  border: '6px solid #ccc',
+                  borderTop: '6px solid #007bff',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }} />
+                <p className="loading-text" style={{
+                  marginTop: 20,
+                  fontSize: 18,
+                  fontWeight: '500',
+                  color: '#333'
+                }}>
+                  {employeesToUpload.length > 0
+                    ? `Importing ${employeesToUpload.length} employees...`
+                    : selectedEmployees.length > 1
+                      ? 'Deleting selected employees...'
+                      : 'Deleting employee...'}
+                </p>
+                <style>
+                  {`@keyframes spin {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }`}
+                </style>
+              </div>
+            )}
+
           </div>
         )}
 
-        </div>
+        {view === 'directory' && (
+          <div className="directory-view" style={styles.directory}>
 
-        
-      )}
+            <div className="directory-header" style={styles.header1}>
+              <div className="search-container">
+                <FontAwesomeIcon icon={faSearch} className="search-icon" style={styles.searchIcon} />
+                <input
+                  placeholder='Search by name, email, or position'
+                  className="search-input"
+                  style={styles.searchInput}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
 
-      {view === 'directory' && (
-        <div style={styles.directory}>
+              <select
+                className="status-filter"
+                style={styles.filterStatus}
+                value={filterEmploymentStatus}
+                onChange={(e) => setFilterEmploymentStatus(e.target.value)}
+              >
+                <option value="">Filter by Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
 
-          <div style={styles.header1}>
-            <div>
-              <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
-              <input
-                placeholder='Search by name, email, or position'
-                style={styles.searchInput}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <select
+                className="department-filter"
+                style={styles.filterStatus2}
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+              >
+                <option value="">Filter by Department</option>
+                {departments.map((dept, idx) => (
+                  <option key={idx} value={dept}>{dept}</option>
+                ))}
+              </select>
+
+              <select
+                className="employment-type-filter"
+                style={styles.filterStatus}
+                value={filterEmploymentType}
+                onChange={(e) => setFilterEmploymentType(e.target.value)}
+              >
+                <option value="">Filter by Employment Type</option>
+                <option value="temporary">Temporary</option>
+                <option value="permanent">Permanent</option>
+                <option value="contract">Contract</option>
+                <option value="casual">Casual</option>
+              </select>
             </div>
 
-            <select
-              style={styles.filterStatus}
-              value={filterEmploymentStatus}
-              onChange={(e) => setFilterEmploymentStatus(e.target.value)}
-            >
-              <option value="">Filter by Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
+            <div className="card-grid" style={styles.cardGrid}>
+              {employeeRecord
+                .filter(emp => {
+                  const search = searchTerm.toLowerCase();
+                  const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+                  const email = (emp.email || '').toLowerCase();
+                  const position = (emp.position || '').toLowerCase();
+                  return fullName.includes(search) || email.includes(search) || position.includes(search);
+                })
+                .filter(emp => filterDepartment ? (emp.department || '') === filterDepartment : true)
+                .filter(emp => filterEmploymentStatus ? (emp.status || '') === filterEmploymentStatus : true)
+                .filter(emp => filterEmploymentType ? (emp.employment_status || '').toLowerCase() === filterEmploymentType.toLowerCase() : true)
+                .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                .map(emp => (
+                  <div
+                    key={emp.id}
+                    className="employee-card"
+                    style={{ ...styles.card, cursor: 'pointer' }}
+                    onClick={() => navigate(`/employeeProfile/${emp.id}`)}
+                  >
+                    <div className="avatar-container" style={styles.avatarContainer}>
+                      {emp.profile_picture ? (
+                        <img src={emp.profile_picture} alt="Profile" className="avatar" style={styles.avatar} />
+                      ) : (
+                        <div className="default-avatar" style={{
+                          width: "80px",
+                          height: "80px",
+                          borderRadius: '50%',
+                          backgroundColor: '#ddd',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <FontAwesomeIcon icon={faUser} size="3x" color="#888" />
+                        </div>
+                      )}
+                    </div>
 
-            <select
-              style={styles.filterStatus2}
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-            >
-              <option value="">Filter by Department</option>
-              {departments.map((dept, idx) => (
-                <option key={idx} value={dept}>{dept}</option>
+                    <div className="employee-info" style={styles.info}>
+                      <p className="employee-name" style={styles.name}>{`${emp.first_name || ''} ${emp.last_name || ''}`.trim()}</p>
+                      <p className="employee-position" style={styles.position}>{emp.position || '—'}</p>
+                      <p className="employee-department" style={styles.department}>{emp.department || '—'}</p>
+                    </div>
+                  </div>
               ))}
-            </select>
+            </div>
 
-            <select
-              style={styles.filterStatus}
-              value={filterEmploymentType}
-              onChange={(e) => setFilterEmploymentType(e.target.value)}
-            >
-              <option value="">Filter by Employment Type</option>
-              <option value="temporary">Temporary</option>
-              <option value="permanent">Permanent</option>
-              <option value="contract">Contract</option>
-              <option value="casual">Casual</option>
-            </select>
+            {/* Pagination */}
+            <div className="pagination-container" style={styles.paginationContainer}>
+              <button
+                className="page-btn prev-btn"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                style={styles.pageBtn}
+              >{'<'}</button>
+
+              {[...Array(Math.ceil(employeeRecord.length / itemsPerPage))].map((_, idx) => {
+                const page = idx + 1;
+                return (
+                  <button
+                    key={page}
+                    className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(page)}
+                    style={{
+                      ...styles.pageBtn,
+                      ...(currentPage === page ? styles.activePageBtn : {}),
+                    }}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+
+              <button
+                className="page-btn next-btn"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(employeeRecord.length / itemsPerPage)))}
+                style={styles.pageBtn}
+              >{'>'}</button>
+            </div>
+
           </div>
-
-          <div style={styles.cardGrid}>
-            {employeeRecord
-              .filter(emp => {
-                const search = searchTerm.toLowerCase();
-                const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
-                const email = (emp.email || '').toLowerCase();
-                const position = (emp.position || '').toLowerCase();
-                return fullName.includes(search) || email.includes(search) || position.includes(search);
-              })
-              .filter(emp => filterDepartment ? (emp.department || '') === filterDepartment : true)
-              .filter(emp => filterEmploymentStatus ? (emp.status || '') === filterEmploymentStatus : true)
-              .filter(emp => filterEmploymentType ? (emp.employment_status || '').toLowerCase() === filterEmploymentType.toLowerCase() : true)
-              .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-              .map(emp => (
-                <div
-                  key={emp.id}
-                  style={{ ...styles.card, cursor: 'pointer' }}
-                  onClick={() => navigate(`/employeeProfile/${emp.id}`)}
-                >
-                  <div style={styles.avatarContainer}>
-                    {emp.profile_picture ? (
-                      <img src={emp.profile_picture} alt="Profile" style={styles.avatar} />
-                    ) : (
-                      <div style={{
-                        width: "80px",
-                        height: "80px",
-                        borderRadius: '50%',
-                        backgroundColor: '#ddd',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <FontAwesomeIcon icon={faUser} size="3x" color="#888" />
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={styles.info}>
-                    <p style={styles.name}>{`${emp.first_name || ''} ${emp.last_name || ''}`.trim()}</p>
-                    <p style={styles.position}>{emp.position || '—'}</p>
-                    <p style={styles.department}>{emp.department || '—'}</p>
-                  </div>
-                </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <div style={styles.paginationContainer}>
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              style={styles.pageBtn}
-            >{'<'}</button>
-
-            {[...Array(Math.ceil(employeeRecord.length / itemsPerPage))].map((_, idx) => {
-              const page = idx + 1;
-              return (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  style={{
-                    ...styles.pageBtn,
-                    ...(currentPage === page ? styles.activePageBtn : {}),
-                  }}
-                >
-                  {page}
-                </button>
-              );
-            })}
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(employeeRecord.length / itemsPerPage)))}
-              style={styles.pageBtn}
-            >{'>'}</button>
-          </div>
-
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
