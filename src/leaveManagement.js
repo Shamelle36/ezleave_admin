@@ -31,13 +31,18 @@ import {
   faUpload,
   faSignature,
   faFilePdf,
+  faEraser,
+  faTrash,
+  faExclamationTriangle,
+  faWarning,
+  faCalendarDay
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import Papa from 'papaparse';
-import { width } from '@fortawesome/free-solid-svg-icons/fa0';
+import SignatureCanvas from 'react-signature-canvas';
 
 function LeaveManagement() {
     const navigate = useNavigate();
@@ -82,6 +87,38 @@ const [formGenerationTimeout, setFormGenerationTimeout] = useState(null);
 const [isTyping, setIsTyping] = useState(false);
 const generationTriggerRef = useRef(false);
 
+// E-Signature Refs and State
+const sigCanvasRef = useRef(null);
+const [showESignPad, setShowESignPad] = useState(false);
+const [signatureImage, setSignatureImage] = useState(null);
+const [isSignatureEmpty, setIsSignatureEmpty] = useState(true);
+
+const [leaveCalendarData, setLeaveCalendarData] = useState([]);
+const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
+const [calendarView, setCalendarView] = useState('day'); // 'day', 'month'
+const [selectedDepartment, setSelectedDepartment] = useState('all');
+const [calendarLoading, setCalendarLoading] = useState(false);
+
+// NEW STATE FOR OVERLAPPING CHECK
+const [overlapCheckResult, setOverlapCheckResult] = useState(null);
+const [showOverlapModal, setShowOverlapModal] = useState(false);
+const [forceApprove, setForceApprove] = useState(false);
+const [overlapCheckLoading, setOverlapCheckLoading] = useState(false);
+
+const [rejectionReason, setRejectionReason] = useState(""); // For pre-defined reasons
+const [customRejectionReason, setCustomRejectionReason] = useState(""); // For custom input
+const [showCustomReasonInput, setShowCustomReasonInput] = useState(false);
+
+// Pre-defined rejection reasons
+const rejectionReasons = [
+  "Overlapping of leave with existing approved leaves",
+  "Incomplete documentation",
+  "Violation of leave policy",
+  "Department scheduling conflict",
+  "Pending work deliverables",
+  "Other (specify below)"
+];
+
     useEffect(() => {
         let role = localStorage.getItem("role") || "";
         // Normalize: lowercase and replace underscores with spaces
@@ -101,7 +138,6 @@ const generationTriggerRef = useRef(false);
       { name: "Announcement", icon: faBullhorn, to: "/announcement" },
       { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
       { name: "User Management", icon: faUserCog, to: "/userManagement" },
-      { name: "Settings", icon: faCog, to: "#" },
     ];
   
     const allowedMenus = menuItems.filter((item) => {
@@ -239,52 +275,122 @@ const generationTriggerRef = useRef(false);
         fetchLeaveBalances();
     }, []);
 
-    useEffect(() => {
-        if (activeTab === "summary") {
-            fetch("http://localhost:5000/api/leave-requests")
-                .then((res) => res.json())
-                .then((data) => {
-                    const formatted = data.map((req) => {
-                        let from = null;
-                        let to = null;
-                        if (req.inclusive_dates) {
-                            const match = req.inclusive_dates.match(/\[(.*?),(.*?)[)\]]/);
-                            if (match) {
-                                from = new Date(match[1]);
-                                to = new Date(match[2]);
+useEffect(() => {
+    if (activeTab === "summary") {
+        console.log("📊 Fetching leave summary data...");
+        fetch("http://localhost:5000/api/leave-requests")
+            .then((res) => {
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then((data) => {
+                console.log("📊 Raw leave summary data received:", data);
+                
+                const formatted = data.map((req, index) => {
+                    console.log(`Processing request ${index}:`, req);
+                    
+                    // Parse inclusive dates - handle multiple formats
+                    let from = null;
+                    let to = null;
+                    
+                    if (req.inclusive_dates) {
+                        try {
+                            // Handle string format like "[2024-01-01,2024-01-05)"
+                            if (typeof req.inclusive_dates === 'string') {
+                                const match = req.inclusive_dates.match(/\[(.*?),(.*?)[)\]]/);
+                                if (match) {
+                                    from = new Date(match[1].trim());
+                                    to = new Date(match[2].trim());
+                                } else {
+                                    // Try to parse as direct dates
+                                    const dates = req.inclusive_dates.split(',');
+                                    if (dates.length >= 2) {
+                                        from = new Date(dates[0].replace(/[\[\]]/g, '').trim());
+                                        to = new Date(dates[1].replace(/[)\]]/g, '').trim());
+                                    }
+                                }
                             }
+                            
+                            // Validate dates
+                            if (from && isNaN(from.getTime())) {
+                                console.warn("Invalid from date:", req.inclusive_dates);
+                                from = null;
+                            }
+                            if (to && isNaN(to.getTime())) {
+                                console.warn("Invalid to date:", req.inclusive_dates);
+                                to = null;
+                            }
+                            
+                        } catch (err) {
+                            console.error("Error parsing dates for request:", req.id, err);
                         }
-                        return {
-                            name: req.first_name && req.last_name
-                                ? `${req.first_name} ${req.last_name}`
-                                : req.user_id,
-                            department: req.office_department,
-                            leaveType: req.leave_type,
-                            entitled: 0,
-                            used: 0,
-                            remaining: 0,
-                            status: req.status,
-                            approvedBy: req.approved_by || "N/A",
-                            dateFiled: new Date(req.date_filing),
-                            range: { from, to }
-                        };
-                    });
-                    setLeaveRecords(formatted);
-                })
-                .catch((err) => console.error("Error fetching summary:", err));
-        }
-    }, [activeTab]);
+                    }
+                    
+                    // Use the inclusive_date fields as fallback
+                    if ((!from || !to) && req.inclusive_date_start && req.inclusive_date_end) {
+                        try {
+                            from = new Date(req.inclusive_date_start);
+                            to = new Date(req.inclusive_date_end);
+                        } catch (err) {
+                            console.error("Error parsing fallback dates:", err);
+                        }
+                    }
+                    
+                    console.log(`Request ${req.id} dates:`, { from, to });
+                    
+                    // Get employee name
+                    const employeeName = req.first_name && req.last_name 
+                        ? `${req.first_name} ${req.last_name}`
+                        : req.name || `Employee ${req.user_id || index + 1}`;
+                    
+                    // Get department
+                    const department = req.department || req.office_department || 'N/A';
+                    
+                    return {
+                        id: req.id || index,
+                        name: employeeName,
+                        department: department,
+                        leaveType: req.leave_type || 'N/A',
+                        entitled: req.entitled || 0,
+                        used: req.used || 0,
+                        remaining: req.balance || (req.entitled - req.used) || 0,
+                        status: req.status || 'Pending',
+                        approvedBy: req.approver_name || req.approved_by || "N/A",
+                        dateFiled: req.date_filing ? new Date(req.date_filing) : null,
+                        range: { from, to }
+                    };
+                });
+                
+                console.log("📊 Formatted leave records:", formatted);
+                setLeaveRecords(formatted);
+            })
+            .catch((err) => {
+                console.error("❌ Error fetching summary:", err);
+                // Fallback to empty array to prevent crashes
+                setLeaveRecords([]);
+            });
+    }
+}, [activeTab]);
 
-    useEffect(() => {
-        const dayStr = date.toISOString().split("T")[0];
-        const filtered = leaveRecords.filter((record) => {
-            if (!record.range.from || !record.range.to) return false;
-            const fromStr = record.range.from.toISOString().split("T")[0];
-            const toStr = record.range.to.toISOString().split("T")[0];
-            return dayStr >= fromStr && dayStr <= toStr;
-        });
-        setFilteredRecords(filtered);
-    }, [date, leaveRecords]);
+
+useEffect(() => {
+    const dayStr = date.toLocaleDateString("en-CA");
+
+    const filtered = leaveRecords.filter((record) => {
+        if (!record.dateFiled) return false;
+
+        const filedStr = record.dateFiled.toLocaleDateString("en-CA");
+
+        return filedStr === dayStr;
+    });
+
+    console.log(`📊 Filtered records count: ${filtered.length}`);
+    setFilteredRecords(filtered);
+}, [date, leaveRecords]);
+
+
 
     useEffect(() => {
         if (activeTab === "requests") {
@@ -295,32 +401,131 @@ const generationTriggerRef = useRef(false);
         }
     }, [activeTab]);
 
-const handleApprove = (requestId, remarks = "Approved via dashboard") => {
+const checkOverlappingLeaves = async (leaveRequestId) => {
+  try {
+    setOverlapCheckLoading(true);
+    
+    const request = requests.find(req => req.id === leaveRequestId);
+    if (!request) {
+      throw new Error("Leave request not found");
+    }
+
+    console.log("🔍 Checking overlaps for request:", {
+      id: request.id,
+      user_id: request.user_id,
+      inclusive_dates: request.inclusive_dates, // Should be "[2025-12-14,2025-12-16)"
+      department: request.department
+    });
+
+    // If inclusive_dates doesn't exist, we need to fetch it
+    let inclusiveDates = request.inclusive_dates;
+    
+    if (!inclusiveDates) {
+      console.log("⚠️ inclusive_dates not found in request, fetching from backend...");
+      // The backend fix above should make this unnecessary
+      throw new Error("inclusive_dates not available in leave request data");
+    }
+
+    console.log("✅ Using inclusive_dates:", inclusiveDates);
+
+    const leaveRequestForBackend = {
+      user_id: request.user_id,
+      inclusive_dates: inclusiveDates,
+      id: request.id,
+      department: request.department
+    };
+
+    console.log("📤 Sending to backend:", leaveRequestForBackend);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch('http://localhost:5000/api/leave-requests/check-overlapping-leaves', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(leaveRequestForBackend),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("✅ Overlap check result:", data);
+    setOverlapCheckResult(data);
+    
+    return data;
+  } catch (error) {
+    console.error('❌ Error checking overlapping leaves:', error);
+    
+    const fallbackResult = { 
+      hasOverlap: false, 
+      violations: [],
+      error: error.message,
+      canProceed: true
+    };
+    
+    setOverlapCheckResult(fallbackResult);
+    return fallbackResult;
+  } finally {
+    setOverlapCheckLoading(false);
+  }
+};
+
+// MODIFIED: handleApprove function with overlapping check
+const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
   const admin = JSON.parse(localStorage.getItem("admin"));
   if (!admin) return alert("No admin logged in!");
 
   const role = admin.role?.toLowerCase().replace(" ", "_");
+  const request = requests.find(req => req.id === requestId);
 
-  // If mayor, office head, or HR admin, show actual CS form directly (but don't generate until state is set)
+  // ❗ BLOCK: If office head rejected → no one can approve
+  if (request.office_head_status === "Rejected" && role !== "office_head") {
+    alert("This leave has already been rejected by the Office Head and cannot be approved.");
+    return;
+  }
+
+  // For office_head role, check for overlapping leaves
+  if (role === "office_head") {
+    try {
+      setOverlapCheckLoading(true);
+      const overlapCheck = await checkOverlappingLeaves(requestId);
+      setOverlapCheckResult(overlapCheck);
+      
+      if (overlapCheck.hasOverlap) {
+        // Show overlapping leaves warning modal
+        setShowOverlapModal(true);
+        setSelectedRequest(request);
+        setActionType("approve");
+        setActionRemarks(remarks);
+        return; // Don't proceed yet, wait for user decision
+      }
+    } catch (error) {
+      console.error("Error checking overlapping leaves:", error);
+      // Continue with approval if check fails
+    } finally {
+      setOverlapCheckLoading(false);
+    }
+  }
+
+  // CS Form path for approval (mayor, office_head, admin)
   if (role === "mayor" || role === "office_head" || role === "admin") {
-    const request = requests.find(req => req.id === requestId);
     if (request) {
-      // set all required state first
       setSelectedRequest(request);
       setDaysWithPay(request.number_of_days || 0);
       setActionType("approve");
       setActionRemarks(remarks);
-
-      // tell the effect to generate the form once those state updates commit
       generationTriggerRef.current = true;
-
-      // also show loading for UX
       setIsGeneratingCSForm(true);
     }
     return;
   }
 
-  // Original approval logic for other roles
+  // Normal approval path (for roles other than the ones above)
   (async () => {
     try {
       const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
@@ -330,6 +535,7 @@ const handleApprove = (requestId, remarks = "Approved via dashboard") => {
           actionBy: admin.id || admin.email,
           remarks,
           role,
+          forceApprove: false // For office_head, this will be handled in backend
         }),
       });
 
@@ -360,21 +566,89 @@ const handleApprove = (requestId, remarks = "Approved via dashboard") => {
   })();
 };
 
+// NEW FUNCTION: Handle force approval after overlap warning
+const handleForceApprove = async () => {
+  if (!selectedRequest) return;
+
+  const admin = JSON.parse(localStorage.getItem("admin"));
+  if (!admin) return alert("No admin logged in!");
+
+  const role = admin.role?.toLowerCase().replace(" ", "_");
+  
+  try {
+    const res = await fetch(`http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actionBy: admin.id || admin.email,
+        remarks: actionRemarks || "Approved despite overlapping leaves",
+        role,
+        forceApprove: true
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      setRequests(prev =>
+        prev.map(req =>
+          req.id === selectedRequest.id
+            ? {
+                ...req,
+                status: role === "mayor" ? "Approved" : req.status,
+                [`${role}_status`]: "Approved",
+                approver_name: data.approver_name,
+                remarks: actionRemarks || "Approved despite overlapping leaves",
+              }
+            : req
+        )
+      );
+      
+      alert(`Leave request approved (with overlapping leaves warning) by ${data.approver_name}`);
+      setShowOverlapModal(false);
+      setOverlapCheckResult(null);
+    } else {
+      alert(data.error || "Failed to approve request");
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Error approving leave request");
+  }
+};
+
+// NEW FUNCTION: Handle normal approval (proceed without force)
+const handleProceedApproval = () => {
+  setShowOverlapModal(false);
+  // Proceed with normal CS Form generation
+  if (selectedRequest) {
+    setDaysWithPay(selectedRequest.number_of_days || 0);
+    generationTriggerRef.current = true;
+    setIsGeneratingCSForm(true);
+  }
+};
+
 const handleReject = (requestId, remarks = "Rejected via dashboard") => {
   const admin = JSON.parse(localStorage.getItem("admin"));
   if (!admin) return alert("No admin logged in!");
 
   const role = admin.role?.toLowerCase().replace(" ", "_");
+  const request = requests.find(req => req.id === requestId);
 
-  // If mayor/office_head/admin, show CS form for rejection (but don't generate until state is set)
+  // CHECK: If head has already rejected, block further actions
+  if (request.office_head_status === "Rejected" && role !== "office_head") {
+    alert("This leave request has been rejected by the Office Head and cannot be processed further.");
+    return;
+  }
+
+  // If mayor/office_head/admin, show CS form for rejection with options
   if (role === "mayor" || role === "office_head" || role === "admin") {
-    const request = requests.find(req => req.id === requestId);
     if (request) {
       setSelectedRequest(request);
       setActionType("reject");
+      setRejectionReason(""); // Reset rejection reason
+      setCustomRejectionReason(""); // Reset custom reason
+      setShowCustomReasonInput(false); // Reset custom input visibility
       setActionRemarks(remarks || "Rejected via CS Form");
-
-      // mark for generation after state commit
       generationTriggerRef.current = true;
       setIsGeneratingCSForm(true);
     }
@@ -423,6 +697,20 @@ const handleReject = (requestId, remarks = "Rejected via dashboard") => {
   })();
 };
 
+const handleRejectionReasonChange = (reason) => {
+  setRejectionReason(reason);
+  
+  // Check if "Other" is selected
+  if (reason === "Other (specify below)") {
+    setShowCustomReasonInput(true);
+    setActionRemarks(""); // Clear action remarks initially
+  } else {
+    setShowCustomReasonInput(false);
+    // Set the selected reason as action remarks
+    setActionRemarks(reason);
+  }
+};
+
 useEffect(() => {
   // Only run when a generation was intentionally requested
   if (!generationTriggerRef.current) return;
@@ -464,32 +752,64 @@ const generateAndShowCSForm = async () => {
     }
 
     const admin = JSON.parse(localStorage.getItem("admin"));
+    
+    if (!admin) {
+      alert("Authentication required. Please log in again.");
+      setIsGeneratingForm(false);
+      setIsGeneratingCSForm(false);
+      return;
+    }
+
     const role = admin.role?.toLowerCase().replace(" ", "_");
 
-    // Build payload from the latest committed states
+    // DEBUG: Check what signature data we have
+    console.log("🔍 Frontend Signature Debug:");
+    console.log("Signature method:", signatureMethod);
+    console.log("Signature data available:", !!signatureData);
+    console.log("Signature data type:", typeof signatureData);
+    console.log("Signature data preview:", signatureData ? signatureData.substring(0, 100) : "No data");
+
+    // Build payload with user data INCLUDING SIGNATURE DATA
     const payload = {
       leave_application_id: selectedRequest.id,
       days_with_pay: daysWithPay,
       requesting_role: role,
       action_type: actionType,
       action_remarks: actionRemarks,
+      user_id: admin.id,
+      user_data: {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+        full_name: admin.full_name
+      },
       real_time_data: {
         action_type: actionType,
         action_remarks: actionRemarks,
         days_with_pay: daysWithPay
-      }
+      },
+      // CRITICAL FIX: Ensure signature data is properly included
+      signature_method: signatureMethod,
+      signature_data: signatureData // This should be the base64 string
     };
 
-    console.log("Generating CS Form with payload:", payload);
+    console.log("📦 Final payload being sent:", {
+      signature_method: payload.signature_method,
+      has_signature_data: !!payload.signature_data,
+      signature_data_length: payload.signature_data ? payload.signature_data.length : 0
+    });
 
     const res = await fetch("http://localhost:5000/api/generate-cs-form", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
+      const errorData = await res.json();
+      throw new Error(errorData.message || `HTTP error! status: ${res.status}`);
     }
 
     const blob = await res.blob();
@@ -501,7 +821,6 @@ const generateAndShowCSForm = async () => {
       timestamp: Date.now()
     });
 
-    // Show the actual form in the modal
     setShowActualCSForm(true);
   } catch (err) {
     console.error("Error generating CS Form:", err);
@@ -512,23 +831,16 @@ const generateAndShowCSForm = async () => {
   }
 };
 
-    const handleSignatureMethod = (method) => {
+
+
+// E-Signature Functions
+const handleSignatureMethod = (method) => {
   setSignatureMethod(method);
   setShowSignatureChoice(false);
 
   if (method === "e-sign") {
+    setShowESignPad(true);
     setIsSigning(true);
-    // emulate e-sign flow then complete approval
-    setTimeout(() => {
-      setSignatureData("Mayor_E_Signature_" + Date.now());
-      setIsSigning(false);
-      // Ensure we have selectedRequest; if not, abort
-      if (!selectedRequest) {
-        alert("No selected request for signing");
-        return;
-      }
-      completeCSFormApproval();
-    }, 2000);
   } else {
     // For traditional signing: open print and then complete
     if (csFormData && csFormData.url) {
@@ -548,9 +860,96 @@ const generateAndShowCSForm = async () => {
       completeCSFormApproval();
     }
   }
-    };
+};
 
-    const completeCSFormApproval = async () => {
+// Add this useEffect to debug signature state
+useEffect(() => {
+  console.log("🔄 Signature state updated:", {
+    signatureMethod,
+    hasSignatureData: !!signatureData,
+    signatureDataLength: signatureData ? signatureData.length : 0
+  });
+}, [signatureMethod, signatureData]);
+
+useEffect(() => {
+  if (signatureMethod === "e-sign" && signatureData && isSigning === false) {
+    console.log("🟢 Signature is now ready, generating CS Form...");
+    generateAndShowCSForm();
+  }
+}, [signatureData, isSigning]);
+
+const saveSignatureToDatabase = async (leaveApplicationId, signatureData, role) => {
+  try {
+    const res = await fetch("http://localhost:5000/api/save-signature", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leave_application_id: leaveApplicationId,
+        signature_data: signatureData,
+        requesting_role: role
+      }),
+    });
+
+    if (res.ok) {
+      console.log("Signature saved successfully to database");
+      return true;
+    } else {
+      console.error("Failed to save signature to database");
+      return false;
+    }
+  } catch (err) {
+    console.error("Error saving signature:", err);
+    return false;
+  }
+};
+
+
+const handleSaveSignature = async () => {
+  if (sigCanvasRef.current) {
+    const signatureDataURL = sigCanvasRef.current.toDataURL();
+    if (sigCanvasRef.current.isEmpty()) {
+      alert("Please provide a signature first.");
+      return;
+    }
+    
+    console.log("💾 Saving signature...");
+    
+    // Save signature to state
+    setSignatureImage(signatureDataURL);
+    setSignatureData(signatureDataURL);
+    
+    // Save signature to database
+    if (selectedRequest) {
+      const admin = JSON.parse(localStorage.getItem("admin"));
+      const role = admin.role?.toLowerCase().replace(" ", "_");
+      
+      const saved = await saveSignatureToDatabase(selectedRequest.id, signatureDataURL, role);
+      if (saved) {
+        console.log("✅ Signature saved to database");
+      }
+    }
+    
+    setShowESignPad(false);
+    setIsSigning(false);
+    
+    console.log("✅ Signature saved to state:", !!signatureDataURL);
+  }
+};
+
+const handleClearSignature = () => {
+  if (sigCanvasRef.current) {
+    sigCanvasRef.current.clear();
+    setIsSignatureEmpty(true);
+  }
+};
+
+const handleSignatureDraw = () => {
+  if (sigCanvasRef.current && !sigCanvasRef.current.isEmpty()) {
+    setIsSignatureEmpty(false);
+  }
+};
+
+const completeCSFormApproval = async () => {
   try {
     const admin = JSON.parse(localStorage.getItem("admin"));
     if (!admin || !selectedRequest) {
@@ -560,59 +959,128 @@ const generateAndShowCSForm = async () => {
 
     const role = admin.role?.toLowerCase().replace(" ", "_");
 
-    const res = await fetch(`http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`, {
+    // For rejection, validate that we have a reason
+    if (actionType === "reject") {
+      if (!rejectionReason && !actionRemarks.trim()) {
+        alert("Please select or specify a reason for rejection");
+        return;
+      }
+      
+      // Use custom reason if provided, otherwise use selected reason
+      const finalRemarks = showCustomReasonInput && customRejectionReason.trim() 
+        ? customRejectionReason 
+        : actionRemarks || rejectionReason;
+      
+      if (!finalRemarks.trim()) {
+        alert("Please provide a reason for rejection");
+        return;
+      }
+      
+      // Update action remarks with the final reason
+      setActionRemarks(finalRemarks);
+    }
+
+    console.log("🔐 Completing action with:", {
+      actionType,
+      rejectionReason,
+      customRejectionReason,
+      actionRemarks,
+      signatureMethod,
+    });
+
+    // If using e-signature, ensure it's saved to database
+    if (signatureMethod === "e-sign" && signatureData) {
+      await saveSignatureToDatabase(selectedRequest.id, signatureData, role);
+    }
+
+    // CRITICAL FIX: Use different endpoints for approve vs reject
+    const endpoint = actionType === "approve" 
+      ? `http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`
+      : `http://localhost:5000/api/leave-requests/${selectedRequest.id}/reject`;
+
+    // Different remarks based on action type
+    const remarks = actionType === "approve" 
+      ? `Approved with CS Form No. 6 - ${daysWithPay} days with pay`
+      : actionRemarks || "Rejected via CS Form";
+
+    const res = await fetch(endpoint, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         actionBy: admin.id || admin.email,
-        remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
+        remarks: remarks,
         role,
         cs_form_signed: true,
         signature_method: signatureMethod,
         signature_data: signatureMethod === "e-sign" ? signatureData : null,
-        days_with_pay: daysWithPay
+        days_with_pay: daysWithPay,
+        forceApprove: forceApprove,
+        rejection_reason: actionType === "reject" ? rejectionReason : null,
+        custom_rejection_reason: actionType === "reject" ? customRejectionReason : null
       }),
     });
 
     if (res.ok) {
+      // Update frontend state based on action type
       setRequests(prev =>
         prev.map(req =>
           req.id === selectedRequest.id
             ? {
                 ...req,
-                status: "Approved",
-                mayor_status: "Approved",
+                status: actionType === "approve" ? "Approved" : "Rejected",
+                mayor_status: actionType === "approve" ? "Approved" : "Rejected",
                 approver_name: admin.name || admin.email,
-                remarks: `Approved with CS Form No. 6 - ${daysWithPay} days with pay`,
-                days_with_pay: daysWithPay
+                remarks: remarks,
+                days_with_pay: daysWithPay,
+                rejection_reason: actionType === "reject" ? rejectionReason : null
               }
             : req
         )
       );
 
-      alert(`Leave request approved with ${signatureMethod === "e-sign" ? "E-Signature" : "Traditional Signature"} - ${daysWithPay} days with pay`);
+      alert(`Leave request ${actionType === "approve" ? "approved" : "rejected"} with ${signatureMethod === "e-sign" ? "E-Signature" : "Traditional Signature"}${actionType === "approve" ? ` - ${daysWithPay} days with pay` : ''}`);
 
-      // Close modals and clear form data
+      // Close modals and reset states
+      setShowSignatureChoice(false);
+      setShowESignPad(false);
       setShowActualCSForm(false);
       setCsFormData(null);
-      setShowSignatureChoice(false);
+      setShowOverlapModal(false);
+      setForceApprove(false);
+      setRejectionReason("");
+      setCustomRejectionReason("");
+      setShowCustomReasonInput(false);
 
       // Refresh latest requests from server
       fetchRequests();
     } else {
       const data = await res.json();
-      alert(data.error || "Failed to approve via CS Form");
+      alert(data.error || `Failed to ${actionType} via CS Form`);
     }
   } catch (err) {
-    console.error("Error approving with CS Form:", err);
-    alert("Error approving leave request");
+    console.error(`Error ${actionType === "approve" ? "approving" : "rejecting"} with CS Form:`, err);
+    alert(`Error ${actionType === "approve" ? "approving" : "rejecting"} leave request`);
   }
-    };
+};
 
-    // NEW: Handle confirm button click - show signature choice
-    const handleConfirmApproval = () => {
-        setShowSignatureChoice(true);
-    };
+
+    const handleConfirmApproval = async () => {
+  // If using e-signature but no signature data, show e-sign pad
+  if (signatureMethod === "e-sign" && !signatureData) {
+    setShowESignPad(true);
+    setIsSigning(true);
+    return;
+  }
+  
+  // If we have e-signature data, proceed to complete approval
+  if (signatureMethod === "e-sign" && signatureData) {
+    await completeCSFormApproval();
+  } else {
+    // For traditional signature, generate form first
+    await generateAndShowCSForm();
+    setShowSignatureChoice(true);
+  }
+};
 
     const handlePrintCSForm = async (requestData) => {
         try {
@@ -724,7 +1192,210 @@ const handleRemarksChange = (newValue) => {
   setIsTyping(true);
 };
 
+//Leave Calendar
 
+const fetchLeaveCalendarData = async (date, view = 'month') => {
+  try {
+    setCalendarLoading(true);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1; // JavaScript months are 0-indexed
+    
+    const response = await fetch(`http://localhost:5000/api/leave-requests/leave-calendar/month/${year}/${month}`);
+    const data = await response.json();
+    
+    if (response.ok) {
+      setLeaveCalendarData(data);
+    } else {
+      console.error('Error fetching leave calendar data:', data.error);
+      alert('Failed to fetch leave calendar data');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error fetching leave calendar data');
+  } finally {
+    setCalendarLoading(false);
+  }
+};
+
+// Add this useEffect to fetch calendar data when date changes
+useEffect(() => {
+  if (activeTab === 'calendar') {
+    fetchLeaveCalendarData(selectedCalendarDate, 'month');
+  }
+}, [selectedCalendarDate, activeTab]);
+
+// Add these calendar navigation functions
+const goToPreviousCalendarDay = () => {
+  const prev = new Date(selectedCalendarDate);
+  prev.setDate(prev.getDate() - 1);
+  setSelectedCalendarDate(prev);
+};
+
+const goToNextCalendarDay = () => {
+  const next = new Date(selectedCalendarDate);
+  next.setDate(next.getDate() + 1);
+  setSelectedCalendarDate(next);
+};
+
+const goToToday = () => {
+  setSelectedCalendarDate(new Date());
+};
+
+const renderCalendarDays = () => {
+  const year = selectedCalendarDate.getFullYear();
+  const month = selectedCalendarDate.getMonth();
+  
+  // Get first day of month and total days
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const totalDays = lastDay.getDate();
+  const startingDay = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  const days = [];
+  
+  // Add empty cells for days before the first day of the month
+  for (let i = 0; i < startingDay; i++) {
+    days.push(<div key={`empty-${i}`} style={styles.calendarDayEmpty}></div>);
+  }
+  
+  // Add actual days of the month
+  for (let day = 1; day <= totalDays; day++) {
+    const currentDate = new Date(year, month, day);
+    const dateStr = currentDate.toISOString().split('T')[0];
+    
+    // FIXED: Proper date range checking with inclusive dates
+    const employeesOnLeave = leaveCalendarData.employees?.filter(employee => {
+      if (!employee.leave_start || !employee.leave_end) return false;
+      
+      try {
+        const leaveStart = new Date(employee.leave_start);
+        const leaveEnd = new Date(employee.leave_end);
+        
+        // Normalize dates to compare only the date part (ignore time)
+        const normalizedCurrent = new Date(currentDate);
+        normalizedCurrent.setHours(0, 0, 0, 0);
+        
+        const normalizedStart = new Date(leaveStart);
+        normalizedStart.setHours(0, 0, 0, 0);
+        
+        const normalizedEnd = new Date(leaveEnd);
+        normalizedEnd.setHours(0, 0, 0, 0);
+        
+        // Check if current date falls within the leave period (inclusive)
+        return normalizedCurrent >= normalizedStart && normalizedCurrent <= normalizedEnd;
+      } catch (error) {
+        console.error('Error parsing dates for employee:', employee.employee_name, error);
+        return false;
+      }
+    }) || [];
+    
+    // Debug logging for specific dates
+    if (day === 2 && employeesOnLeave.length > 0) {
+      console.log(`🔍 DEBUG December 2nd - Employees on leave:`, employeesOnLeave.map(e => ({
+        name: e.employee_name,
+        leave_type: e.leave_type,
+        start: e.leave_start,
+        end: e.leave_end,
+        currentDate: dateStr
+      })));
+    }
+    
+    days.push(
+      <div 
+        key={day} 
+        style={{
+          ...styles.calendarDay,
+          ...(isToday(currentDate) ? styles.calendarDayToday : {}),
+          ...(employeesOnLeave.length > 0 ? styles.calendarDayWithLeave : {})
+        }}
+        title={employeesOnLeave.length > 0 ? 
+          `${employeesOnLeave.length} employee(s) on leave:\n${employeesOnLeave.map(e => 
+            `${e.employee_name} - ${e.leave_type}\n(${formatDisplayDate(e.leave_start)} to ${formatDisplayDate(e.leave_end)})`
+          ).join('\n')}` : 
+          `No leaves on ${currentDate.toLocaleDateString()}`
+        }
+      >
+        <div style={styles.calendarDayNumber}>{day}</div>
+        
+        {/* Leave indicators */}
+        {employeesOnLeave.length > 0 && (
+          <div style={styles.leaveIndicators}>
+            {employeesOnLeave.slice(0, 3).map((employee, index) => (
+              <div 
+                key={index}
+                style={{
+                  ...styles.leaveIndicator,
+                  backgroundColor: getLeaveColor(employee.leave_type)
+                }}
+                title={`${employee.employee_name} - ${employee.leave_type} (${formatDisplayDate(employee.leave_start)} to ${formatDisplayDate(employee.leave_end)})`}
+              >
+                {getLeaveAbbreviation(employee.leave_type)}
+              </div>
+            ))}
+            {employeesOnLeave.length > 3 && (
+              <div style={styles.moreLeavesIndicator}>
+                +{employeesOnLeave.length - 3}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  return days;
+};
+
+// Helper function to format dates for display
+const formatDisplayDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateString;
+  }
+};
+
+// Helper function to check if a date is today
+const isToday = (date) => {
+  const today = new Date();
+  return date.getDate() === today.getDate() &&
+         date.getMonth() === today.getMonth() &&
+         date.getFullYear() === today.getFullYear();
+};
+
+// Helper function to get leave color
+const getLeaveColor = (leaveType) => {
+  switch (leaveType) {
+    case 'Sick Leave': return '#f44336';
+    case 'Vacation Leave': return '#3f51b5';
+    case 'Maternity Leave': return '#ff9800';
+    case 'Paternity Leave': return '#8bc34a';
+    case 'Solo Parent Leave': return '#e91e63';
+    case 'Emergency Leave': return '#ffc107';
+    case 'Bereavement Leave': return '#757575';
+    default: return '#4caf50';
+  }
+};
+
+// Helper function to get leave abbreviation
+const getLeaveAbbreviation = (leaveType) => {
+  switch (leaveType) {
+    case 'Sick Leave': return 'SL';
+    case 'Vacation Leave': return 'VL';
+    case 'Maternity Leave': return 'ML';
+    case 'Paternity Leave': return 'PL';
+    case 'Solo Parent Leave': return 'SPL';
+    case 'Emergency Leave': return 'EL';
+    case 'Bereavement Leave': return 'BL';
+    default: return leaveType.substring(0, 2).toUpperCase();
+  }
+};
 
 
   return (
@@ -801,6 +1472,111 @@ const handleRemarksChange = (newValue) => {
         </div>
       )}
 
+{/* NEW: Overlapping Leaves Warning Modal */}
+{showOverlapModal && overlapCheckResult && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.overlapWarningModal}>
+      <div style={styles.warningHeader}>
+        <FontAwesomeIcon icon={faExclamationTriangle} style={styles.warningIcon} />
+        <h3 style={styles.warningTitle}>Overlapping Leaves Warning</h3>
+      </div>
+      
+      <div style={styles.warningContent}>
+        <p style={styles.warningText}>
+          Approving this leave request would violate business rules:
+        </p>
+        
+        <div style={styles.violationSummary}>
+          <p style={styles.summaryText}>
+            <strong>Total violations:</strong> {overlapCheckResult.violations?.length || 0}
+          </p>
+          <p style={styles.summaryText}>
+            <strong>Can proceed:</strong> {overlapCheckResult.canProceed ? 'Yes' : 'No'}
+          </p>
+        </div>
+        
+        {overlapCheckResult.violations && overlapCheckResult.violations.length > 0 && (
+          <div style={styles.violationsList}>
+            <h4 style={styles.violationsTitle}>Violations:</h4>
+            {overlapCheckResult.violations.map((violation, index) => (
+              <div key={index} style={styles.violationItem}>
+                <FontAwesomeIcon icon={faWarning} style={styles.violationIcon} />
+                <div style={styles.violationDetails}>
+                  <p style={styles.violationDate}>
+                    <strong>Date:</strong> {new Date(violation.date).toLocaleDateString()}
+                    {violation.is_holiday && <span style={styles.holidayBadge}> Holiday</span>}
+                  </p>
+                  <p style={styles.violationInfo}>
+                    <strong>Current on leave:</strong> {violation.current_on_leave} | 
+                    <strong> Max allowed:</strong> {violation.max_allowed}
+                  </p>
+                  <p style={styles.violationMessage}>
+                    {violation.department}: Would exceed limit ({violation.current_on_leave}/{violation.max_allowed})
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <div style={styles.businessRules}>
+          <h4 style={styles.rulesTitle}>Business Rules:</h4>
+          <ul style={styles.rulesList}>
+            <li>Regular days: Maximum 3 employees from same department can be on leave</li>
+            <li>Holidays (Christmas season): Maximum 50% of department employees can be on leave</li>
+            <li>This check is performed at Office Head approval stage only</li>
+          </ul>
+        </div>
+      </div>
+      
+      <div style={styles.overlapActions}>
+        <button
+          style={styles.cancelOverlapBtn}
+          onClick={() => {
+            setShowOverlapModal(false);
+            setOverlapCheckResult(null);
+            setForceApprove(false);
+          }}
+        >
+          Cancel Approval
+        </button>
+        <button
+          style={styles.forceApproveBtn}
+          onClick={() => {
+            setForceApprove(true);
+            handleForceApprove();
+          }}
+        >
+          Force Approve Anyway
+        </button>
+        <button
+          style={styles.proceedBtn}
+          onClick={handleProceedApproval}
+        >
+          Proceed to CS Form
+        </button>
+      </div>
+      
+      <div style={styles.overlapNote}>
+        <p style={styles.noteText}>
+          <strong>Note:</strong> Force approval bypasses overlapping leave restrictions. 
+          Use only when absolutely necessary.
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Loading Modal for Overlap Check */}
+{overlapCheckLoading && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.loadingModal}>
+      <div style={styles.loadingSpinner}></div>
+      <h3 style={styles.loadingTitle}>Checking for Overlapping Leaves</h3>
+      <p style={styles.loadingText}>Please wait while we verify business rules...</p>
+    </div>
+  </div>
+)}
 
             <div style={styles.tabContainer}>
                 <button
@@ -1280,73 +2056,93 @@ const handleRemarksChange = (newValue) => {
                             </div>
 
                             {/* ACTION BUTTONS - MODIFIED FOR MAYOR, OFFICE HEAD, AND HR ADMIN */}
-                            <div style={styles.actionSection}>
-                                {(userRole === "office head" && 
-                                (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
-                                (userRole === "admin" && 
-                                selectedRequest.office_head_status === "Approved" && 
-                                (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
-                                (userRole === "mayor" && 
-                                selectedRequest.hr_status === "Approved" && 
-                                (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending")) ? (
+                          <div style={styles.actionSection}>
+                            {/* Check if head has rejected - if so, don't show action buttons for HR/Mayor */}
+                            {selectedRequest.office_head_status !== "Rejected" ? (
+                              (userRole === "office head" && 
+                              (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
+                              (userRole === "admin" && 
+                              selectedRequest.office_head_status === "Approved" && 
+                              (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
+                              (userRole === "mayor" && 
+                              selectedRequest.hr_status === "Approved" && 
+                              (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending")) ? (
                                 <div style={styles.actionButtons}>
-                                    <button
+                                  <button
                                     style={styles.approveBtn}
                                     onClick={() => {
-                                        // Set action type and remarks first
-                                        setActionType("approve");
-                                        setActionRemarks("Approved via dashboard");
-                                        // For mayor, office head, and HR admin, show CS form
-                                        if (userRole === "mayor" || userRole === "office head" || userRole === "admin") {
-                                            handleApprove(selectedRequest.id, "Approved via dashboard");
-                                        } else {
-                                            setShowActionModal(true);
-                                        }
+                                      setActionType("approve");
+                                      setActionRemarks("Approved via dashboard");
+                                      // For office head, check overlapping leaves before proceeding
+                                      if (userRole === "office head") {
+                                        handleApprove(selectedRequest.id, "Approved via dashboard");
+                                      } else {
+                                        // For mayor and admin, proceed directly
+                                        setDaysWithPay(selectedRequest.number_of_days || 0);
+                                        generationTriggerRef.current = true;
+                                        setIsGeneratingCSForm(true);
+                                      }
                                     }}
-                                    >
+                                    disabled={overlapCheckLoading}
+                                  >
                                     <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
+                                    {overlapCheckLoading ? "Checking..." : 
+                                     (userRole === "office head" ? "Approve (Check Overlaps)" : 
+                                      (userRole === "mayor" || userRole === "admin") ? "Approve with CS Form" : 
+                                      "Approve Request")}
+                                  </button>
+                                  <button
+                                    style={styles.rejectBtn}
+                                    onClick={() => {
+                                      setActionType("reject");
+                                      setActionRemarks("Pending rejection reason...");
+                                      handleReject(selectedRequest.id, "Pending rejection reason...");
+                                    }}
+                                  >
+                                    <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
                                     {(userRole === "mayor" || userRole === "office head" || userRole === "admin") 
-                                        ? "Approve with CS Form" 
-                                        : "Approve Request"}
-                                    </button>
-                                    <button
-                                        style={styles.rejectBtn}
-                                        onClick={() => {
-                                            // Set action type and generate CS form directly
-                                            setActionType("reject");
-                                            setActionRemarks("Pending rejection reason..."); // Default text
-                                            handleReject(selectedRequest.id, "Pending rejection reason...");
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
-                                        {(userRole === "mayor" || userRole === "office head" || userRole === "admin") 
-                                            ? "Reject with CS Form" 
-                                            : "Reject Request"}
-                                    </button>
+                                      ? "Reject with CS Form" 
+                                      : "Reject Request"}
+                                  </button>
                                 </div>
-                                ) : (
+                              ) : (
                                 <div style={styles.finalStatus}>
-                                    <div style={{
+                                  <div style={{
                                     ...styles.finalStatusBadge,
                                     ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
                                         selectedRequest.status === 'Rejected' ? styles.statusRejected : 
                                         styles.statusPending)
-                                    }}>
+                                  }}>
                                     {selectedRequest.status}
-                                    </div>
-                                    <p style={styles.finalStatusText}>
+                                  </div>
+                                  <p style={styles.finalStatusText}>
                                     Processed by {selectedRequest.approver_name} on {" "}
                                     {new Date(selectedRequest.approver_date).toLocaleDateString()}
-                                    </p>
-                                    {selectedRequest.remarks && (
+                                  </p>
+                                  {selectedRequest.remarks && (
                                     <p style={styles.remarksText}>
-                                        <strong>Remarks:</strong> {selectedRequest.remarks}
+                                      <strong>Remarks:</strong> {selectedRequest.remarks}
                                     </p>
-                                    )}
+                                  )}
                                 </div>
+                              )
+                            ) : (
+                              // Show rejection message when head has rejected
+                              <div style={styles.finalStatus}>
+                                <div style={styles.statusRejected}>
+                                  Rejected by Office Head
+                                </div>
+                                <p style={styles.finalStatusText}>
+                                  This request was rejected by the Office Head and cannot be processed further.
+                                </p>
+                                {selectedRequest.remarks && (
+                                  <p style={styles.remarksText}>
+                                    <strong>Rejection Reason:</strong> {selectedRequest.remarks}
+                                  </p>
                                 )}
-                            </div>
-
+                              </div>
+                            )}
+                          </div>
                             </div>
                         </>
                         ) : (
@@ -1367,192 +2163,168 @@ const handleRemarksChange = (newValue) => {
     <div style={styles.actualFormModal}>
       <h3 style={styles.modalTitle}>CS Form No. 6 - Application for Leave</h3>
       
-      {/* Show role-specific information */}
-      <div style={styles.roleInfo}>
-        <p style={styles.roleText}>
-          Acting as: <strong>{userRole}</strong>
-          {userRole === "admin" && " (HR Department)"}
-          {userRole === "office head" && " (Department Head)"}
-          {userRole === "mayor" && " (Mayor's Office)"}
-        </p>
-        <p style={styles.roleText}>
-          Action: <strong>{actionType === "approve" ? "APPROVAL" : "REJECTION"}</strong>
-        </p>
-      </div>
-      
-      {/* REAL-TIME FORM CONTROLS */}
-      <div style={styles.realTimeControls}>
-        <h4>Form Details</h4>
-        
-        {/* Show different sections based on action type */}
-        {actionType === "approve" && (
-          <>
-            {/* APPROVAL SECTION */}
-            <div style={styles.approvalSection}>
-              <h5 style={styles.sectionSubtitle}>Approval Details</h5>
-              
-              {/* Remarks Section for Approval */}
-              <div style={styles.remarksSection}>
-                <label style={styles.remarksLabel}>Approval Remarks:</label>
-             <textarea
-  style={styles.remarksTextarea}
-  value={actionRemarks}
-  onChange={(e) => handleRemarksChange(e.target.value)}
-  placeholder="Enter approval remarks..."
-  rows={3}
-/>
-
-
-     {isTyping && (
-      <p style={{color: '#666', fontSize: '12px', margin: '5px 0'}}>
-        Form will update when you stop typing...
-      </p>
-    )}
-              </div>
-              
-              {/* Days with Pay for approval - Only show for Mayor */}
-              {userRole === "mayor" && (
-                <div style={styles.daysWithPaySection}>
-                  <h5>Days with Pay</h5>
-                  <div style={styles.daysInputContainer}>
-                    <input
-                      type="number"
-                      style={styles.daysInput}
-                      value={daysWithPay}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value) || 0;
-                        setDaysWithPay(value);
-                        setRealTimeFormData(prev => ({
-                          ...prev,
-                          days_with_pay: value
-                        }));
-                        // Update form immediately when days change
-                        setTimeout(() => generateAndShowCSForm(), 100);
+      <div style={styles.formModalLayout}>
+        {/* LEFT SIDE - REJECTION/REASON SECTION */}
+        <div style={styles.leftControlPanel}>
+          <div style={styles.controlSection}>
+            <h4 style={styles.controlSectionTitle}>
+              {actionType === "approve" ? "Approval Details" : "Disapproval Details"}
+            </h4>
+            
+            {actionType === "reject" && (
+              <div style={styles.rejectionSection}>
+                <h5 style={styles.rejectionTitle}>Select Reason for Disapproval:</h5>
+                
+                {/* Button choices for rejection reasons */}
+                <div style={styles.rejectionButtonGrid}>
+                  {rejectionReasons.map((reason, index) => (
+                    <button
+                      key={index}
+                      style={{
+                        ...styles.rejectionButton,
+                        ...(rejectionReason === reason ? styles.rejectionButtonSelected : {})
                       }}
-                      min="0"
-                      max={selectedRequest.number_of_days}
+                      onClick={() => {
+                        handleRejectionReasonChange(reason);
+                        if (reason !== "Other (specify below)") {
+                          setIsTyping(true);
+                          setTimeout(() => {
+                            generateAndShowCSForm();
+                          }, 100);
+                        }
+                      }}
+                    >
+                      <div style={styles.rejectionButtonContent}>
+                        <div style={styles.rejectionButtonText}>{reason}</div>
+                        {rejectionReason === reason && (
+                          <FontAwesomeIcon 
+                            icon={faCheckCircle} 
+                            style={styles.rejectionButtonIcon}
+                          />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom reason input */}
+                {showCustomReasonInput && (
+                  <div style={styles.customReasonSection}>
+                    <label style={styles.customReasonLabel}>Specify reason:</label>
+                    <textarea
+                      style={styles.customReasonTextarea}
+                      value={customRejectionReason}
+                      onChange={(e) => {
+                        setCustomRejectionReason(e.target.value);
+                        setActionRemarks(e.target.value);
+                        setIsTyping(true);
+                        clearTimeout(formGenerationTimeout);
+                        const timeout = setTimeout(() => {
+                          generateAndShowCSForm();
+                        }, 500);
+                        setFormGenerationTimeout(timeout);
+                      }}
+                      placeholder="Enter specific reason for rejection..."
+                      rows={3}
                     />
-                    <span style={styles.daysNote}>out of {selectedRequest.number_of_days} total days</span>
+                    {!customRejectionReason.trim() && (
+                      <p style={styles.validationError}>
+                        Please provide a reason for rejection
+                      </p>
+                    )}
                   </div>
-                </div>
-              )}
-              
-              {/* Special note for HR admin */}
-              {userRole === "admin" && (
-                <div style={styles.hrNote}>
-                  <p style={styles.noteText}>
-                    <strong>Note:</strong> As HR Admin, your approval will populate the leave credit values in Section 7.A
-                  </p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-        
-        {actionType === "reject" && (
-          <>
-            {/* REJECTION SECTION */}
-            <div style={styles.rejectionSection}>
-              <h5 style={styles.sectionSubtitle}>Rejection Details</h5>
-              
-              {/* Reason for Rejection */}
-              <div style={styles.remarksSection}>
-                <label style={styles.remarksLabel}>Reason for Disapproval:</label>
-                <textarea
-  style={styles.remarksTextarea}
-  value={actionRemarks}
-  onChange={(e) => handleRemarksChange(e.target.value)}
-  placeholder="Enter reason for disapproval..."
-  rows={3}
-/>
-
-    {isTyping && (
-      <p style={{color: '#666', fontSize: '12px', margin: '5px 0'}}>
-        Form will update when you stop typing...
-      </p>
-    )}
-                {!actionRemarks.trim() && (
-                  <p style={{color: 'red', fontSize: '12px', margin: '5px 0'}}>
-                    Please provide a reason for rejection
-                  </p>
+                )}
+                
+                {/* Selected reason display */}
+                {rejectionReason && !showCustomReasonInput && (
+                  <div style={styles.selectedReasonDisplay}>
+                    <div style={styles.selectedReasonLabel}>Selected Reason:</div>
+                    <div style={styles.selectedReasonText}>{rejectionReason}</div>
+                  </div>
                 )}
               </div>
-            </div>
-          </>
-        )}
-        
-        {/* Manual Refresh Button */}
-        <button
-          style={styles.refreshFormBtn}
-          onClick={() => generateAndShowCSForm()}
-        >
-          <FontAwesomeIcon icon={faRefresh} />
-          Refresh Form Preview
-        </button>
+            )}
+            
+            {actionType === "approve" && (
+              <div style={styles.daysWithPaySection}>
+                <h5 style={styles.controlSectionTitle}>Days with Pay:</h5>
+                <div style={styles.daysInputContainer}>
+                  <input
+                    type="number"
+                    min="0"
+                    max={selectedRequest.number_of_days || 30}
+                    value={daysWithPay}
+                    onChange={(e) => {
+                      const value = Math.max(0, parseInt(e.target.value) || 0);
+                      setDaysWithPay(value);
+                      setIsTyping(true);
+                      clearTimeout(formGenerationTimeout);
+                      const timeout = setTimeout(() => {
+                        generateAndShowCSForm();
+                      }, 500);
+                      setFormGenerationTimeout(timeout);
+                    }}
+                    style={styles.daysInput}
+                  />
+                  <span style={styles.daysNote}>
+                    (Maximum: {selectedRequest.number_of_days || "N/A"} days requested)
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            
+          </div>
+        </div>
+
+        {/* RIGHT SIDE - FORM PREVIEW */}
+        <div style={styles.rightFormPreview}>
+          <div style={styles.formPreviewHeader}>
+            <h4 style={styles.previewTitle}>Form Preview</h4>
+            <button
+              style={styles.printFormBtn}
+              onClick={() => {
+                const newWindow = window.open(csFormData.url);
+                if (newWindow) {
+                  newWindow.onload = () => {
+                    newWindow.print();
+                  };
+                }
+              }}
+            >
+              <FontAwesomeIcon icon={faPrint} />
+              Print Form
+            </button>
+          </div>
+          
+          <div style={styles.formPreviewContainer}>
+            {isTyping ? (
+              <div style={styles.typingIndicator}>
+                <p>Updating form preview...</p>
+              </div>
+            ) : isGeneratingForm ? (
+              <div style={styles.generatingPreview}>
+                <div style={styles.loadingSpinner}></div>
+                <p>Generating form preview...</p>
+              </div>
+            ) : csFormData ? (
+              <iframe 
+                src={csFormData.url} 
+                style={styles.formIframe}
+                title="CS Form No. 6"
+                key={csFormData.timestamp}
+              />
+            ) : (
+              <div style={styles.loadingPreview}>
+                <p>Generating form preview...</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      
-
-      {/* PDF Preview */}
-<div style={styles.formPreviewContainer}>
-  {isTyping ? (
-    <div style={styles.typingIndicator}>
-      <p>Updating form... (waiting for you to finish typing)</p>
-    </div>
-  ) : isGeneratingForm ? (
-    <div style={styles.generatingPreview}>
-      <div style={styles.loadingSpinner}></div>
-      <p>Generating form preview...</p>
-    </div>
-  ) : csFormData ? (
-    <iframe 
-      src={csFormData.url} 
-      style={styles.formIframe}
-      title="CS Form No. 6"
-      key={csFormData.timestamp}
-    />
-  ) : (
-    <div style={styles.loadingPreview}>
-      <p>Generating form preview...</p>
-    </div>
-  )}
-</div>
-
+      {/* ACTION BUTTONS AT BOTTOM */}
       <div style={styles.formActions}>
-        <button
-          style={styles.printFormBtn}
-          onClick={() => {
-            const newWindow = window.open(csFormData.url);
-            if (newWindow) {
-              newWindow.onload = () => {
-                newWindow.print();
-              };
-            }
-          }}
-        >
-          <FontAwesomeIcon icon={faPrint} />
-          Print Form
-        </button>
-        
-        <button
-          style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
-          onClick={() => {
-            if (actionType === "approve") {
-              handleConfirmApproval();
-            } else {
-              // For rejection, make sure we have the remarks before proceeding
-              if (actionRemarks.trim()) {
-                handleConfirmApproval();
-              } else {
-                alert("Please provide a reason for rejection");
-              }
-            }
-          }}
-          disabled={actionType === "reject" && !actionRemarks.trim()}
-        >
-          {actionType === "approve" ? "Approve Request" : "Reject Request"}
-        </button>
-        
         <button
           style={styles.cancelBtn}
           onClick={() => {
@@ -1560,14 +2332,41 @@ const handleRemarksChange = (newValue) => {
             setCsFormData(null);
             setActionType(null);
             setActionRemarks("");
+            setRejectionReason("");
+            setCustomRejectionReason("");
+            setShowCustomReasonInput(false);
             setRealTimeFormData({
               action_type: "",
               action_remarks: "",
               days_with_pay: 0
             });
+            if (formGenerationTimeout) {
+              clearTimeout(formGenerationTimeout);
+            }
           }}
         >
           Cancel
+        </button>
+        
+        <button
+          style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
+          onClick={() => {
+            if (actionType === "reject") {
+              if (!rejectionReason && !actionRemarks.trim()) {
+                alert("Please select or specify a reason for rejection");
+                return;
+              }
+              
+              if (rejectionReason === "Other (specify below)" && !customRejectionReason.trim()) {
+                alert("Please specify the reason for rejection");
+                return;
+              }
+            }
+            handleConfirmApproval();
+          }}
+          disabled={actionType === "reject" && !actionRemarks.trim()}
+        >
+          {actionType === "approve" ? "Approve Request" : "Reject Request"}
         </button>
       </div>
     </div>
@@ -1588,51 +2387,135 @@ const handleRemarksChange = (newValue) => {
 <style>{spinAnimation}</style>
 
 
-            {showSignatureChoice && (
-                <div style={styles.modalOverlay}>
-                    <div style={styles.signatureChoiceModal}>
-                        <h3 style={styles.modalTitle}>Select Signature Method</h3>
-                        
-                        <div style={styles.signatureOptions}>
-                            <p style={styles.signatureDescription}>
-                                How would you like to sign the CS Form No. 6?
-                            </p>
-                            
-                            <div style={styles.signatureButtons}>
-                                <button
-                                    style={styles.eSignBtn}
-                                    onClick={() => handleSignatureMethod("e-sign")}
-                                    disabled={isSigning}
-                                >
-                                    <FontAwesomeIcon icon={faSignature} />
-                                    {isSigning ? " Signing..." : " E-Signature"}
-                                    <span style={styles.methodDescription}>Sign digitally using your electronic signature</span>
-                                </button>
-                                
-                                <button
-                                    style={styles.traditionalSignBtn}
-                                    onClick={() => handleSignatureMethod("traditional")}
-                                >
-                                    <FontAwesomeIcon icon={faPrint} />
-                                    Print & Sign
-                                    <span style={styles.methodDescription}>Print the form and sign manually</span>
-                                </button>
-                            </div>
-                        </div>
+{showSignatureChoice && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.signatureChoiceModal}>
+      <h3 style={styles.modalTitle}>Select Signature Method</h3>
+      
+      <div style={styles.signatureOptions}>
+        <p style={styles.signatureDescription}>
+          How would you like to sign the CS Form No. 6?
+        </p>
+        
+        <div style={styles.signatureButtons}>
+          <button
+            style={styles.eSignBtn}
+            onClick={() => {
+              setSignatureMethod("e-sign");
+              setShowSignatureChoice(false);
+              setShowESignPad(true);
+              setIsSigning(true);
+            }}
+            disabled={isSigning}
+          >
+            <FontAwesomeIcon icon={faSignature} />
+            {isSigning ? " Signing..." : " E-Signature"}
+            <span style={styles.methodDescription}>Sign digitally using your electronic signature</span>
+          </button>
+          
+          <button
+            style={styles.traditionalSignBtn}
+            onClick={() => {
+              setSignatureMethod("traditional");
+              setShowSignatureChoice(false);
+              // For traditional, generate form immediately
+              generateAndShowCSForm();
+            }}
+          >
+            <FontAwesomeIcon icon={faPrint} />
+            Print & Sign
+            <span style={styles.methodDescription}>Print the form and sign manually</span>
+          </button>
+        </div>
+      </div>
 
-                        <div style={styles.modalActions}>
-                            <button
-                                style={styles.cancelBtn}
-                                onClick={() => {
-                                    setShowSignatureChoice(false);
-                                }}
-                            >
-                                Back
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+      <div style={styles.modalActions}>
+        <button
+          style={styles.cancelBtn}
+          onClick={() => {
+            setShowSignatureChoice(false);
+          }}
+        >
+          Back
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
+{/* E-SIGNATURE PAD MODAL */}
+{showESignPad && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.eSignModal}>
+      <h3 style={styles.modalTitle}>Provide Your E-Signature</h3>
+      
+      <div style={styles.signatureInstructions}>
+        <p>Draw your signature in the box below using your mouse or touchpad.</p>
+      </div>
+
+      <div style={styles.signaturePadContainer}>
+        <SignatureCanvas
+          ref={sigCanvasRef}
+          penColor="black"
+          canvasProps={{
+            width: 500,
+            height: 200,
+            className: 'signature-canvas',
+            style: {
+              border: '2px solid #ccc',
+              borderRadius: '8px',
+              backgroundColor: '#fff'
+            }
+          }}
+          onEnd={handleSignatureDraw}
+        />
+      </div>
+
+      <div style={styles.signatureActions}>
+        <button
+          style={styles.clearSignatureBtn}
+          onClick={handleClearSignature}
+        >
+          <FontAwesomeIcon icon={faEraser} />
+          Clear Signature
+        </button>
+        
+        <div style={styles.signatureMainActions}>
+          <button
+            style={styles.cancelBtn}
+            onClick={() => {
+              setShowESignPad(false);
+              setIsSigning(false);
+            }}
+          >
+            Cancel
+          </button>
+          
+          <button
+            style={styles.saveSignatureBtn}
+            onClick={handleSaveSignature}
+            disabled={isSignatureEmpty}
+          >
+            <FontAwesomeIcon icon={faCheckCircle} />
+            Save Signature & Approve
+          </button>
+        </div>
+      </div>
+
+      {signatureImage && (
+        <div style={styles.signaturePreview}>
+          <h4>Signature Preview:</h4>
+          <img 
+            src={signatureImage} 
+            alt="Your signature" 
+            style={styles.previewImage}
+          />
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
 
                     
@@ -1782,167 +2665,164 @@ const handleRemarksChange = (newValue) => {
                 
             )}
 
-            {activeTab === 'calendar' && (
-                <div style={styles.leaveCalendar}>
-                    <div style={styles.calendarContent}>
-                        <div style={styles.calendarRow1}>
-                            <button style={styles.calendarButton}>
-                                <FontAwesomeIcon icon={faCalendarAlt} style={styles.calendarIcon}/>
-                                April 2025
-                            </button>
-                            <input
-                                type="text"
-                                placeholder="Search by employee name, department"
-                                style={styles.calendarSearch}
-                            />
-                            <button style={styles.calendarFilter}>
-                                <FontAwesomeIcon icon={faFilter} style={styles.filterIcon}/>
-                                Filter
-                            </button>
-                        </div>
+{activeTab === 'calendar' && (
+  <div style={styles.leaveCalendar}>
+    <div style={styles.calendarContent}>
+      {/* Calendar Header */}
+      <div style={styles.calendarHeader}>
+        <div style={styles.calendarNavigation}>
+          <button style={styles.navButton} onClick={() => {
+            const prevMonth = new Date(selectedCalendarDate);
+            prevMonth.setMonth(prevMonth.getMonth() - 1);
+            setSelectedCalendarDate(prevMonth);
+          }}>
+            <FontAwesomeIcon icon={faChevronLeft} />
+          </button>
+          
+          <h2 style={styles.calendarTitle}>
+            {selectedCalendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </h2>
+          
+          <button style={styles.navButton} onClick={() => {
+            const nextMonth = new Date(selectedCalendarDate);
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+            setSelectedCalendarDate(nextMonth);
+          }}>
+            <FontAwesomeIcon icon={faChevronRight} />
+          </button>
+          
+          <button style={styles.todayButton} onClick={goToToday}>
+            Today
+          </button>
+        </div>
+        
+        <div style={styles.calendarControls}>
+          <input
+            type="text"
+            placeholder="Search by employee name, department"
+            style={styles.calendarSearch}
+          />
+          <button style={styles.calendarFilter}>
+            <FontAwesomeIcon icon={faFilter} style={styles.filterIcon}/>
+            Filter
+          </button>
+        </div>
+      </div>
 
-                    <table style={styles.calendarTable}>
-                        <thead>
-                            <tr>
-                                <th style={styles.thCalendar}>Employees</th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>02</p>
-                                        <p style={styles.calendarDay}>Sun</p>
-                                    </div>
-                                </th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>03</p>
-                                        <p style={styles.calendarDay}>Mon</p>
-                                    </div>
-                                </th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>04</p>
-                                        <p style={styles.calendarDay}>Tue</p>
-                                    </div>
-                                </th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>05</p>
-                                        <p style={styles.calendarDay}>Wed</p>
-                                    </div>
-                                </th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>06</p>
-                                        <p style={styles.calendarDay}>Thu</p>
-                                    </div>
-                                </th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>07</p>
-                                        <p style={styles.calendarDay}>Fri</p>
-                                    </div>
-                                </th>
-                                <th style={styles.thCalendar}>
-                                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                                        <p>08</p>
-                                        <p style={styles.calendarDay}>Sat</p>
-                                    </div>
-                                </th>
-                            </tr>
-                        </thead>
+      {/* Real Calendar Grid */}
+      <div style={styles.calendarGrid}>
+        {/* Weekday Headers */}
+        <div style={styles.weekdayHeaders}>
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} style={styles.weekdayHeader}>
+              {day}
+            </div>
+          ))}
+        </div>
 
-                        <tbody>
-                            {[...Array(6)].map((_, idx) => (
-                            <tr key={idx}>
-                                <td style={styles.tdCalendar}>
-                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                    <img src="https://via.placeholder.com/32" alt="avatar" style={styles.calendarPic} />
-                                    <div>
-                                    <div style={{ fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap' }}>Renz Retuya</div>
-                                    <div style={{ fontSize: 12, color: '#888' }}>Officer 1</div>
-                                    <div style={{ fontSize: 11, color: '#aaa' }}>123456789</div>
-                                    </div>
-                                </div>
-                                </td>
-                                <td style={styles.tdCalendar}/>
-                                <td style={styles.tdCalendar}/>
-                                <td style={styles.tdCalendar}/>
-                                <td style={styles.tdCalendar}/>
-                                <td style={styles.tdCalendar}/>
-                                <td style={styles.tdCalendar}/>
-                                <td style={styles.tdCalendar}/>
-                            </tr>
-                            ))}
-                        </tbody>
-                        </table>
-                    </div>
+        {/* Calendar Days */}
+        <div style={styles.calendarDays}>
+          {calendarLoading ? (
+            <div style={styles.calendarLoading}>
+              Loading calendar data...
+            </div>
+          ) : (
+            renderCalendarDays()
+          )}
+        </div>
+      </div>
+    </div>
 
-                    <div style={styles.calendarBox}>
-                        <div style={styles.calendarLeave}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                                <span>Leave Types</span>
-                                <select style={styles.selectCalendar}>
-                                    <option>This Month</option>
-                                    <option>This Year</option>
-                                </select>
-                            </div>
-                            <div style={{ marginTop: 12 }}>
-                                {[
-                                    { label: 'SL', name: 'Sick Leave', color: '#f44336', value: 5 },
-                                    { label: 'VL', name: 'Vacation Leave', color: '#3f51b5', value: 2 },
-                                    { label: 'MFL', name: 'Mandatory/Forced Leave', color: '#4caf50', value: 0 },
-                                    { label: 'ML', name: 'Maternity Leave', color: '#ff9800', value: 0 },
-                                    { label: 'PL', name: 'Paternity Leave', color: '#8bc34a', value: 0 },
-                                    { label: 'SPL', name: 'Solo Parent Leave', color: '#e91e63', value: 0 },
-                                ].map((type) => (
-                                    <div key={type.label} style={{ marginBottom: 8 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <div style={{ width: 20, height: 20, backgroundColor: type.color, borderRadius: 4 }} />
-                                            <div style={{ fontSize: 12, fontWeight: 500 }}>{type.label} - {type.name}</div>
-                                        </div>
-                                        <div style={{ height: 6, backgroundColor: '#eee', borderRadius: 4, marginTop: 4 }}>
-                                            <div style={{
-                                            width: `${type.value * 10}%`,
-                                            height: '100%',
-                                            backgroundColor: type.color,
-                                            borderRadius: 4
-                                            }} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                    </div>
-
-                    <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                        <span>Unnotified Leave</span>
-                        <select style={styles.selectCalendar}>
-                            <option>This Month</option>
-                            <option>This Year</option>
-                        </select>
-                        </div>
-                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <img src="https://via.placeholder.com/40" alt="avatar" style={{ width: '30px', height: '30px' }} />
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 600 }}>Renz Retuya</div>
-                            <div style={{ fontSize: 12, color: '#777' }}>Officer 1</div>
-                            <div style={{ fontSize: 12, marginTop: 4 }}>Duration: <strong>02–03 May 2025</strong></div>
-                            <div style={{ fontSize: 12 }}>No. of Days: <strong>02</strong></div>
-                        </div>
-                        <div style={{
-                            background: '#fbd103',
-                            color: '#000',
-                            fontWeight: 600,
-                            padding: '4px 10px',
-                            borderRadius: 8,
-                            fontSize: 12,
-                        }}>
-                            Pending
-                        </div>
-                        </div>
-                    </div>
-                    </div>
+    {/* Calendar Sidebar */}
+    <div style={styles.calendarBox}>
+      <div style={styles.calendarLeave}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+          <span>Leave Types</span>
+          <select style={styles.selectCalendar}>
+            <option>This Month</option>
+            <option>This Week</option>
+          </select>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          {[
+            { label: 'SL', name: 'Sick Leave', color: '#f44336', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Sick Leave').length || 0 },
+            { label: 'VL', name: 'Vacation Leave', color: '#3f51b5', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Vacation Leave').length || 0 },
+            { label: 'ML', name: 'Maternity Leave', color: '#ff9800', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Maternity Leave').length || 0 },
+            { label: 'PL', name: 'Paternity Leave', color: '#8bc34a', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Paternity Leave').length || 0 },
+            { label: 'SPL', name: 'Solo Parent Leave', color: '#e91e63', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Solo Parent Leave').length || 0 },
+          ].map((type) => (
+            <div key={type.label} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 20, height: 20, backgroundColor: type.color, borderRadius: 4 }} />
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>{type.label} - {type.name}</div>
                 </div>
-                )}
+                <div style={{ fontSize: 12, fontWeight: 'bold', color: type.color }}>
+                  {type.count}
+                </div>
+              </div>
+              <div style={{ height: 6, backgroundColor: '#eee', borderRadius: 4, marginTop: 4 }}>
+                <div style={{
+                  width: `${Math.min((type.count / Math.max(leaveCalendarData.employees?.length || 1, 1)) * 100, 100)}%`,
+                  height: '100%',
+                  backgroundColor: type.color,
+                  borderRadius: 4
+                }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+          <span>Today's Leave Summary</span>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          {leaveCalendarData.employees && leaveCalendarData.employees.length > 0 ? (
+            leaveCalendarData.employees.slice(0, 3).map((employee) => (
+              <div key={employee.id} style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <img 
+                  src={employee.profile_picture || "https://via.placeholder.com/30"} 
+                  alt="avatar" 
+                  style={{ width: '30px', height: '30px', borderRadius: '50%' }} 
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px' }}>{employee.employee_name}</div>
+                  <div style={{ fontSize: 12, color: '#777' }}>{employee.department}</div>
+                  <div style={{ fontSize: 12, marginTop: 2 }}>
+                    <span style={{ 
+                      padding: '2px 6px', 
+                      borderRadius: '4px', 
+                      backgroundColor: employee.leave_type === 'Sick Leave' ? '#f4433620' : 
+                                      employee.leave_type === 'Vacation Leave' ? '#3f51b520' : '#4caf5020',
+                      color: employee.leave_type === 'Sick Leave' ? '#f44336' : 
+                            employee.leave_type === 'Vacation Leave' ? '#3f51b5' : '#4caf50',
+                      fontSize: '10px',
+                      fontWeight: '600'
+                    }}>
+                      {employee.leave_type}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div style={{ textAlign: 'center', color: '#666', fontSize: '14px', padding: '20px 0' }}>
+              No employees on leave today
+            </div>
+          )}
+          {leaveCalendarData.employees && leaveCalendarData.employees.length > 3 && (
+            <div style={{ textAlign: 'center', fontSize: '12px', color: '#666', marginTop: '8px' }}>
+              +{leaveCalendarData.employees.length - 3} more employees on leave
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
              </div>
       </div>
   );
@@ -3699,8 +4579,833 @@ generatingPreview: {
   color: '#666',
 },
 
+// E-Signature Modal Styles
+eSignModal: {
+  backgroundColor: '#fff',
+  padding: '30px',
+  borderRadius: '12px',
+  width: '600px',
+  maxHeight: '80vh',
+  overflowY: 'auto',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+signatureInstructions: {
+  textAlign: 'center',
+  marginBottom: '20px',
+  color: '#666',
+},
+signaturePadContainer: {
+  display: 'flex',
+  justifyContent: 'center',
+  marginBottom: '20px',
+},
+signatureActions: {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '15px',
+},
+clearSignatureBtn: {
+  padding: '10px 16px',
+  backgroundColor: '#ffc107',
+  color: '#212529',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: '600',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  alignSelf: 'flex-start',
+},
+signatureMainActions: {
+  display: 'flex',
+  gap: '15px',
+  justifyContent: 'flex-end',
+},
+saveSignatureBtn: {
+  padding: '12px 20px',
+  backgroundColor: '#28a745',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: '600',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  transition: 'all 0.2s ease',
+},
+signaturePreview: {
+  marginTop: '20px',
+  padding: '15px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+},
+previewImage: {
+  maxWidth: '200px',
+  maxHeight: '100px',
+  border: '1px solid #ccc',
+  borderRadius: '4px',
+  marginTop: '10px',
+},
+todayButton: {
+  backgroundColor: '#5ab049ff',
+  color: '#fefcf5',
+  border: 'none',
+  borderRadius: '5px',
+  padding: '5px 10px',
+  cursor: 'pointer',
+  marginLeft: '10px',
+  fontSize: '12px',
+},
 
+// Add these new styles to your styles object
+calendarHeader: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '20px',
+  padding: '20px',
+  backgroundColor: '#ffffff',
+  borderRadius: '12px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+},
+calendarNavigation: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '15px',
+},
+calendarTitle: {
+  fontSize: '24px',
+  fontWeight: '600',
+  color: '#1F2937',
+  margin: 0,
+  minWidth: '250px',
+  textAlign: 'center',
+},
+calendarControls: {
+  display: 'flex',
+  gap: '12px',
+  alignItems: 'center',
+},
+calendarGrid: {
+  backgroundColor: '#ffffff',
+  borderRadius: '12px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+  overflow: 'hidden',
+},
+weekdayHeaders: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(7, 1fr)',
+  backgroundColor: '#F9FAFB',
+  borderBottom: '1px solid #E5E7EB',
+},
+weekdayHeader: {
+  padding: '15px 10px',
+  textAlign: 'center',
+  fontWeight: '600',
+  color: '#374151',
+  fontSize: '14px',
+  textTransform: 'uppercase',
+},
+calendarDays: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(7, 1fr)',
+  gap: '1px',
+  backgroundColor: '#E5E7EB',
+},
+calendarDay: {
+  backgroundColor: '#ffffff',
+  minHeight: '100px',
+  padding: '8px',
+  border: '1px solid #E5E7EB',
+  position: 'relative',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+},
+calendarDayEmpty: {
+  backgroundColor: '#F9FAFB',
+  minHeight: '100px',
+  border: '1px solid #E5E7EB',
+},
+calendarDayToday: {
+  backgroundColor: '#e8f5e8',
+  border: '2px solid #5ab049',
+},
+calendarDayWithLeave: {
+  backgroundColor: '#fff8e1',
+},
+calendarDayNumber: {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#1F2937',
+  marginBottom: '5px',
+},
+leaveIndicators: {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '2px',
+},
+leaveIndicator: {
+  fontSize: '10px',
+  fontWeight: '600',
+  color: 'white',
+  padding: '2px 4px',
+  borderRadius: '3px',
+  textAlign: 'center',
+  cursor: 'pointer',
+},
+moreLeavesIndicator: {
+  fontSize: '9px',
+  color: '#666',
+  textAlign: 'center',
+  fontStyle: 'italic',
+},
+calendarLoading: {
+  gridColumn: '1 / -1',
+  textAlign: 'center',
+  padding: '40px',
+  color: '#666',
+  fontSize: '16px',
+},
 
+remarksTextarea: {
+    width: '100%',
+    height: '80px',
+    borderRadius: '6px',
+    border: '1px solid #ccc',
+    padding: '10px',
+    fontSize: '14px',
+    resize: 'vertical',
+    boxSizing: 'border-box',
+},
+
+// NEW STYLES FOR OVERLAPPING CHECK MODAL
+overlapWarningModal: {
+    backgroundColor: '#fff',
+    padding: '30px',
+    borderRadius: '12px',
+    width: '700px',
+    maxHeight: '80vh',
+    overflowY: 'auto',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+warningHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
+    marginBottom: '20px',
+    paddingBottom: '15px',
+    borderBottom: '2px solid #ffc107',
+},
+warningIcon: {
+    fontSize: '32px',
+    color: '#ffc107',
+},
+warningTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#856404',
+    margin: 0,
+},
+warningContent: {
+    marginBottom: '25px',
+},
+warningText: {
+    fontSize: '16px',
+    color: '#856404',
+    marginBottom: '20px',
+    lineHeight: '1.5',
+},
+violationSummary: {
+    backgroundColor: '#fff3cd',
+    padding: '15px',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    border: '1px solid #ffeaa7',
+},
+summaryText: {
+    fontSize: '14px',
+    color: '#856404',
+    margin: '5px 0',
+},
+violationsList: {
+    marginBottom: '25px',
+},
+violationsTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: '15px',
+},
+violationItem: {
+    display: 'flex',
+    gap: '12px',
+    padding: '12px',
+    marginBottom: '10px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    borderLeft: '4px solid #ffc107',
+    border: '1px solid #dee2e6',
+},
+violationIcon: {
+    fontSize: '18px',
+    color: '#ffc107',
+    marginTop: '3px',
+},
+violationDetails: {
+    flex: 1,
+},
+violationDate: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#333',
+    margin: '0 0 5px 0',
+},
+holidayBadge: {
+    backgroundColor: '#dc3545',
+    color: 'white',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontSize: '11px',
+    marginLeft: '8px',
+},
+violationInfo: {
+    fontSize: '13px',
+    color: '#666',
+    margin: '0 0 5px 0',
+},
+violationMessage: {
+    fontSize: '13px',
+    color: '#856404',
+    margin: 0,
+    fontStyle: 'italic',
+},
+businessRules: {
+    backgroundColor: '#e8f5e8',
+    padding: '15px',
+    borderRadius: '8px',
+    marginTop: '20px',
+    border: '1px solid #c3e6cb',
+},
+rulesTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#155724',
+    marginBottom: '10px',
+},
+rulesList: {
+    margin: 0,
+    paddingLeft: '20px',
+},
+li: {
+    fontSize: '14px',
+    color: '#155724',
+    marginBottom: '8px',
+    lineHeight: '1.4',
+},
+overlapActions: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center',
+    marginTop: '25px',
+},
+cancelOverlapBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+},
+forceApproveBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+},
+proceedBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+},
+overlapNote: {
+    marginTop: '20px',
+    padding: '15px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    border: '1px solid #dee2e6',
+},
+noteText: {
+    fontSize: '13px',
+    color: '#666',
+    margin: 0,
+    fontStyle: 'italic',
+    textAlign: 'center',
+},
+
+// Add these styles to your styles object
+rejectionSection: {
+  marginBottom: '20px',
+  padding: '15px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+},
+rejectionTitle: {
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#dc3545',
+  marginBottom: '15px',
+},
+rejectionOptions: {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '10px',
+  marginBottom: '15px',
+},
+rejectionOption: {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: '10px',
+},
+rejectionRadio: {
+  marginTop: '3px',
+},
+rejectionLabel: {
+  fontSize: '14px',
+  color: '#333',
+  cursor: 'pointer',
+  flex: 1,
+},
+customReasonSection: {
+  marginTop: '15px',
+  padding: '15px',
+  backgroundColor: '#fff3cd',
+  borderRadius: '6px',
+  border: '1px solid #ffeaa7',
+},
+customReasonLabel: {
+  display: 'block',
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#856404',
+  marginBottom: '8px',
+},
+customReasonTextarea: {
+  width: '100%',
+  height: '80px',
+  borderRadius: '6px',
+  border: '1px solid #ffc107',
+  padding: '10px',
+  fontSize: '14px',
+  resize: 'vertical',
+  boxSizing: 'border-box',
+  backgroundColor: '#fff',
+},
+remarksSection: {
+  marginTop: '15px',
+},
+remarksLabel: {
+  display: 'block',
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#495057',
+  marginBottom: '8px',
+},
+remarksTextarea: {
+  width: '100%',
+  height: '80px',
+  borderRadius: '6px',
+  border: '1px solid #ccc',
+  padding: '10px',
+  fontSize: '14px',
+  resize: 'vertical',
+  boxSizing: 'border-box',
+},
+daysLabel: {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#333',
+},
+
+// Add these new styles to your styles object
+rejectionButtonGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+  gap: '10px',
+  marginBottom: '15px',
+},
+rejectionButton: {
+  backgroundColor: '#ffffff',
+  border: '2px solid #e0e0e0',
+  borderRadius: '8px',
+  textAlign: 'left',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+  display: 'flex',
+  alignItems: 'center',
+  padding: '10px'
+},
+rejectionButtonSelected: {
+  backgroundColor: '#e8f5e8',
+  borderColor: '#28a745',
+  boxShadow: '0 4px 8px rgba(40, 167, 69, 0.2)',
+},
+rejectionButtonContent: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  width: '100%',
+},
+rejectionButtonText: {
+  fontSize: '12px',
+  color: '#333',
+  fontWeight: '500',
+  flex: 1,
+  textAlign: 'left',
+},
+rejectionButtonIcon: {
+  color: '#28a745',
+  fontSize: '16px',
+  marginLeft: '10px',
+},
+selectedReasonDisplay: {
+  backgroundColor: '#f0f9ff',
+  border: '1px solid #b8daff',
+  borderRadius: '8px',
+  padding: '15px',
+  marginBottom: '15px',
+},
+selectedReasonLabel: {
+  fontSize: '12px',
+  color: '#0066cc',
+  fontWeight: '600',
+  marginBottom: '5px',
+  textTransform: 'uppercase',
+},
+selectedReasonText: {
+  fontSize: '14px',
+  color: '#333',
+  fontWeight: '500',
+},
+
+// Add these new styles
+actualFormModal: {
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '12px',
+    width: '90%',
+    height: '90%',
+    maxWidth: '1400px', // Increased width
+    maxHeight: '90vh',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+    display: 'flex',
+    flexDirection: 'column',
+},
+formModalLayout: {
+    display: 'flex',
+    flex: 1,
+    gap: '20px',
+    marginBottom: '20px',
+    minHeight: 0, // Important for flex children
+},
+leftControlPanel: {
+    flex: 1,
+    minWidth: '400px',
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    padding: '20px',
+    overflowY: 'auto',
+    border: '1px solid #dee2e6',
+},
+rightFormPreview: {
+    flex: 2,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0, // Important for flex children
+},
+controlSection: {
+    flex: 1,
+},
+controlSectionTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#333',
+    margin: '0 0 15px 0',
+    paddingBottom: '10px',
+    borderBottom: '2px solid #e0e0e0',
+},
+formPreviewHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px',
+},
+previewTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#333',
+    margin: 0,
+},
+formPreviewContainer: {
+    flex: 1,
+    border: '2px solid #333',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    backgroundColor: '#f5f5f5',
+},
+formIframe: {
+    width: '100%',
+    height: '100%',
+    border: 'none',
+},
+daysInputContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '20px',
+},
+daysInput: {
+    width: '100%',
+    padding: '10px',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    fontSize: '14px',
+},
+daysNote: {
+    fontSize: '12px',
+    color: '#666',
+    fontStyle: 'italic',
+},
+rejectionSection: {
+    marginBottom: '20px',
+},
+rejectionTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#dc3545',
+    marginBottom: '15px',
+},
+rejectionButtonGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '10px',
+    marginBottom: '15px',
+    maxHeight: '300px',
+    overflowY: 'auto',
+    paddingRight: '5px',
+},
+rejectionButton: {
+    backgroundColor: '#ffffff',
+    border: '2px solid #e0e0e0',
+    borderRadius: '8px',
+    textAlign: 'left',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px',
+},
+rejectionButtonSelected: {
+    backgroundColor: '#e8f5e8',
+    borderColor: '#28a745',
+    boxShadow: '0 4px 8px rgba(40, 167, 69, 0.2)',
+},
+rejectionButtonContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+},
+rejectionButtonText: {
+    fontSize: '13px',
+    color: '#333',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'left',
+},
+rejectionButtonIcon: {
+    color: '#28a745',
+    fontSize: '16px',
+    marginLeft: '10px',
+},
+customReasonSection: {
+    marginTop: '15px',
+    padding: '15px',
+    backgroundColor: '#ffffffff',
+    borderRadius: '6px',
+    border: '1px solid #e5e3dbff',
+},
+customReasonLabel: {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#000000ff',
+    marginBottom: '8px',
+},
+customReasonTextarea: {
+    width: '100%',
+    height: '80px',
+    borderRadius: '6px',
+    border: '1px solid #e6e3daff',
+    padding: '10px',
+    fontSize: '14px',
+    resize: 'vertical',
+    boxSizing: 'border-box',
+    backgroundColor: '#fff',
+},
+selectedReasonDisplay: {
+    backgroundColor: '#f0f9ff',
+    border: '1px solid #b8daff',
+    borderRadius: '8px',
+    padding: '15px',
+    marginTop: '15px',
+},
+selectedReasonLabel: {
+    fontSize: '12px',
+    color: '#0066cc',
+    fontWeight: '600',
+    marginBottom: '5px',
+    textTransform: 'uppercase',
+},
+selectedReasonText: {
+    fontSize: '14px',
+    color: '#333',
+    fontWeight: '500',
+},
+remarksSection: {
+    marginTop: '20px',
+},
+remarksLabel: {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: '8px',
+},
+remarksTextarea: {
+    width: '100%',
+    height: '80px',
+    borderRadius: '6px',
+    border: '1px solid #ccc',
+    padding: '10px',
+    fontSize: '14px',
+    resize: 'vertical',
+    boxSizing: 'border-box',
+},
+validationError: {
+    color: 'red',
+    fontSize: '12px',
+    margin: '5px 0 0 0',
+},
+formActions: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingTop: '20px',
+    borderTop: '1px solid #e0e0e0',
+},
+printFormBtn: {
+    padding: '8px 16px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+confirmApproveBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+confirmRejectBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+},
+cancelBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+},
+typingIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    color: '#666',
+    fontStyle: 'italic',
+    backgroundColor: '#f8f9fa',
+},
+generatingPreview: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    color: '#666',
+    backgroundColor: '#f8f9fa',
+},
+loadingPreview: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    color: '#666',
+    backgroundColor: '#f8f9fa',
+},
 
 };
 

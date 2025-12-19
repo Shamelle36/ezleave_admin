@@ -63,7 +63,6 @@ function Announcement() {
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
-    { name: "Settings", icon: faCog, to: "#" },
   ];
     
   const allowedMenus = menuItems.filter((item) => {

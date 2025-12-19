@@ -3,14 +3,22 @@ const { Pool } = require("pg");
 const moment = require("moment-timezone"); 
 require("dotenv").config();
 
+
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // DB pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
+
+app.use((req, res, next) => {
+  console.log(`➡️ ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 
 // Middleware to capture raw body
 app.use((req, res, next) => {
@@ -22,6 +30,13 @@ app.use((req, res, next) => {
     next();
   });
 });
+
+app.get("/iclock", (req, res) => {
+  console.log("📡 /iclock ping from device");
+  res.type("text/plain").send("OK");
+});
+
+
 
 app.post("/iclock/cdata", async (req, res) => {
   const table = req.query.table;

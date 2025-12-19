@@ -16,6 +16,18 @@ import {
   faPlus,
   faEdit,
   faTrash,
+  faSearch,
+  faFilter,
+  faEye,
+  faKey,
+  faCheckCircle,
+  faTimesCircle,
+  faUserShield,
+  faBuilding,
+  faEnvelopeOpen,
+  faCalendar,
+  faSave,
+  faInfoCircle
 } from "@fortawesome/free-solid-svg-icons";
 
 function UserManagement() {
@@ -31,6 +43,9 @@ function UserManagement() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [filteredAccounts, setFilteredAccounts] = useState([]);
 
   const departments = [
     "Office of the Municipal Mayor",
@@ -49,7 +64,7 @@ function UserManagement() {
     "Municipal General Services Office",
     "Municipal Public Employment Service Office",
     "Municipal Health Office",
-    "Municipal Treasurer’s Office",
+    "Municipal Treasurer's Office",
   ];
 
   // Fetch all admin accounts
@@ -67,8 +82,27 @@ function UserManagement() {
     fetchAccounts();
   }, []);
 
+  // Filter accounts based on search and role filter
+  useEffect(() => {
+    let filtered = accounts;
+    
+    if (searchTerm) {
+      filtered = filtered.filter(account =>
+        account.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        account.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        account.department.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    if (roleFilter !== "all") {
+      filtered = filtered.filter(account => account.role === roleFilter);
+    }
+    
+    setFilteredAccounts(filtered);
+  }, [accounts, searchTerm, roleFilter]);
+
   const handleCreateAccount = async () => {
-    if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "Mayor" && !newAccount.department)) {
+    if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "mayor" && !newAccount.department)) {
       alert("Please fill out all fields.");
       return;
     }
@@ -82,10 +116,13 @@ function UserManagement() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage("✅ Account created! Email sent for password setup.");
+        setMessage("✅ Account created successfully! Email sent for password setup.");
         setNewAccount({ full_name: "", email: "", role: "", department: "" });
         setShowModal(false);
         fetchAccounts();
+        
+        // Clear message after 5 seconds
+        setTimeout(() => setMessage(""), 5000);
       } else {
         setMessage(`❌ ${data.message || "Failed to create account."}`);
       }
@@ -102,11 +139,54 @@ function UserManagement() {
     setEditModal(true);
   };
 
-  const handleSaveEdit = () => {
-    // TODO: connect to API to update account
-    setEditModal(false);
-    setMessage("✅ Changes saved successfully.");
-    fetchAccounts();
+  const handleSaveEdit = async () => {
+    if (!selectedAccount) return;
+    
+    try {
+      const res = await fetch(`http://localhost:5000/api/authAdmin/accounts/${selectedAccount.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(selectedAccount),
+      });
+      
+      if (res.ok) {
+        setEditModal(false);
+        setMessage("✅ Account updated successfully!");
+        fetchAccounts();
+        
+        // Clear message after 5 seconds
+        setTimeout(() => setMessage(""), 5000);
+      } else {
+        setMessage("❌ Failed to update account.");
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage("❌ Server error. Please try again later.");
+    }
+  };
+
+  const handleResetPassword = async (accountId) => {
+    if (window.confirm("Are you sure you want to reset this user's password? An email will be sent for password reset.")) {
+      try {
+        const res = await fetch(`http://localhost:5000/api/authAdmin/reset-password/${accountId}`, {
+          method: "POST",
+        });
+        
+        if (res.ok) {
+          setMessage("✅ Password reset email sent successfully!");
+        } else {
+          setMessage("❌ Failed to send reset email.");
+        }
+      } catch (err) {
+        console.error(err);
+        setMessage("❌ Server error. Please try again later.");
+      }
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setRoleFilter("all");
   };
 
   return (
@@ -163,11 +243,6 @@ function UserManagement() {
           </li>
           <li>
             <Link style={styles.sb} to="#">
-              <FontAwesomeIcon icon={faCog} style={styles.icon} /> Settings
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="#">
               <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
             </Link>
           </li>
@@ -175,107 +250,340 @@ function UserManagement() {
       </div>
 
       {/* Main Content */}
-<div style={styles.mainContent}>
-        <h2 style={styles.pageTitle}>User Management</h2>
-        <button style={styles.addBtn} onClick={() => setShowModal(true)}>
-          <FontAwesomeIcon icon={faPlus} /> Create New Account
-        </button>
+      <div style={styles.mainContent}>
+        {/* Header Section */}
+        <div style={styles.pageHeader}>
+          <div>
+            <h2 style={styles.pageTitle}>User Management</h2>
+            <p style={styles.pageSubtitle}>Manage system users and their permissions</p>
+          </div>
+          <button style={styles.addBtn} onClick={() => setShowModal(true)}>
+            <FontAwesomeIcon icon={faPlus} style={styles.btnIcon} />
+            Create New Account
+          </button>
+        </div>
 
-        {message && <p style={styles.message}>{message}</p>}
+        {/* Stats Cards */}
+        <div style={styles.statsContainer}>
+          <div style={styles.statCard}>
+            <div style={styles.statIconContainer} className="mayor">
+              <FontAwesomeIcon icon={faUserShield} style={styles.statIcon} />
+            </div>
+            <div style={styles.statContent}>
+              <h3 style={styles.statNumber}>
+                {accounts.filter(a => a.role === "mayor").length}
+              </h3>
+              <p style={styles.statLabel}>Mayor Accounts</p>
+            </div>
+          </div>
+          
+          <div style={styles.statCard}>
+            <div style={styles.statIconContainer} className="office-head">
+              <FontAwesomeIcon icon={faBuilding} style={styles.statIcon} />
+            </div>
+            <div style={styles.statContent}>
+              <h3 style={styles.statNumber}>
+                {accounts.filter(a => a.role === "office_head").length}
+              </h3>
+              <p style={styles.statLabel}>Office Heads</p>
+            </div>
+          </div>
+          
+          <div style={styles.statCard}>
+            <div style={styles.statIconContainer} className="total">
+              <FontAwesomeIcon icon={faUsers} style={styles.statIcon} />
+            </div>
+            <div style={styles.statContent}>
+              <h3 style={styles.statNumber}>{accounts.length}</h3>
+              <p style={styles.statLabel}>Total Users</p>
+            </div>
+          </div>
+          
+          <div style={styles.statCard}>
+            <div style={styles.statIconContainer} className="active">
+              <FontAwesomeIcon icon={faCheckCircle} style={styles.statIcon} />
+            </div>
+            <div style={styles.statContent}>
+              <h3 style={styles.statNumber}>{accounts.length}</h3>
+              <p style={styles.statLabel}>Active Users</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Message Alert */}
+        {message && (
+          <div style={message.includes("✅") ? styles.successMessage : styles.errorMessage}>
+            <FontAwesomeIcon icon={message.includes("✅") ? faCheckCircle : faTimesCircle} style={styles.messageIcon} />
+            {message}
+          </div>
+        )}
+
+        {/* Search and Filter Bar */}
+        <div style={styles.filterBar}>
+          <div style={styles.searchBox}>
+            <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="Search by name, email, or department..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={styles.searchInput}
+            />
+          </div>
+          
+          <div style={styles.filterControls}>
+            <div style={styles.filterGroup}>
+              <FontAwesomeIcon icon={faFilter} style={styles.filterIcon} />
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                style={styles.filterSelect}
+              >
+                <option value="all">All Roles</option>
+                <option value="mayor">Mayor</option>
+                <option value="office_head">Office Head</option>
+              </select>
+            </div>
+            
+            <button 
+              style={styles.clearFilterBtn}
+              onClick={clearFilters}
+              disabled={!searchTerm && roleFilter === "all"}
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
 
         {/* Accounts Table */}
         <div style={styles.tableContainer}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.column}>Name</th>
-                <th style={styles.column}>Email</th>
-                <th style={styles.column}>Role</th>
-                <th style={styles.column}>Department</th>
-                <th style={styles.column}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((acc) => (
-                <tr key={acc.id} style={styles.tableRow}>
-                  <td style={styles.row}>{acc.full_name}</td>
-                  <td style={styles.row}>{acc.email}</td>
-                  <td style={styles.row}>{acc.role}</td>
-                  <td style={styles.row}>{acc.department}</td>
-                  <td style={styles.row}>
-                    <button style={styles.editBtn} onClick={() => handleEditAccount(acc)}>
-                      <FontAwesomeIcon icon={faEdit} /> Edit
-                    </button>
-                  </td>
+          <div style={styles.tableHeader}>
+            <h3 style={styles.tableTitle}>
+              User Accounts ({filteredAccounts.length})
+              {filteredAccounts.length !== accounts.length && ` of ${accounts.length}`}
+            </h3>
+          </div>
+          
+          <div style={styles.tableWrapper}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>USER</th>
+                  <th style={styles.th}>ROLE</th>
+                  <th style={styles.th}>DEPARTMENT</th>
+                  <th style={styles.th}>EMAIL</th>
+                  <th style={styles.th}>STATUS</th>
+                  <th style={styles.th}>ACTIONS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredAccounts.length > 0 ? (
+                  filteredAccounts.map((acc) => (
+                    <tr key={acc.id} style={styles.tableRow}>
+                      <td style={styles.td}>
+                        <div style={styles.userCell}>
+                          <div style={styles.userAvatar}>
+                            {acc.full_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={styles.userInfo}>
+                            <div style={styles.userName}>{acc.full_name}</div>
+                            <div style={styles.userId}>ID: {acc.id}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={styles.td}>
+                        <span style={{
+                          ...styles.roleBadge,
+                          ...(acc.role === "Mayor" ? styles.roleMayor : styles.roleOfficeHead)
+                        }}>
+                          {acc.role}
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        <div style={styles.deptCell}>
+                          <FontAwesomeIcon icon={faBuilding} style={styles.deptIcon} />
+                          <span style={styles.deptText}>{acc.department}</span>
+                        </div>
+                      </td>
+                      <td style={styles.td}>
+                        <div style={styles.emailCell}>
+                          <FontAwesomeIcon icon={faEnvelopeOpen} style={styles.emailIcon} />
+                          <span style={styles.emailText}>{acc.email}</span>
+                        </div>
+                      </td>
+                      <td style={styles.td}>
+                        <span style={styles.statusBadge}>
+                          <FontAwesomeIcon icon={faCheckCircle} style={styles.statusIcon} />
+                          Active
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        <div style={styles.actionButtons}>
+                          <button 
+                            style={styles.viewBtn}
+                            onClick={() => handleEditAccount(acc)}
+                            title="View Details"
+                          >
+                            <FontAwesomeIcon icon={faEye} />
+                          </button>
+                          <button 
+                            style={styles.editBtn}
+                            onClick={() => handleEditAccount(acc)}
+                            title="Edit Account"
+                          >
+                            <FontAwesomeIcon icon={faEdit} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" style={styles.noData}>
+                      <div style={styles.emptyState}>
+                        <FontAwesomeIcon icon={faUsers} style={styles.emptyIcon} />
+                        <p style={styles.emptyText}>No users found</p>
+                        {searchTerm || roleFilter !== "all" ? (
+                          <p style={styles.emptySubtext}>
+                            Try adjusting your search or filters
+                          </p>
+                        ) : (
+                          <button 
+                            style={styles.createFirstBtn}
+                            onClick={() => setShowModal(true)}
+                          >
+                            Create Your First User
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Create Account Modal */}
         {showModal && (
           <div style={styles.modalOverlay}>
             <div style={styles.modal}>
-              <h3>Create Head / Mayor Account</h3>
-              <label>Full Name</label>
-              <input
-                type="text"
-                value={newAccount.full_name}
-                onChange={(e) => setNewAccount({ ...newAccount, full_name: e.target.value })}
-                style={styles.input}
-              />
-              <label>Email</label>
-              <input
-                type="email"
-                value={newAccount.email}
-                onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
-                style={styles.input}
-              />
-              <label>Role</label>
-              <select
-                value={newAccount.role}
-                onChange={(e) => {
-                  const role = e.target.value;
-                  setNewAccount({
-                    ...newAccount,
-                    role,
-                    department: role === "Mayor" ? "Office of the Municipal Mayor" : "",
-                  });
-                }}
-                style={styles.input}
-              >
-                <option value="">Select Role</option>
-                <option value="Mayor">Mayor</option>
-                <option value="Office Head">Office Head</option>
-              </select>
-
-              {newAccount.role !== "Mayor" && (
-                <>
-                  <label>Department</label>
-                  <select
-                    value={newAccount.department}
-                    onChange={(e) =>
-                      setNewAccount({ ...newAccount, department: e.target.value })
-                    }
-                    style={styles.input}
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-
-              <div style={styles.modalButtons}>
-                <button onClick={handleCreateAccount} style={styles.saveBtn} disabled={loading}>
-                  {loading ? "Creating..." : "Create"}
+              <div style={styles.modalHeader}>
+                <h3 style={styles.modalTitle}>Create New Account</h3>
+                <button 
+                  style={styles.closeBtn}
+                  onClick={() => setShowModal(false)}
+                >
+                  ×
                 </button>
-                <button onClick={() => setShowModal(false)} style={styles.cancelBtn}>
+              </div>
+              
+              <div style={styles.modalBody}>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>
+                    <FontAwesomeIcon icon={faUsers} style={styles.labelIcon} />
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newAccount.full_name}
+                    onChange={(e) => setNewAccount({ ...newAccount, full_name: e.target.value })}
+                    style={styles.formInput}
+                    placeholder="Enter full name"
+                  />
+                </div>
+                
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>
+                    <FontAwesomeIcon icon={faEnvelope} style={styles.labelIcon} />
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={newAccount.email}
+                    onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                    style={styles.formInput}
+                    placeholder="Enter email address"
+                  />
+                </div>
+                
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>
+                    <FontAwesomeIcon icon={faUserShield} style={styles.labelIcon} />
+                    Role
+                  </label>
+                  <select
+                    value={newAccount.role}
+                    onChange={(e) => {
+                      const role = e.target.value;
+                      setNewAccount({
+                        ...newAccount,
+                        role,
+                        department: role === "Mayor" ? "Office of the Municipal Mayor" : "",
+                      });
+                    }}
+                    style={styles.formSelect}
+                  >
+                    <option value="">Select Role</option>
+                    <option value="Mayor">Mayor</option>
+                    <option value="Office Head">Office Head</option>
+                  </select>
+                </div>
+
+                {newAccount.role !== "Mayor" && newAccount.role !== "" && (
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>
+                      <FontAwesomeIcon icon={faBuilding} style={styles.labelIcon} />
+                      Department
+                    </label>
+                    <select
+                      value={newAccount.department}
+                      onChange={(e) =>
+                        setNewAccount({ ...newAccount, department: e.target.value })
+                      }
+                      style={styles.formSelect}
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div style={styles.modalInfo}>
+                  <FontAwesomeIcon icon={faInfoCircle} style={styles.infoIcon} />
+                  <p style={styles.infoText}>
+                    An email will be sent to the user for password setup.
+                  </p>
+                </div>
+              </div>
+
+              <div style={styles.modalFooter}>
+                <button 
+                  onClick={() => setShowModal(false)} 
+                  style={styles.modalCancelBtn}
+                >
                   Cancel
+                </button>
+                <button 
+                  onClick={handleCreateAccount} 
+                  style={styles.modalSaveBtn}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <div style={styles.spinner}></div>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faPlus} style={styles.saveIcon} />
+                      Create Account
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -286,56 +594,100 @@ function UserManagement() {
         {editModal && selectedAccount && (
           <div style={styles.modalOverlay}>
             <div style={styles.modal}>
-              <h3>Edit Account</h3>
-              <label>Full Name</label>
-              <input
-                type="text"
-                value={selectedAccount.full_name}
-                onChange={(e) => setSelectedAccount({ ...selectedAccount, full_name: e.target.value })}
-                style={styles.input}
-              />
-              <label>Email</label>
-              <input
-                type="email"
-                value={selectedAccount.email}
-                onChange={(e) => setSelectedAccount({ ...selectedAccount, email: e.target.value })}
-                style={styles.input}
-              />
-              <label>Role</label>
-              <input type="text" value={selectedAccount.role} readOnly style={styles.inputReadOnly} />
-              <label>Department</label>
-              <input type="text" value={selectedAccount.department} readOnly style={styles.inputReadOnly} />
-              <div style={styles.modalButtons}>
-                <button onClick={handleSaveEdit} style={styles.saveBtn}>
-                  Save Changes
+              <div style={styles.modalHeader}>
+                <h3 style={styles.modalTitle}>Account Details</h3>
+                <button 
+                  style={styles.closeBtn}
+                  onClick={() => setEditModal(false)}
+                >
+                  ×
                 </button>
-                <button onClick={() => setEditModal(false)} style={styles.cancelBtn}>
+              </div>
+              
+              <div style={styles.modalBody}>
+                <div style={styles.userPreview}>
+                  <div style={styles.previewAvatar}>
+                    {selectedAccount.full_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div style={styles.previewInfo}>
+                    <h4 style={styles.previewName}>{selectedAccount.full_name}</h4>
+                    <p style={styles.previewEmail}>{selectedAccount.email}</p>
+                  </div>
+                </div>
+                
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Full Name</label>
+                  <input
+                    type="text"
+                    value={selectedAccount.full_name}
+                    onChange={(e) => setSelectedAccount({ ...selectedAccount, full_name: e.target.value })}
+                    style={styles.formInput}
+                  />
+                </div>
+                
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Email Address</label>
+                  <input
+                    type="email"
+                    value={selectedAccount.email}
+                    onChange={(e) => setSelectedAccount({ ...selectedAccount, email: e.target.value })}
+                    style={styles.formInput}
+                  />
+                </div>
+                
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Role</label>
+                  <div style={styles.readOnlyField}>
+                    {selectedAccount.role}
+                  </div>
+                </div>
+                
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Department</label>
+                  <div style={styles.readOnlyField}>
+                    {selectedAccount.department}
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.modalFooter}>
+                <button 
+                  onClick={() => setEditModal(false)} 
+                  style={styles.modalCancelBtn}
+                >
                   Cancel
+                </button>
+                <button 
+                  onClick={handleSaveEdit} 
+                  style={styles.modalSaveBtn}
+                >
+                  <FontAwesomeIcon icon={faSave} style={styles.saveIcon} />
+                  Save Changes
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
-          
     </div>
   );
 }
 
-// ----- Styles -----
+// ----- Enhanced Styles -----
 const styles = {
-  dashboardContainer: { 
-    display: "flex", 
-    minHeight: "100vh", 
-    backgroundColor: "#F8F8F8" 
+  dashboardContainer: {
+    display: 'flex',
+    minHeight: '100vh',
+    backgroundColor: '#F8F8F8',
   },
   sidebar: {
-    backgroundColor: "#009205",
-    width: "280px",
-    height: "100vh",
-    position: "fixed",
-    padding: "20px",
-    boxSizing: "border-box",
+    backgroundColor: '#009205',
+    width: '280px',
+    height: '100vh',
+    margin: '0',
+    position: 'fixed',
+    padding: '20px',
+    boxSizing: 'border-box', 
   },
   logo: { 
     width: "100px", 
@@ -348,71 +700,819 @@ const styles = {
     padding: "0", 
     margin: "0" 
   },
-  sb: { 
-    color: "#fff", 
-    textDecoration: "none", 
-    padding: "10px 15px", 
-    display: "flex", 
-    alignItems: "center", 
-    fontSize: "16px", 
-    gap: "10px", 
-    transition: "background-color 0.2s ease" 
+  sb: {
+    color: '#fff',
+    textDecoration: 'none',
+    padding: '10px 15px',
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '16px',
+    gap: '10px',
+    transition: 'background-color 0.2s ease', 
   },
   icon: { 
-    color: "#fff" 
+    color: "#fff",
+    width: "20px"
   },
   search: { 
-    padding: "10px", 
+    padding: "10px 15px", 
     width: "300px", 
-    borderRadius: "5px", 
-    border: "1px solid #ccc", 
-    marginRight: "20px" 
+    borderRadius: "8px", 
+    border: "1px solid #ddd", 
+    marginRight: "20px",
+    fontSize: "14px",
+    transition: "all 0.3s ease",
+    ":focus": {
+      outline: "none",
+      borderColor: "#009205",
+      boxShadow: "0 0 0 3px rgba(0, 146, 5, 0.1)"
+    }
   },
   iconBell: { 
     color: "#fff", 
-    fontSize: "24px", 
-    cursor: "pointer" 
+    fontSize: "22px", 
+    cursor: "pointer",
+    transition: "transform 0.3s ease",
+    ":hover": {
+      transform: "scale(1.1)"
+    }
   },
-  header: { 
-    display: "flex", 
-    alignItems: "center", 
-    justifyContent: "flex-end", 
-    padding: "10px", 
-    backgroundColor: "#009205", 
-    position: "fixed", 
-    top: "0", 
-    left: "280px", 
-    width: "calc(100% - 280px)", 
-    zIndex: 1000, 
-    boxSizing: "border-box" 
-  },
-  btnActive: { 
-    backgroundColor: "#A8FC0080", 
-    borderRadius: "5px", 
-    boxShadow: "0 2px 4px rgba(0,0,0,0.2)" 
-  },
-  column: {
+  header: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end', 
     padding: '10px',
-    textAlign: 'left'
+    backgroundColor: '#009205',
+    position: 'fixed',
+    top: '0',
+    left: '280px', 
+    width: 'calc(100% - 280px)', 
+    zIndex: 1000, 
+    boxSizing: 'border-box',
   },
-  row: {
-    padding: '10px'
+  btnActive: {
+    backgroundColor: '#A8FC0080',
+    borderRadius: '5px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
   },
- mainContent: { marginLeft: "280px", padding: "30px", flex: 1, marginTop: "50px" },
-  pageTitle: { fontSize: "28px", marginBottom: "20px", color: "#333" },
-  addBtn: { backgroundColor: "#1976D2", color: "#fff", padding: "10px 20px", borderRadius: "6px", border: "none", cursor: "pointer", marginBottom: "20px" },
-  tableContainer: { overflowX: "auto", background: "#fff", borderRadius: "10px", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" },
-  table: { width: "100%", borderCollapse: "collapse" },
-  tableRow: { transition: "background 0.2s", cursor: "pointer", ":hover": { backgroundColor: "#f0f8ff" } },
-  editBtn: { backgroundColor: "#0288D1", color: "#fff", padding: "6px 12px", borderRadius: "5px", border: "none", cursor: "pointer" },
-  input: { width: "100%", padding: "8px", margin: "5px 0 15px", borderRadius: "5px", border: "1px solid #ccc" },
-  inputReadOnly: { width: "100%", padding: "8px", margin: "5px 0 15px", borderRadius: "5px", border: "1px solid #eee", backgroundColor: "#f9f9f9" },
-  modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.3)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
-  modal: { background: "#fff", borderRadius: "12px", padding: "30px", width: "400px", display: "flex", flexDirection: "column", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" },
-  modalButtons: { display: "flex", justifyContent: "flex-end", gap: "10px" },
-  saveBtn: { backgroundColor: "#1976D2", color: "#fff", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer" },
-  cancelBtn: { backgroundColor: "#ccc", color: "#333", padding: "8px 16px", borderRadius: "6px", border: "none", cursor: "pointer" },
-  message: { margin: "10px 0", fontWeight: "bold", color: "#1976D2" },
+  mainContent: { 
+    marginLeft: "280px", 
+    padding: "30px", 
+    flex: 1, 
+    marginTop: "70px",
+    maxWidth: "calc(100% - 280px)"
+  },
+  
+  // Page Header
+  pageHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "30px",
+    paddingBottom: "20px",
+    borderBottom: "1px solid #eaeaea"
+  },
+  pageTitle: {
+    fontSize: "32px",
+    fontWeight: "700",
+    color: "#2c3e50",
+    margin: "0 0 5px 0",
+    background: "linear-gradient(135deg, #009205 0%, #4CAF50 100%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent"
+  },
+  pageSubtitle: {
+    fontSize: "16px",
+    color: "#7f8c8d",
+    margin: "0",
+    fontWeight: "400"
+  },
+  addBtn: {
+    backgroundColor: "#009205",
+    color: "#fff",
+    padding: "12px 24px",
+    borderRadius: "8px",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "15px",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    transition: "all 0.3s ease",
+    boxShadow: "0 4px 12px rgba(0, 146, 5, 0.3)",
+    ":hover": {
+      backgroundColor: "#007a04",
+      transform: "translateY(-2px)",
+      boxShadow: "0 6px 15px rgba(0, 146, 5, 0.4)"
+    },
+    ":active": {
+      transform: "translateY(0)"
+    }
+  },
+  btnIcon: {
+    fontSize: "16px"
+  },
+
+  // Stats Cards
+  statsContainer: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: "20px",
+    marginBottom: "30px"
+  },
+  statCard: {
+    backgroundColor: "#fff",
+    borderRadius: "12px",
+    padding: "20px",
+    display: "flex",
+    alignItems: "center",
+    gap: "20px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
+    transition: "all 0.3s ease",
+    border: "1px solid #f0f0f0",
+    ":hover": {
+      transform: "translateY(-5px)",
+      boxShadow: "0 8px 25px rgba(0, 0, 0, 0.1)"
+    }
+  },
+  statIconContainer: {
+    width: "60px",
+    height: "60px",
+    borderRadius: "12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    "&.mayor": {
+      backgroundColor: "rgba(41, 128, 185, 0.1)",
+      color: "#2980b9"
+    },
+    "&.office-head": {
+      backgroundColor: "rgba(155, 89, 182, 0.1)",
+      color: "#9b59b6"
+    },
+    "&.total": {
+      backgroundColor: "rgba(52, 152, 219, 0.1)",
+      color: "#3498db"
+    },
+    "&.active": {
+      backgroundColor: "rgba(46, 204, 113, 0.1)",
+      color: "#2ecc71"
+    }
+  },
+  statIcon: {
+    fontSize: "24px"
+  },
+  statContent: {
+    flex: 1
+  },
+  statNumber: {
+    fontSize: "28px",
+    fontWeight: "700",
+    color: "#2c3e50",
+    margin: "0 0 5px 0",
+    lineHeight: "1"
+  },
+  statLabel: {
+    fontSize: "14px",
+    color: "#7f8c8d",
+    margin: "0",
+    fontWeight: "500"
+  },
+
+  // Messages
+  successMessage: {
+    backgroundColor: "#d4edda",
+    color: "#155724",
+    padding: "15px 20px",
+    borderRadius: "8px",
+    marginBottom: "25px",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    border: "1px solid #c3e6cb",
+    animation: "fadeIn 0.5s ease"
+  },
+  errorMessage: {
+    backgroundColor: "#f8d7da",
+    color: "#721c24",
+    padding: "15px 20px",
+    borderRadius: "8px",
+    marginBottom: "25px",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    border: "1px solid #f5c6cb"
+  },
+  messageIcon: {
+    fontSize: "18px"
+  },
+
+  // Filter Bar
+  filterBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "25px",
+    gap: "20px",
+    flexWrap: "wrap"
+  },
+  searchBox: {
+    flex: "1",
+    minWidth: "300px",
+    position: "relative"
+  },
+  searchIcon: {
+    position: "absolute",
+    left: "15px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: "#95a5a6",
+    fontSize: "16px"
+  },
+  searchInput: {
+    width: "100%",
+    padding: "12px 20px 12px 45px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    fontSize: "15px",
+    transition: "all 0.3s ease",
+    backgroundColor: "#fff",
+    ":focus": {
+      outline: "none",
+      borderColor: "#009205",
+      boxShadow: "0 0 0 3px rgba(0, 146, 5, 0.1)"
+    }
+  },
+  filterControls: {
+    display: "flex",
+    alignItems: "center",
+    gap: "15px"
+  },
+  filterGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px"
+  },
+  filterIcon: {
+    color: "#7f8c8d",
+    fontSize: "16px"
+  },
+  filterSelect: {
+    padding: "12px 15px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    fontSize: "15px",
+    backgroundColor: "#fff",
+    minWidth: "150px",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
+    ":focus": {
+      outline: "none",
+      borderColor: "#009205"
+    }
+  },
+  clearFilterBtn: {
+    padding: "12px 20px",
+    backgroundColor: "#95a5a6",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "600",
+    transition: "all 0.3s ease",
+    ":hover:not(:disabled)": {
+      backgroundColor: "#7f8c8d"
+    },
+    ":disabled": {
+      opacity: "0.5",
+      cursor: "not-allowed"
+    }
+  },
+
+  // Table Styles
+  tableContainer: {
+    backgroundColor: "#fff",
+    borderRadius: "12px",
+    overflow: "hidden",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
+    border: "1px solid #f0f0f0",
+    marginTop: "20px"
+  },
+  tableHeader: {
+    padding: "20px 25px",
+    borderBottom: "1px solid #eee",
+    backgroundColor: "#fafafa"
+  },
+  tableTitle: {
+    fontSize: "18px",
+    fontWeight: "600",
+    color: "#2c3e50",
+    margin: "0"
+  },
+  tableWrapper: {
+    overflowX: "auto"
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: "800px"
+  },
+  th: {
+    padding: "18px 25px",
+    textAlign: "left",
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#7f8c8d",
+    borderBottom: "2px solid #eee",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#fafafa"
+  },
+  tableRow: {
+    transition: "all 0.3s ease",
+    borderBottom: "1px solid #f5f5f5",
+    ":hover": {
+      backgroundColor: "#f9f9f9"
+    }
+  },
+  td: {
+    padding: "20px 25px",
+    verticalAlign: "middle"
+  },
+
+  // User Cell
+  userCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "15px"
+  },
+  userAvatar: {
+    width: "45px",
+    height: "45px",
+    borderRadius: "50%",
+    backgroundColor: "#009205",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    fontWeight: "600"
+  },
+  userInfo: {
+    display: "flex",
+    flexDirection: "column"
+  },
+  userName: {
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "#2c3e50",
+    marginBottom: "3px"
+  },
+  userId: {
+    fontSize: "13px",
+    color: "#95a5a6"
+  },
+
+  // Role Badge
+  roleBadge: {
+    padding: "6px 12px",
+    borderRadius: "20px",
+    fontSize: "13px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px"
+  },
+  roleMayor: {
+    backgroundColor: "rgba(41, 128, 185, 0.1)",
+    color: "#2980b9",
+    border: "1px solid rgba(41, 128, 185, 0.2)"
+  },
+  roleOfficeHead: {
+    backgroundColor: "rgba(155, 89, 182, 0.1)",
+    color: "#9b59b6",
+    border: "1px solid rgba(155, 89, 182, 0.2)"
+  },
+
+  // Department Cell
+  deptCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px"
+  },
+  deptIcon: {
+    color: "#95a5a6",
+    fontSize: "14px"
+  },
+  deptText: {
+    fontSize: "14px",
+    color: "#34495e"
+  },
+
+  // Email Cell
+  emailCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px"
+  },
+  emailIcon: {
+    color: "#95a5a6",
+    fontSize: "14px"
+  },
+  emailText: {
+    fontSize: "14px",
+    color: "#34495e"
+  },
+
+  // Status Badge
+  statusBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "6px 12px",
+    backgroundColor: "rgba(46, 204, 113, 0.1)",
+    color: "#27ae60",
+    borderRadius: "20px",
+    fontSize: "13px",
+    fontWeight: "600",
+    border: "1px solid rgba(46, 204, 113, 0.2)"
+  },
+  statusIcon: {
+    fontSize: "12px"
+  },
+
+  // Action Buttons
+  actionButtons: {
+    display: "flex",
+    gap: "8px"
+  },
+  viewBtn: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    backgroundColor: "transparent",
+    color: "#7f8c8d",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.3s ease",
+    fontSize: "14px",
+    ":hover": {
+      backgroundColor: "#f8f9fa",
+      borderColor: "#009205",
+      color: "#009205"
+    }
+  },
+  resetBtn: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    backgroundColor: "transparent",
+    color: "#7f8c8d",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.3s ease",
+    fontSize: "14px",
+    ":hover": {
+      backgroundColor: "#e3f2fd",
+      borderColor: "#2196F3",
+      color: "#2196F3"
+    }
+  },
+  editBtn: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    backgroundColor: "transparent",
+    color: "#7f8c8d",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.3s ease",
+    fontSize: "14px",
+    ":hover": {
+      backgroundColor: "#e8f5e9",
+      borderColor: "#4CAF50",
+      color: "#4CAF50"
+    }
+  },
+
+  // Empty State
+  noData: {
+    padding: "60px 20px",
+    textAlign: "center"
+  },
+  emptyState: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "15px"
+  },
+  emptyIcon: {
+    fontSize: "60px",
+    color: "#ddd",
+    marginBottom: "10px"
+  },
+  emptyText: {
+    fontSize: "18px",
+    color: "#95a5a6",
+    margin: "0",
+    fontWeight: "600"
+  },
+  emptySubtext: {
+    fontSize: "14px",
+    color: "#bdc3c7",
+    margin: "0"
+  },
+  createFirstBtn: {
+    marginTop: "15px",
+    padding: "10px 20px",
+    backgroundColor: "#009205",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "600",
+    transition: "all 0.3s ease",
+    ":hover": {
+      backgroundColor: "#007a04"
+    }
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    right: "0",
+    bottom: "0",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 2000,
+    padding: "20px",
+    backdropFilter: "blur(5px)"
+  },
+  modal: {
+    backgroundColor: "#fff",
+    borderRadius: "16px",
+    width: "100%",
+    maxWidth: "500px",
+    maxHeight: "90vh",
+    display: "flex",
+    flexDirection: "column",
+    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+    animation: "modalSlideIn 0.4s ease"
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "25px 30px",
+    borderBottom: "1px solid #eee"
+  },
+  modalTitle: {
+    fontSize: "22px",
+    fontWeight: "700",
+    color: "#2c3e50",
+    margin: "0"
+  },
+  closeBtn: {
+    background: "none",
+    border: "none",
+    fontSize: "28px",
+    color: "#95a5a6",
+    cursor: "pointer",
+    padding: "0",
+    width: "36px",
+    height: "36px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "50%",
+    transition: "all 0.3s ease",
+    ":hover": {
+      backgroundColor: "#f5f5f5",
+      color: "#e74c3c"
+    }
+  },
+  modalBody: {
+    padding: "30px",
+    overflowY: "auto",
+    flex: "1"
+  },
+  
+  // Form Styles
+  formGroup: {
+    marginBottom: "25px"
+  },
+  formLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#2c3e50",
+    marginBottom: "8px"
+  },
+  labelIcon: {
+    color: "#009205",
+    fontSize: "14px"
+  },
+  formInput: {
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: "8px",
+    border: "2px solid #e0e0e0",
+    fontSize: "15px",
+    transition: "all 0.3s ease",
+    backgroundColor: "#fff",
+    ":focus": {
+      outline: "none",
+      borderColor: "#009205",
+      boxShadow: "0 0 0 4px rgba(0, 146, 5, 0.1)"
+    }
+  },
+  formSelect: {
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: "8px",
+    border: "2px solid #e0e0e0",
+    fontSize: "15px",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
+    appearance: "none",
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23009205' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 16px center",
+    backgroundSize: "16px",
+    ":focus": {
+      outline: "none",
+      borderColor: "#009205",
+      boxShadow: "0 0 0 4px rgba(0, 146, 5, 0.1)"
+    }
+  },
+  readOnlyField: {
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: "8px",
+    border: "2px solid #f0f0f0",
+    fontSize: "15px",
+    backgroundColor: "#f9f9f9",
+    color: "#7f8c8d"
+  },
+
+  // Modal Info
+  modalInfo: {
+    backgroundColor: "#e8f5e9",
+    padding: "15px",
+    borderRadius: "8px",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    marginTop: "20px",
+    border: "1px solid #c8e6c9"
+  },
+  infoIcon: {
+    color: "#4CAF50",
+    fontSize: "16px"
+  },
+  infoText: {
+    fontSize: "14px",
+    color: "#2e7d32",
+    margin: "0"
+  },
+
+  // User Preview (Edit Modal)
+  userPreview: {
+    display: "flex",
+    alignItems: "center",
+    gap: "20px",
+    marginBottom: "30px",
+    paddingBottom: "20px",
+    borderBottom: "1px solid #eee"
+  },
+  previewAvatar: {
+    width: "70px",
+    height: "70px",
+    borderRadius: "50%",
+    backgroundColor: "#009205",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "28px",
+    fontWeight: "600"
+  },
+  previewInfo: {
+    flex: "1"
+  },
+  previewName: {
+    fontSize: "20px",
+    fontWeight: "700",
+    color: "#2c3e50",
+    margin: "0 0 5px 0"
+  },
+  previewEmail: {
+    fontSize: "15px",
+    color: "#7f8c8d",
+    margin: "0"
+  },
+
+  // Modal Footer
+  modalFooter: {
+    padding: "25px 30px",
+    borderTop: "1px solid #eee",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "15px"
+  },
+  modalCancelBtn: {
+    padding: "12px 24px",
+    backgroundColor: "transparent",
+    color: "#7f8c8d",
+    border: "2px solid #ddd",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "15px",
+    fontWeight: "600",
+    transition: "all 0.3s ease",
+    ":hover": {
+      backgroundColor: "#f5f5f5",
+      borderColor: "#bbb"
+    }
+  },
+  modalSaveBtn: {
+    padding: "12px 24px",
+    backgroundColor: "#009205",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "15px",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    transition: "all 0.3s ease",
+    ":hover:not(:disabled)": {
+      backgroundColor: "#007a04",
+      transform: "translateY(-2px)",
+      boxShadow: "0 6px 15px rgba(0, 146, 5, 0.4)"
+    },
+    ":disabled": {
+      opacity: "0.6",
+      cursor: "not-allowed",
+      transform: "none"
+    }
+  },
+  saveIcon: {
+    fontSize: "16px"
+  },
+  spinner: {
+    width: "16px",
+    height: "16px",
+    border: "2px solid rgba(255, 255, 255, 0.3)",
+    borderTop: "2px solid #fff",
+    borderRadius: "50%",
+    animation: "spin 1s linear infinite"
+  }
 };
+
+// Add these keyframes at the end of the file
+const keyframes = `
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: translateY(-30px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+`;
+
+// Add the styles to the document
+const styleSheet = document.createElement("style");
+styleSheet.type = "text/css";
+styleSheet.innerText = keyframes;
+document.head.appendChild(styleSheet);
 
 export default UserManagement;

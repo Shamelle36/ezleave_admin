@@ -5,6 +5,31 @@
   font-family: 'Poppins';
 }
 
+/* App.css or your main CSS file */
+
+/* Hide scrollbar completely but allow scrolling */
+.hide-scrollbar {
+  overflow-y: scroll !important;
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, Opera */
+}
+
+/* Show scrollbar (if needed) */
+.show-scrollbar {
+  overflow-y: auto !important;
+  scrollbar-width: auto !important;
+  -ms-overflow-style: auto !important;
+}
+
+.show-scrollbar::-webkit-scrollbar {
+  display: block !important;
+}
+
+
 .container {
   display: flex;
   flex-direction: column;

@@ -23,7 +23,8 @@ import {
   faTimes,
   faPenToSquare,
   faUser,
-  faBars
+  faBars,
+  faUpload
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -44,7 +45,10 @@ function Employees() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [employeesToEdit, setEmployeesToEdit] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(() => {
+    const savedView = localStorage.getItem('employeesView');
+    return savedView || 'list';
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
   const listEmployeePerPage = 10;
@@ -57,6 +61,12 @@ function Employees() {
   const [filterEmploymentStatus, setFilterEmploymentStatus] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  const [showUploadBalancesModal, setShowUploadBalancesModal] = useState(false);
+  const [selectedBalancesFile, setSelectedBalancesFile] = useState(null);
+  const [uploadingBalances, setUploadingBalances] = useState(false);
+  const [uploadBalancesResult, setUploadBalancesResult] = useState(null);
+  const [uploadBalancesProgress, setUploadBalancesProgress] = useState(0);
   
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
@@ -79,6 +89,10 @@ function Employees() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [admin, setAdmin] = useState(null);
+  
+  useEffect(() => {
+    localStorage.setItem('employeesView', view);
+  }, [view]);
 
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -89,7 +103,6 @@ function Employees() {
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
-    { name: "Settings", icon: faCog, to: "#" },
   ];
 
   const allowedMenus = menuItems.filter((item) => {
@@ -116,8 +129,8 @@ function Employees() {
     "Office of the Assessor",
     "Municipal Budget Office",
     "Municipal Planning and Development Office",
-    "Office of the Municipal Engineer",
-    "Municipal Risk Reduction and Management Office",
+    "Municipal Engineering Office",
+    "Municipal Disaster Risk Reduction and Management Office",
     "Municipal Social Welfare and Development Office",
     "Municipal Environment and Natural Resources Office",
     "Office of the Municipal Agriculturist",
@@ -522,6 +535,71 @@ function Employees() {
     return pages;
   };
 
+  const canUploadBalances = () => {
+    const role = localStorage.getItem("role") || "admin";
+    return role !== "mayor"; // Mayor cannot upload balances
+  };
+
+  const handleBalancesUpload = async () => {
+    if (!selectedBalancesFile) {
+      alert("Please select a file first!");
+      return;
+    }
+
+    setUploadingBalances(true);
+    setUploadBalancesProgress(0);
+    setUploadBalancesResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedBalancesFile);
+
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadBalancesProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      const res = await fetch(`${API_URL}/api/leave-cards/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setUploadBalancesProgress(100);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Upload failed: ${res.status} - ${errorText}`);
+      }
+
+      const data = await res.json();
+      setUploadBalancesResult(data);
+      
+      // Auto-close on success after delay
+      if (data.inserted > 0) {
+        setTimeout(() => {
+          setShowUploadBalancesModal(false);
+          setSelectedBalancesFile(null);
+          setUploadBalancesResult(null);
+          setUploadBalancesProgress(0);
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setUploadBalancesResult({
+        error: err.message || "Failed to upload leave balances. Please check the file format and try again."
+      });
+    } finally {
+      setUploadingBalances(false);
+    }
+  };
+
   return (
     <div className="dashboard-container" style={styles.dashboardContainer}>
 
@@ -773,6 +851,18 @@ function Employees() {
                       Import CSV
                     </button>
                   )}
+
+                  {canUploadBalances() && (
+                    <button 
+                      className="upload-balances-btn" 
+                      style={styles.uploadBalancesBtn} 
+                      onClick={() => setShowUploadBalancesModal(true)}
+                    >
+                      <FontAwesomeIcon icon={faUpload} className="upload-icon" style={styles.iconUpload} />
+                      Upload Balances
+                    </button>
+                  )}
+
                   <input
                     type="file"
                     accept=".csv,.xlsx,.xls"
@@ -815,6 +905,8 @@ function Employees() {
                       <span>Delete Selected ({selectedEmployees.length})</span>
                     </button>
                   )}
+
+                  
 
                   {showBulkDeleteModal && (
                     <div className="bulk-delete-modal" style={{
@@ -1031,6 +1123,203 @@ function Employees() {
                   <p style={{fontSize: '20px'}}>Are you sure you want to import {employeesToUpload.length} employees?</p>
                   <button className="btn-yes" onClick={confirmUpload} style={styles.btnYes}>Yes</button>
                   <button className="btn-no" onClick={() => setShowConfirmModal(false)} style={styles.btnNo}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {showUploadBalancesModal && (
+              <div className="modal-overlay" style={styles.modalOverlay}>
+                <div className="modal-content" style={{...styles.modalContent, maxWidth: '500px', backgroundColor: '#fff', padding: '25px', borderRadius: '10px'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+                    <h3 style={{ margin: 0, color: '#2C3E50' }}>Upload Leave Balances</h3>
+                    <button
+                      onClick={() => {
+                        setShowUploadBalancesModal(false);
+                        setSelectedBalancesFile(null);
+                        setUploadBalancesResult(null);
+                        setUploadBalancesProgress(0);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '18px',
+                        cursor: 'pointer',
+                        color: '#666'
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  </div>
+                  
+                  <div style={{ 
+                    backgroundColor: '#f8f9fa', 
+                    padding: '15px', 
+                    borderRadius: '8px', 
+                    marginBottom: '15px',
+                    border: '1px dashed #dee2e6'
+                  }}>
+                    <p style={{ fontSize: "14px", color: "#495057", margin: "0 0 10px 0" }}>
+                      <strong>File Requirements:</strong>
+                    </p>
+                    <ul style={{ fontSize: "12px", color: "#6c757d", margin: 0, paddingLeft: '15px' }}>
+                      <li>Excel format (.xlsx, .xls) only</li>
+                      <li>Must match the leave card template structure</li>
+                      <li>Include employee ID numbers for matching</li>
+                      <li>First row should contain column headers</li>
+                    </ul>
+                  </div>
+
+                  <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#495057' }}>
+                      Select Excel File:
+                    </label>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        setSelectedBalancesFile(file);
+                        setUploadBalancesResult(null);
+                        setUploadBalancesProgress(0);
+                      }}
+                      style={{ 
+                        width: '100%', 
+                        padding: '8px', 
+                        border: '1px solid #ced4da', 
+                        borderRadius: '4px',
+                        fontSize: '14px'
+                      }}
+                      disabled={uploadingBalances}
+                    />
+                    {selectedBalancesFile && (
+                      <p style={{ fontSize: "12px", color: "#28a745", margin: "5px 0 0 0" }}>
+                        ✅ Selected: {selectedBalancesFile.name}
+                      </p>
+                    )}
+                  </div>
+
+                  {uploadingBalances && (
+                    <div style={{ marginBottom: "15px" }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        marginBottom: '5px',
+                        fontSize: '14px',
+                        color: '#495057'
+                      }}>
+                        <span>Uploading...</span>
+                        <span>{uploadBalancesProgress}%</span>
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '8px',
+                        backgroundColor: '#e9ecef',
+                        borderRadius: '4px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          width: `${uploadBalancesProgress}%`,
+                          height: '100%',
+                          backgroundColor: '#28a745',
+                          transition: 'width 0.3s ease',
+                          borderRadius: '4px'
+                        }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {uploadBalancesResult && (
+                    <div style={{ 
+                      marginTop: "15px", 
+                      padding: "12px", 
+                      backgroundColor: uploadBalancesResult.error ? "#f8d7da" : "#d1ecf1", 
+                      borderRadius: "6px",
+                      border: `1px solid ${uploadBalancesResult.error ? "#f5c6cb" : "#bee5eb"}`
+                    }}>
+                      {uploadBalancesResult.error ? (
+                        <div>
+                          <p style={{ margin: "0 0 8px 0", color: "#721c24", fontWeight: "500" }}>
+                            ❌ Upload Failed
+                          </p>
+                          <p style={{ margin: 0, fontSize: "13px", color: "#721c24" }}>
+                            {uploadBalancesResult.error}
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p style={{ margin: "0 0 8px 0", color: "#0c5460", fontWeight: "500" }}>
+                            ✅ Upload Complete
+                          </p>
+                          <div style={{ fontSize: "13px", color: "#0c5460" }}>
+                            <p style={{ margin: "2px 0" }}>
+                              <strong>Successfully processed:</strong> {uploadBalancesResult.inserted || 0} records
+                            </p>
+                            <p style={{ margin: "2px 0" }}>
+                              <strong>Skipped (no matching employee):</strong> {uploadBalancesResult.skipped || 0}
+                            </p>
+                            {uploadBalancesResult.errors && uploadBalancesResult.errors.length > 0 && (
+                              <div style={{ marginTop: '8px' }}>
+                                <p style={{ margin: "5px 0", fontWeight: "500" }}>Errors encountered:</p>
+                                <ul style={{ 
+                                  margin: "5px 0", 
+                                  paddingLeft: '15px',
+                                  fontSize: '12px',
+                                  maxHeight: '100px',
+                                  overflowY: 'auto'
+                                }}>
+                                  {uploadBalancesResult.errors.slice(0, 5).map((error, index) => (
+                                    <li key={index}>{error}</li>
+                                  ))}
+                                  {uploadBalancesResult.errors.length > 5 && (
+                                    <li>... and {uploadBalancesResult.errors.length - 5} more errors</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                    <button
+                      style={{
+                        ...styles.closeModalButton,
+                        backgroundColor: '#6c757d'
+                      }}
+                      onClick={() => {
+                        setShowUploadBalancesModal(false);
+                        setSelectedBalancesFile(null);
+                        setUploadBalancesResult(null);
+                        setUploadBalancesProgress(0);
+                      }}
+                      disabled={uploadingBalances}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      style={{
+                        ...styles.uploadConfirmButton,
+                        opacity: (!selectedBalancesFile || uploadingBalances) ? 0.6 : 1,
+                        cursor: (!selectedBalancesFile || uploadingBalances) ? 'not-allowed' : 'pointer'
+                      }}
+                      onClick={handleBalancesUpload}
+                      disabled={!selectedBalancesFile || uploadingBalances}
+                    >
+                      {uploadingBalances ? (
+                        <>
+                          <FontAwesomeIcon icon={faCircle} spin style={{ marginRight: '5px' }} />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <FontAwesomeIcon icon={faUpload} style={{ marginRight: '5px' }} />
+                          Upload Balances
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -2411,7 +2700,47 @@ checkbox: {
   row1: {
     display: 'flex',
     flexDirection: 'row',
-  }
+  },
+
+  uploadBalancesBtn: {
+    padding: '5px 10px',
+    borderRadius: '5px',
+    color: '#fff',
+    border: 'none',
+    cursor: 'pointer',
+    marginRight: '10px',
+    backgroundColor: '#28a745',
+    fontSize: '12px',
+    fontWeight: '500',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+  },
+  
+  iconUpload: {
+    marginRight: '5px',
+    fontSize: '12px',
+  },
+
+  uploadConfirmButton: {
+    backgroundColor: "#4CAF50",
+    color: "#fff",
+    border: "none",
+    padding: "10px 20px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    marginTop: "10px",
+  },
+  
+  closeModalButton: {
+    backgroundColor: "#aaa",
+    color: "#fff",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    marginTop: "10px",
+  },
 
 };
 
