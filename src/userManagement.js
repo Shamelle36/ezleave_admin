@@ -67,7 +67,7 @@ function UserManagement() {
     "Municipal Treasurer's Office",
   ];
 
-  // Fetch all admin accounts
+  // Fetch all user accounts
   const fetchAccounts = async () => {
     try {
       const res = await fetch("http://localhost:5000/api/authAdmin/accounts");
@@ -103,7 +103,7 @@ function UserManagement() {
 
   const handleCreateAccount = async () => {
     if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "mayor" && !newAccount.department)) {
-      alert("Please fill out all fields.");
+      alert("Please complete all required fields before submission.");
       return;
     }
     setLoading(true);
@@ -116,7 +116,7 @@ function UserManagement() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage("✅ Account created successfully! Email sent for password setup.");
+        setMessage("✅ Account successfully created. Password setup instructions have been emailed to the user.");
         setNewAccount({ full_name: "", email: "", role: "", department: "" });
         setShowModal(false);
         fetchAccounts();
@@ -124,11 +124,11 @@ function UserManagement() {
         // Clear message after 5 seconds
         setTimeout(() => setMessage(""), 5000);
       } else {
-        setMessage(`❌ ${data.message || "Failed to create account."}`);
+        setMessage(`❌ ${data.message || "Account creation failed. Please verify the information and try again."}`);
       }
     } catch (err) {
       console.error(err);
-      setMessage("❌ Server error. Please try again later.");
+      setMessage("❌ System error occurred. Please contact IT support or try again later.");
     } finally {
       setLoading(false);
     }
@@ -151,35 +151,35 @@ function UserManagement() {
       
       if (res.ok) {
         setEditModal(false);
-        setMessage("✅ Account updated successfully!");
+        setMessage("✅ Account information successfully updated.");
         fetchAccounts();
         
         // Clear message after 5 seconds
         setTimeout(() => setMessage(""), 5000);
       } else {
-        setMessage("❌ Failed to update account.");
+        setMessage("❌ Unable to update account. Please try again.");
       }
     } catch (err) {
       console.error(err);
-      setMessage("❌ Server error. Please try again later.");
+      setMessage("❌ System error occurred. Please contact IT support.");
     }
   };
 
   const handleResetPassword = async (accountId) => {
-    if (window.confirm("Are you sure you want to reset this user's password? An email will be sent for password reset.")) {
+    if (window.confirm("Confirm password reset? The user will receive email instructions to create a new password.")) {
       try {
         const res = await fetch(`http://localhost:5000/api/authAdmin/reset-password/${accountId}`, {
           method: "POST",
         });
         
         if (res.ok) {
-          setMessage("✅ Password reset email sent successfully!");
+          setMessage("✅ Password reset instructions have been sent to the user's email.");
         } else {
-          setMessage("❌ Failed to send reset email.");
+          setMessage("❌ Password reset email could not be sent.");
         }
       } catch (err) {
         console.error(err);
-        setMessage("❌ Server error. Please try again later.");
+        setMessage("❌ System error occurred. Please contact IT support.");
       }
     }
   };
@@ -223,12 +223,12 @@ function UserManagement() {
           </li>
           <li>
             <Link style={styles.sb} to="/messages">
-              <FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message
+              <FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Messages
             </Link>
           </li>
           <li>
             <Link style={styles.sb} to="/announcement">
-              <FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement
+              <FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcements
             </Link>
           </li>
           <li>
@@ -254,16 +254,15 @@ function UserManagement() {
         {/* Header Section */}
         <div style={styles.pageHeader}>
           <div>
-            <h2 style={styles.pageTitle}>User Management</h2>
-            <p style={styles.pageSubtitle}>Manage system users and their permissions</p>
+            <h2 style={styles.pageTitle}>User Account Management</h2>
           </div>
           <button style={styles.addBtn} onClick={() => setShowModal(true)}>
             <FontAwesomeIcon icon={faPlus} style={styles.btnIcon} />
-            Create New Account
+            Add New User
           </button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Statistics Overview */}
         <div style={styles.statsContainer}>
           <div style={styles.statCard}>
             <div style={styles.statIconContainer} className="mayor">
@@ -273,7 +272,7 @@ function UserManagement() {
               <h3 style={styles.statNumber}>
                 {accounts.filter(a => a.role === "mayor").length}
               </h3>
-              <p style={styles.statLabel}>Mayor Accounts</p>
+              <p style={styles.statLabel}>Municipal Mayor</p>
             </div>
           </div>
           
@@ -285,7 +284,7 @@ function UserManagement() {
               <h3 style={styles.statNumber}>
                 {accounts.filter(a => a.role === "office_head").length}
               </h3>
-              <p style={styles.statLabel}>Office Heads</p>
+              <p style={styles.statLabel}>Department Heads</p>
             </div>
           </div>
           
@@ -295,7 +294,7 @@ function UserManagement() {
             </div>
             <div style={styles.statContent}>
               <h3 style={styles.statNumber}>{accounts.length}</h3>
-              <p style={styles.statLabel}>Total Users</p>
+              <p style={styles.statLabel}>Total System Users</p>
             </div>
           </div>
           
@@ -305,12 +304,12 @@ function UserManagement() {
             </div>
             <div style={styles.statContent}>
               <h3 style={styles.statNumber}>{accounts.length}</h3>
-              <p style={styles.statLabel}>Active Users</p>
+              <p style={styles.statLabel}>Active Accounts</p>
             </div>
           </div>
         </div>
 
-        {/* Message Alert */}
+        {/* System Notification */}
         {message && (
           <div style={message.includes("✅") ? styles.successMessage : styles.errorMessage}>
             <FontAwesomeIcon icon={message.includes("✅") ? faCheckCircle : faTimesCircle} style={styles.messageIcon} />
@@ -318,13 +317,13 @@ function UserManagement() {
           </div>
         )}
 
-        {/* Search and Filter Bar */}
+        {/* Search and Filter Controls */}
         <div style={styles.filterBar}>
           <div style={styles.searchBox}>
             <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
             <input
               type="text"
-              placeholder="Search by name, email, or department..."
+              placeholder="Find users by name, email, or department..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={styles.searchInput}
@@ -339,9 +338,9 @@ function UserManagement() {
                 onChange={(e) => setRoleFilter(e.target.value)}
                 style={styles.filterSelect}
               >
-                <option value="all">All Roles</option>
-                <option value="mayor">Mayor</option>
-                <option value="office_head">Office Head</option>
+                <option value="all">All Access Levels</option>
+                <option value="mayor">Executive Administration</option>
+                <option value="office_head">Department Leadership</option>
               </select>
             </div>
             
@@ -350,28 +349,22 @@ function UserManagement() {
               onClick={clearFilters}
               disabled={!searchTerm && roleFilter === "all"}
             >
-              Clear Filters
+              Reset Filters
             </button>
           </div>
         </div>
 
-        {/* Accounts Table */}
+        {/* User Accounts Directory */}
         <div style={styles.tableContainer}>
-          <div style={styles.tableHeader}>
-            <h3 style={styles.tableTitle}>
-              User Accounts ({filteredAccounts.length})
-              {filteredAccounts.length !== accounts.length && ` of ${accounts.length}`}
-            </h3>
-          </div>
           
           <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>USER</th>
-                  <th style={styles.th}>ROLE</th>
+                  <th style={styles.th}>USER PROFILE</th>
+                  <th style={styles.th}>ACCESS LEVEL</th>
                   <th style={styles.th}>DEPARTMENT</th>
-                  <th style={styles.th}>EMAIL</th>
+                  <th style={styles.th}>Email Address</th>
                   <th style={styles.th}>STATUS</th>
                   <th style={styles.th}>ACTIONS</th>
                 </tr>
@@ -387,7 +380,7 @@ function UserManagement() {
                           </div>
                           <div style={styles.userInfo}>
                             <div style={styles.userName}>{acc.full_name}</div>
-                            <div style={styles.userId}>ID: {acc.id}</div>
+                            <div style={styles.userId}>Employee ID: {acc.id}</div>
                           </div>
                         </div>
                       </td>
@@ -401,13 +394,11 @@ function UserManagement() {
                       </td>
                       <td style={styles.td}>
                         <div style={styles.deptCell}>
-                          <FontAwesomeIcon icon={faBuilding} style={styles.deptIcon} />
                           <span style={styles.deptText}>{acc.department}</span>
                         </div>
                       </td>
                       <td style={styles.td}>
                         <div style={styles.emailCell}>
-                          <FontAwesomeIcon icon={faEnvelopeOpen} style={styles.emailIcon} />
                           <span style={styles.emailText}>{acc.email}</span>
                         </div>
                       </td>
@@ -422,14 +413,14 @@ function UserManagement() {
                           <button 
                             style={styles.viewBtn}
                             onClick={() => handleEditAccount(acc)}
-                            title="View Details"
+                            title="View User Details"
                           >
                             <FontAwesomeIcon icon={faEye} />
                           </button>
                           <button 
                             style={styles.editBtn}
                             onClick={() => handleEditAccount(acc)}
-                            title="Edit Account"
+                            title="Edit User Information"
                           >
                             <FontAwesomeIcon icon={faEdit} />
                           </button>
@@ -442,17 +433,17 @@ function UserManagement() {
                     <td colSpan="6" style={styles.noData}>
                       <div style={styles.emptyState}>
                         <FontAwesomeIcon icon={faUsers} style={styles.emptyIcon} />
-                        <p style={styles.emptyText}>No users found</p>
+                        <p style={styles.emptyText}>No user accounts match your criteria</p>
                         {searchTerm || roleFilter !== "all" ? (
                           <p style={styles.emptySubtext}>
-                            Try adjusting your search or filters
+                            Adjust your search parameters or reset filters
                           </p>
                         ) : (
                           <button 
                             style={styles.createFirstBtn}
                             onClick={() => setShowModal(true)}
                           >
-                            Create Your First User
+                            Create Initial User Account
                           </button>
                         )}
                       </div>
@@ -464,12 +455,12 @@ function UserManagement() {
           </div>
         </div>
 
-        {/* Create Account Modal */}
+        {/* Create New Account Modal */}
         {showModal && (
           <div style={styles.modalOverlay}>
             <div style={styles.modal}>
               <div style={styles.modalHeader}>
-                <h3 style={styles.modalTitle}>Create New Account</h3>
+                <h3 style={styles.modalTitle}>Register New System User</h3>
                 <button 
                   style={styles.closeBtn}
                   onClick={() => setShowModal(false)}
@@ -489,28 +480,28 @@ function UserManagement() {
                     value={newAccount.full_name}
                     onChange={(e) => setNewAccount({ ...newAccount, full_name: e.target.value })}
                     style={styles.formInput}
-                    placeholder="Enter full name"
+                    placeholder="Enter employee's full name"
                   />
                 </div>
                 
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>
                     <FontAwesomeIcon icon={faEnvelope} style={styles.labelIcon} />
-                    Email Address
+                    Official Email Address
                   </label>
                   <input
                     type="email"
                     value={newAccount.email}
                     onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
                     style={styles.formInput}
-                    placeholder="Enter email address"
+                    placeholder="Enter municipal email address"
                   />
                 </div>
                 
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>
                     <FontAwesomeIcon icon={faUserShield} style={styles.labelIcon} />
-                    Role
+                    System Access Level
                   </label>
                   <select
                     value={newAccount.role}
@@ -524,9 +515,9 @@ function UserManagement() {
                     }}
                     style={styles.formSelect}
                   >
-                    <option value="">Select Role</option>
-                    <option value="Mayor">Mayor</option>
-                    <option value="Office Head">Office Head</option>
+                    <option value="">Select Access Privilege</option>
+                    <option value="Mayor">Executive Administration</option>
+                    <option value="Office Head">Department Leadership</option>
                   </select>
                 </div>
 
@@ -534,7 +525,7 @@ function UserManagement() {
                   <div style={styles.formGroup}>
                     <label style={styles.formLabel}>
                       <FontAwesomeIcon icon={faBuilding} style={styles.labelIcon} />
-                      Department
+                      Assigned Department
                     </label>
                     <select
                       value={newAccount.department}
@@ -543,7 +534,7 @@ function UserManagement() {
                       }
                       style={styles.formSelect}
                     >
-                      <option value="">Select Department</option>
+                      <option value="">Select Municipal Department</option>
                       {departments.map((d) => (
                         <option key={d} value={d}>
                           {d}
@@ -556,7 +547,7 @@ function UserManagement() {
                 <div style={styles.modalInfo}>
                   <FontAwesomeIcon icon={faInfoCircle} style={styles.infoIcon} />
                   <p style={styles.infoText}>
-                    An email will be sent to the user for password setup.
+                    Upon creation, the user will receive automated email instructions for password setup and system access.
                   </p>
                 </div>
               </div>
@@ -576,12 +567,12 @@ function UserManagement() {
                   {loading ? (
                     <>
                       <div style={styles.spinner}></div>
-                      Creating...
+                      Processing Registration...
                     </>
                   ) : (
                     <>
                       <FontAwesomeIcon icon={faPlus} style={styles.saveIcon} />
-                      Create Account
+                      Create User Account
                     </>
                   )}
                 </button>
@@ -590,12 +581,12 @@ function UserManagement() {
           </div>
         )}
 
-        {/* Edit Account Modal */}
+        {/* Edit Account Details Modal */}
         {editModal && selectedAccount && (
           <div style={styles.modalOverlay}>
             <div style={styles.modal}>
               <div style={styles.modalHeader}>
-                <h3 style={styles.modalTitle}>Account Details</h3>
+                <h3 style={styles.modalTitle}>User Account Details</h3>
                 <button 
                   style={styles.closeBtn}
                   onClick={() => setEditModal(false)}
@@ -636,14 +627,14 @@ function UserManagement() {
                 </div>
                 
                 <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Role</label>
+                  <label style={styles.formLabel}>Access Level</label>
                   <div style={styles.readOnlyField}>
                     {selectedAccount.role}
                   </div>
                 </div>
                 
                 <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Department</label>
+                  <label style={styles.formLabel}>Department Assignment</label>
                   <div style={styles.readOnlyField}>
                     {selectedAccount.department}
                   </div>
@@ -776,17 +767,7 @@ const styles = {
   pageTitle: {
     fontSize: "32px",
     fontWeight: "700",
-    color: "#2c3e50",
     margin: "0 0 5px 0",
-    background: "linear-gradient(135deg, #009205 0%, #4CAF50 100%)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent"
-  },
-  pageSubtitle: {
-    fontSize: "16px",
-    color: "#7f8c8d",
-    margin: "0",
-    fontWeight: "400"
   },
   addBtn: {
     backgroundColor: "#009205",
@@ -801,21 +782,13 @@ const styles = {
     alignItems: "center",
     gap: "10px",
     transition: "all 0.3s ease",
-    boxShadow: "0 4px 12px rgba(0, 146, 5, 0.3)",
-    ":hover": {
-      backgroundColor: "#007a04",
-      transform: "translateY(-2px)",
-      boxShadow: "0 6px 15px rgba(0, 146, 5, 0.4)"
-    },
-    ":active": {
-      transform: "translateY(0)"
-    }
+    
   },
   btnIcon: {
     fontSize: "16px"
   },
 
-  // Stats Cards
+  // Statistics Cards
   statsContainer: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -881,7 +854,7 @@ const styles = {
     fontWeight: "500"
   },
 
-  // Messages
+  // System Messages
   successMessage: {
     backgroundColor: "#d4edda",
     color: "#155724",
@@ -909,7 +882,7 @@ const styles = {
     fontSize: "18px"
   },
 
-  // Filter Bar
+  // Filter and Search Bar
   filterBar: {
     display: "flex",
     justifyContent: "space-between",
@@ -992,7 +965,7 @@ const styles = {
     }
   },
 
-  // Table Styles
+  // Table Container
   tableContainer: {
     backgroundColor: "#fff",
     borderRadius: "12px",
@@ -1043,7 +1016,7 @@ const styles = {
     verticalAlign: "middle"
   },
 
-  // User Cell
+  // User Profile Cell
   userCell: {
     display: "flex",
     alignItems: "center",
@@ -1076,24 +1049,20 @@ const styles = {
     color: "#95a5a6"
   },
 
-  // Role Badge
+  // Access Level Badge
   roleBadge: {
     padding: "6px 12px",
-    borderRadius: "20px",
-    fontSize: "13px",
+    borderRadius: "8px",
+    fontSize: "12px",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: "0.5px"
   },
   roleMayor: {
-    backgroundColor: "rgba(41, 128, 185, 0.1)",
-    color: "#2980b9",
-    border: "1px solid rgba(41, 128, 185, 0.2)"
+    border: "1px solid rgba(229, 229, 229, 1)"
   },
   roleOfficeHead: {
-    backgroundColor: "rgba(155, 89, 182, 0.1)",
-    color: "#9b59b6",
-    border: "1px solid rgba(155, 89, 182, 0.2)"
+    border: "1px solid rgba(229, 229, 229, 1)"
   },
 
   // Department Cell
@@ -1111,7 +1080,7 @@ const styles = {
     color: "#34495e"
   },
 
-  // Email Cell
+  // Email Contact Cell
   emailCell: {
     display: "flex",
     alignItems: "center",
@@ -1126,7 +1095,7 @@ const styles = {
     color: "#34495e"
   },
 
-  // Status Badge
+  // Status Indicator
   statusBadge: {
     display: "inline-flex",
     alignItems: "center",
@@ -1143,7 +1112,7 @@ const styles = {
     fontSize: "12px"
   },
 
-  // Action Buttons
+  // Action Controls
   actionButtons: {
     display: "flex",
     gap: "8px"
@@ -1206,7 +1175,7 @@ const styles = {
     }
   },
 
-  // Empty State
+  // Empty State Display
   noData: {
     padding: "60px 20px",
     textAlign: "center"
@@ -1249,7 +1218,7 @@ const styles = {
     }
   },
 
-  // Modal Styles
+  // Modal Interface
   modalOverlay: {
     position: "fixed",
     top: "0",
@@ -1313,7 +1282,7 @@ const styles = {
     flex: "1"
   },
   
-  // Form Styles
+  // Form Components
   formGroup: {
     marginBottom: "25px"
   },
@@ -1374,7 +1343,7 @@ const styles = {
     color: "#7f8c8d"
   },
 
-  // Modal Info
+  // Information Panel
   modalInfo: {
     backgroundColor: "#e8f5e9",
     padding: "15px",
@@ -1395,7 +1364,7 @@ const styles = {
     margin: "0"
   },
 
-  // User Preview (Edit Modal)
+  // User Preview Section
   userPreview: {
     display: "flex",
     alignItems: "center",
@@ -1491,7 +1460,7 @@ const styles = {
   }
 };
 
-// Add these keyframes at the end of the file
+// Animation Keyframes
 const keyframes = `
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }

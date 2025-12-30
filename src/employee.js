@@ -24,13 +24,22 @@ import {
   faPenToSquare,
   faUser,
   faBars,
-  faUpload
+  faUpload,
+  faFileContract,
+  faClock,
+  faUserShield,
+  faEdit,
+  faSave,
+  faHistory,
+  faArrowRight,
+  faArrowLeft
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import Papa from 'papaparse';
 import * as XLSX from "xlsx";
 import './employee-responsive.css';
+import ProfileDropdown from './profileDropdown';
 
 function Employees() {
   const [employeeRecord, setEmployeeRecords] = useState([]);
@@ -89,6 +98,31 @@ function Employees() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [admin, setAdmin] = useState(null);
+  const [profileData, setProfileData] = useState({
+    full_name: "",
+    profile_picture: "",
+    role: ""
+  });
+
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [showTermsModal, setShowTermsModal] = useState(false);
+    const [termsContent, setTermsContent] = useState('');
+    const [isEditingTerms, setIsEditingTerms] = useState(false);
+    const [termsVersions, setTermsVersions] = useState([]);
+    const [activeTermsVersion, setActiveTermsVersion] = useState(null);
+    const [newTermsVersion, setNewTermsVersion] = useState('');
+  
+    const [attendanceTimeSettings, setAttendanceTimeSettings] = useState({});
+    const [showTimeSettingsModal, setShowTimeSettingsModal] = useState(false);
+    const [editingDay, setEditingDay] = useState(null);
+    const [isLoadingTimeSettings, setIsLoadingTimeSettings] = useState(false);
+  
+    useEffect(() => {
+      if (showTermsModal) {
+        fetchTermsAndConditions();
+      }
+    }, [showTermsModal]);
+  
   
   useEffect(() => {
     localStorage.setItem('employeesView', view);
@@ -147,7 +181,7 @@ function Employees() {
   const API_URL =
     window.location.hostname === "localhost"
       ? "http://localhost:5000"
-      : "http://10.242.224.105:5000";
+      : "http://10.115.128.197:5000";
 
   const loadEmployees = async () => {
     try {
@@ -600,8 +634,211 @@ function Employees() {
     }
   };
 
+   useEffect(() => {
+      const fetchInitialProfile = async () => {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem("admin"));
+          if (!storedUser) return;
+  
+          const url =
+            storedUser.role === "office_head"
+              ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+              : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+  
+          const res = await fetch(url);
+          const data = await res.json();
+  
+          if (res.ok) {
+            setAdmin(data);
+            setProfileData(data);
+          } else {
+            console.error("Error loading initial profile:", data.message);
+          }
+        } catch (err) {
+          console.error("Error loading initial profile:", err);
+        }
+      };
+  
+      fetchInitialProfile();
+    }, []);
+  
+    useEffect(() => {
+      if (!showProfileModal) return;
+  
+      const fetchProfileData = async () => {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem("admin"));
+          if (!storedUser) return;
+  
+          const url =
+            storedUser.role === "office_head"
+              ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+              : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+  
+          const res = await fetch(url);
+          const data = await res.json();
+  
+          if (res.ok) {
+            setProfileData(data);
+          } else {
+            console.error("Error loading profile:", data.message);
+          }
+        } catch (err) {
+          console.error("Error loading profile:", err);
+        }
+      };
+  
+      fetchProfileData();
+    }, [showProfileModal]);
+
+    useEffect(() => {
+      const fetchTimeSettings = async () => {
+        setIsLoadingTimeSettings(true);
+        try {
+          const response = await fetch(`${API_URL}/api/attendance/settings/time`);
+          if (response.ok) {
+            const data = await response.json();
+            setAttendanceTimeSettings(data);
+          } else {
+            console.warn('Failed to fetch time settings from server');
+            // Don't set any defaults - let the modal handle empty state
+            setAttendanceTimeSettings({});
+          }
+        } catch (error) {
+          console.error('Error fetching time settings:', error);
+          setAttendanceTimeSettings({});
+        } finally {
+          setIsLoadingTimeSettings(false);
+        }
+      };
+    
+      fetchTimeSettings();
+    }, []);
+    
+    const fetchTermsAndConditions = async () => {
+  try {
+    // Fetch active terms
+    const response = await fetch(`${API_URL}/api/terms/active`);
+    const data = await response.json();
+    
+    // Check if response is valid
+    if (data && data.content) {
+      setTermsContent(data.content);
+      setActiveTermsVersion(data);
+    } else {
+      setTermsContent('');
+      setActiveTermsVersion(null);
+    }
+    
+    // Fetch all versions - handle potential errors
+    try {
+      const versionsRes = await fetch(`${API_URL}/api/terms`);
+      const versionsData = await versionsRes.json();
+      
+      // Ensure versionsData is an array
+      if (Array.isArray(versionsData)) {
+        setTermsVersions(versionsData);
+      } else if (versionsData && Array.isArray(versionsData.data)) {
+        // Some APIs wrap arrays in a data property
+        setTermsVersions(versionsData.data);
+      } else if (versionsData && versionsData.versions) {
+        // Some APIs use a versions property
+        setTermsVersions(versionsData.versions);
+      } else {
+        // Default to empty array
+        setTermsVersions([]);
+        console.warn('API returned non-array data:', versionsData);
+      }
+    } catch (versionsError) {
+      console.error('Error fetching versions:', versionsError);
+      setTermsVersions([]);
+    }
+  } catch (error) {
+    console.error('Error fetching active terms:', error);
+    setTermsContent('');
+    setActiveTermsVersion(null);
+    setTermsVersions([]);
+  }
+};
+
+const saveTermsAndConditions = async () => {
+  if (!termsContent.trim()) {
+    alert('Please enter Terms & Conditions content');
+    return;
+  }
+
+  // Safely calculate next version number
+  const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
+  const version = newTermsVersion || `v${versionCount + 1}.0`;
+  
+  try {
+    const response = await fetch(`${API_URL}/api/terms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version,
+        content: termsContent
+      })
+    });
+
+    if (response.ok) {
+      alert('Terms & Conditions saved successfully!');
+      setIsEditingTerms(false);
+      fetchTermsAndConditions();
+      setNewTermsVersion('');
+    } else {
+      const errorData = await response.json();
+      alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
+    }
+  } catch (error) {
+    console.error('Error saving terms:', error);
+    alert('Error saving Terms & Conditions. Check console.');
+  }
+};
+
+const activateTermsVersion = async (id) => {
+  try {
+    const response = await fetch(`${API_URL}/api/terms/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ is_active: true })
+    });
+
+    if (response.ok) {
+      fetchTermsAndConditions();
+    }
+  } catch (error) {
+    console.error('Error activating version:', error);
+  }
+};
+
+const deleteTermsVersion = async (id) => {
+  if (window.confirm('Are you sure you want to delete this version?')) {
+    try {
+      const response = await fetch(`${API_URL}/api/terms/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        fetchTermsAndConditions();
+      }
+    } catch (error) {
+      console.error('Error deleting version:', error);
+    }
+  }
+};
+
+
+
+
   return (
     <div className="dashboard-container" style={styles.dashboardContainer}>
+
+    
 
       <div className="desktop-header" style={styles.header}>
         <input type="text" placeholder="Search..." className="search-input" style={styles.search} />
@@ -661,14 +898,15 @@ function Employees() {
         </button>
         <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
         <div className="mobile-header-right">
-          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
-          <div className="mobile-profile" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-            <img
-              src={admin?.profile_picture || "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"}
-              alt="Profile"
-              className="mobile-profile-image"
-            />
-          </div>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={true}
+          />
         </div>
       </div>
 
@@ -688,6 +926,458 @@ function Employees() {
           >
             <FontAwesomeIcon icon={faSignOutAlt} className="dropdown-icon" style={styles.dropdownIcon} /> Logout
           </button>
+        </div>
+      )}
+
+      {showSettingsModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.settingsModalContent}>
+            <div style={styles.settingsModalHeader}>
+              <h2 style={styles.settingsModalTitle}>
+                <FontAwesomeIcon icon={faCog} /> Settings
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => setShowSettingsModal(false)}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+      
+            <div style={styles.settingsSections}>
+              <button 
+                style={styles.settingsSectionButton}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowTermsModal(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faFileContract} style={{marginRight: '10px'}} />
+                Terms & Conditions Management
+              </button>
+      
+              <button 
+                style={styles.settingsSectionButton}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowTimeSettingsModal(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faClock} style={{marginRight: '10px'}} />
+                Attendance Time Settings
+              </button>
+              
+              <button style={styles.settingsSectionButton}>
+                <FontAwesomeIcon icon={faBell} style={{marginRight: '10px'}} />
+                Notification Settings
+              </button>
+              
+              <button style={styles.settingsSectionButton}>
+                <FontAwesomeIcon icon={faUserShield} style={{marginRight: '10px'}} />
+                Privacy & Security
+              </button>
+              
+              <button style={styles.settingsSectionButton}>
+                <FontAwesomeIcon icon={faUsers} style={{marginRight: '10px'}} />
+                User Permissions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Terms & Conditions Modal */}
+      {showTermsModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.termsModalContent}>
+            <div style={styles.termsModalHeader}>
+              <h2 style={styles.termsModalTitle}>
+                <FontAwesomeIcon icon={faFileContract} /> Terms & Conditions
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => {
+                  setShowTermsModal(false);
+                  setIsEditingTerms(false);
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+      
+            {/* Active Version Info */}
+            <div style={styles.activeTermsCard}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <h4>Active Version</h4>
+                {activeTermsVersion && (
+                  <span style={styles.activeBadge}>ACTIVE</span>
+                )}
+              </div>
+              {activeTermsVersion ? (
+                <div>
+                  <p><strong>Version:</strong> {activeTermsVersion.version}</p>
+                  <p><strong>Created:</strong> {new Date(activeTermsVersion.created_at).toLocaleDateString()}</p>
+                </div>
+              ) : (
+                <p>No active terms found</p>
+              )}
+            </div>
+      
+            {/* Terms Content */}
+            <div style={styles.termsContentSection}>
+              <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
+                <h4>Terms & Conditions Content</h4>
+                {!isEditingTerms ? (
+                  <button 
+                    style={styles.editButton}
+                    onClick={() => setIsEditingTerms(true)}
+                  >
+                    <FontAwesomeIcon icon={faEdit} /> Edit
+                  </button>
+                ) : (
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <button 
+                      style={styles.saveButton}
+                      onClick={saveTermsAndConditions}
+                    >
+                      <FontAwesomeIcon icon={faSave} /> Save
+                    </button>
+                    <button 
+                      style={styles.cancelButton}
+                      onClick={() => setIsEditingTerms(false)}
+                    >
+                      <FontAwesomeIcon icon={faTimes} /> Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+      
+              {isEditingTerms && (
+                <div style={{marginBottom: '15px'}}>
+                  <input
+                    type="text"
+                    placeholder="Version (e.g., v2.0)"
+                    value={newTermsVersion}
+                    onChange={(e) => setNewTermsVersion(e.target.value)}
+                    style={styles.versionInput}
+                  />
+                </div>
+              )}
+      
+              {isEditingTerms ? (
+                <textarea
+                  value={termsContent}
+                  onChange={(e) => setTermsContent(e.target.value)}
+                  style={styles.termsTextarea}
+                  rows={15}
+                  placeholder="Enter Terms & Conditions content here..."
+                />
+              ) : (
+                <div style={styles.termsViewer}>
+                  {termsContent || 'No Terms & Conditions content available.'}
+                </div>
+              )}
+            </div>
+      
+            {/* Version History */}
+            <div style={styles.versionHistory}>
+              <h4><FontAwesomeIcon icon={faHistory} /> Version History</h4>
+              <div style={{maxHeight: '200px', overflowY: 'auto'}}>
+                {termsVersions.map(version => (
+                  <div 
+                    key={version.id} 
+                    style={{
+                      ...styles.versionItem,
+                      borderLeft: version.is_active ? '4px solid #009205' : '4px solid #ccc'
+                    }}
+                  >
+                    <div style={{flex: 1}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <strong>Version {version.version}</strong>
+                        {version.is_active && <span style={styles.activeBadge}>ACTIVE</span>}
+                      </div>
+                      <p style={{fontSize: '12px', color: '#666', margin: '5px 0'}}>
+                        Created: {new Date(version.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div style={{display: 'flex', gap: '5px'}}>
+                      {!version.is_active && (
+                        <>
+                          <button 
+                            style={styles.smallButton}
+                            onClick={() => activateTermsVersion(version.id)}
+                          >
+                            Activate
+                          </button>
+                          <button 
+                            style={{...styles.smallButton, background: '#dc3545'}}
+                            onClick={() => deleteTermsVersion(version.id)}
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showTimeSettingsModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.timeSettingsModalContent}>
+            <div style={styles.timeSettingsModalHeader}>
+              <h2 style={styles.timeSettingsModalTitle}>
+                <FontAwesomeIcon icon={faClock} /> Attendance Time Settings
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => {
+                  setShowTimeSettingsModal(false);
+                  setEditingDay(null);
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+      
+            <div style={styles.timeSettingsContent}>
+              <p style={styles.timeSettingsDescription}>
+                Set the official working hours for each day of the week. 
+                Employees checking in after the start time will be marked as late.
+              </p>
+      
+              {isLoadingTimeSettings ? (
+                <div style={styles.loadingContainer}>
+                  <p>Loading time settings...</p>
+                </div>
+              ) : (
+                <>
+                  <div style={styles.timeSettingsGrid}>
+                    {/* Define all days of the week */}
+                    {[
+                      { key: 'monday', label: 'Monday (Early Start)' },
+                      { key: 'tuesday', label: 'Tuesday' },
+                      { key: 'wednesday', label: 'Wednesday' },
+                      { key: 'thursday', label: 'Thursday' },
+                      { key: 'friday', label: 'Friday' },
+                      { key: 'saturday', label: 'Saturday' },
+                      { key: 'sunday', label: 'Sunday' }
+                    ].map(({ key, label }) => {
+                      // Get config or use default empty structure
+                      const config = attendanceTimeSettings[key] || {};
+                      
+                      // Determine if day is active (default to true if not set)
+                      const isActive = config.is_active !== undefined ? config.is_active : true;
+                      
+                      // Get start/end times or use empty strings
+                      const startTime = config.start || '';
+                      const endTime = config.end || '';
+                      
+                      // Check if time is set
+                      const isTimeSet = startTime && endTime;
+                      
+                      return (
+                        <div key={key} style={{
+                          ...styles.timeSettingCard,
+                          opacity: isActive ? 1 : 0.7,
+                          borderColor: isActive ? '#e9ecef' : '#ccc'
+                        }}>
+                          <div style={styles.timeSettingHeader}>
+                            <div>
+                              <h4 style={styles.dayName}>
+                                {label}
+                              </h4>
+                              {!isActive && (
+                                <span style={styles.inactiveBadge}>INACTIVE</span>
+                              )}
+                            </div>
+                            {editingDay === key ? (
+                              <button 
+                                style={styles.saveTimeButton}
+                                onClick={() => setEditingDay(null)}
+                              >
+                                Done
+                              </button>
+                            ) : (
+                              <button 
+                                style={styles.editTimeButton}
+                                onClick={() => setEditingDay(key)}
+                                disabled={!isActive}
+                              >
+                                {isTimeSet ? 'Edit' : 'Add'}
+                              </button>
+                            )}
+                          </div>
+                          
+                          {editingDay === key ? (
+                            <div style={styles.timeInputs}>
+                              <div style={styles.timeInputGroup}>
+                                <label style={styles.timeLabel}>Start Time</label>
+                                <input
+                                  type="time"
+                                  value={startTime}
+                                  onChange={(e) => {
+                                    setAttendanceTimeSettings(prev => ({
+                                      ...prev,
+                                      [key]: { 
+                                        ...prev[key], 
+                                        start: e.target.value,
+                                        end: endTime || '17:00',
+                                        is_active: true
+                                      }
+                                    }));
+                                  }}
+                                  style={styles.timeInput}
+                                />
+                              </div>
+                              <div style={styles.timeInputGroup}>
+                                <label style={styles.timeLabel}>End Time</label>
+                                <input
+                                  type="time"
+                                  value={endTime}
+                                  onChange={(e) => {
+                                    setAttendanceTimeSettings(prev => ({
+                                      ...prev,
+                                      [key]: { 
+                                        ...prev[key], 
+                                        end: e.target.value,
+                                        start: startTime || '08:00',
+                                        is_active: true
+                                      }
+                                    }));
+                                  }}
+                                  style={styles.timeInput}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={styles.timeDisplay}>
+                              {isTimeSet ? (
+                                <>
+                                  <div style={styles.timeSlot}>
+                                    <FontAwesomeIcon icon={faArrowRight} style={styles.timeIcon} />
+                                    <span style={styles.timeText}>Start: {startTime}</span>
+                                  </div>
+                                  <div style={styles.timeSlot}>
+                                    <FontAwesomeIcon icon={faArrowLeft} style={styles.timeIcon} />
+                                    <span style={styles.timeText}>End: {endTime}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div style={styles.noTimeSet}>
+                                  <FontAwesomeIcon icon={faClock} style={styles.noTimeIcon} />
+                                  <span style={styles.noTimeText}>Time not set</span>
+                                  <button 
+                                    style={styles.addTimeButton}
+                                    onClick={() => setEditingDay(key)}
+                                  >
+                                    <FontAwesomeIcon icon={faPlus} /> Add Time
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+      
+                  <div style={styles.timeSettingsActions}>
+                    <button 
+                      style={styles.saveAllButton}
+                      onClick={async () => {
+                        try {
+                          // Prepare data for saving - only include days with times
+                          const settingsToSave = {};
+                          const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                          
+                          days.forEach(day => {
+                            const config = attendanceTimeSettings[day] || {};
+                            if (config.start && config.end) {
+                              settingsToSave[day] = {
+                                start: config.start,
+                                end: config.end,
+                                is_active: config.is_active !== false // Default to true if not set
+                              };
+                            }
+                          });
+                          
+                          if (Object.keys(settingsToSave).length === 0) {
+                            alert('Please add at least one time setting');
+                            return;
+                          }
+                          
+                          console.log('Saving settings:', settingsToSave);
+                          
+                          const response = await fetch(`${API_URL}/api/attendance/settings/time`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(settingsToSave)
+                          });
+      
+                          if (response.ok) {
+                            alert('Attendance time settings saved successfully!');
+                            setShowTimeSettingsModal(false);
+                            setEditingDay(null);
+                            
+                            // Refresh settings from server
+                            const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
+                            if (refreshResponse.ok) {
+                              const data = await refreshResponse.json();
+                              setAttendanceTimeSettings(data);
+                            }
+                          } else {
+                            const errorData = await response.json();
+                            alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
+                          }
+                        } catch (error) {
+                          console.error('Error saving time settings:', error);
+                          alert('Error saving settings. Check console.');
+                        }
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faSave} /> Save All Settings
+                    </button>
+                    <button 
+                      style={styles.resetButton}
+                      onClick={async () => {
+                        if (window.confirm('Are you sure you want to reset all time settings to default?')) {
+                          try {
+                            const response = await fetch(`${API_URL}/api/attendance/settings/time/reset`, {
+                              method: 'POST'
+                            });
+      
+                            if (response.ok) {
+                              alert('Settings reset to default successfully!');
+                              // Refresh settings
+                              const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
+                              if (refreshResponse.ok) {
+                                const data = await refreshResponse.json();
+                                setAttendanceTimeSettings(data);
+                              }
+                            } else {
+                              alert('Failed to reset settings');
+                            }
+                          } catch (error) {
+                            console.error('Error resetting settings:', error);
+                            alert('Error resetting settings');
+                          }
+                        }
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faHistory} /> Reset to Default
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -754,6 +1444,20 @@ function Employees() {
           </li>
         </ul>
       </div>
+
+      <div className="desktop-header" style={styles.header}>
+              <div style={styles.headerRight}>
+                <ProfileDropdown
+                  showSettingsModal={showSettingsModal}
+                  setShowSettingsModal={setShowSettingsModal}
+                  showProfileModal={showProfileModal}
+                  setShowProfileModal={setShowProfileModal}
+                  showLogoutModal={showLogoutModal}
+                  setShowLogoutModal={setShowLogoutModal}
+                  isMobile={false}
+                />
+              </div>
+            </div>
 
       <div className="content" style={styles.content}>
       
@@ -1968,34 +2672,72 @@ function Employees() {
 
             {/* Pagination */}
             <div className="pagination-container" style={styles.paginationContainer}>
+              {/* Previous Button */}
               <button
                 className="page-btn prev-btn"
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 style={styles.pageBtn}
-              >{'<'}</button>
+                disabled={currentPage === 1}
+              >
+                {'<'}
+              </button>
 
-              {[...Array(Math.ceil(employeeRecord.length / itemsPerPage))].map((_, idx) => {
-                const page = idx + 1;
-                return (
-                  <button
-                    key={page}
-                    className={`page-btn ${currentPage === page ? 'active' : ''}`}
-                    onClick={() => setCurrentPage(page)}
-                    style={{
-                      ...styles.pageBtn,
-                      ...(currentPage === page ? styles.activePageBtn : {}),
-                    }}
+              {/* First page + ellipsis if needed */}
+              {getPaginationRange(currentPage, totalPages)[0] > 1 && (
+                <>
+                  <button 
+                    className="page-btn" 
+                    onClick={() => setCurrentPage(1)} 
+                    style={styles.pageBtn}
                   >
-                    {page}
+                    1
                   </button>
-                );
-              })}
+                  {getPaginationRange(currentPage, totalPages)[0] > 2 && (
+                    <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+                  )}
+                </>
+              )}
 
+              {/* Visible page numbers */}
+              {getPaginationRange(currentPage, totalPages).map((page) => (
+                <button
+                  key={page}
+                  className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                  onClick={() => setCurrentPage(page)}
+                  style={{
+                    ...styles.pageBtn,
+                    ...(currentPage === page ? styles.activePageBtn : {}),
+                  }}
+                >
+                  {page}
+                </button>
+              ))}
+
+              {/* Last page + ellipsis if needed */}
+              {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
+                <>
+                  {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && (
+                    <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+                  )}
+                  <button 
+                    className="page-btn" 
+                    onClick={() => setCurrentPage(totalPages)} 
+                    style={styles.pageBtn}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+
+              {/* Next Button */}
               <button
                 className="page-btn next-btn"
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(employeeRecord.length / itemsPerPage)))}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 style={styles.pageBtn}
-              >{'>'}</button>
+                disabled={currentPage === totalPages}
+              >
+                {'>'}
+              </button>
             </div>
 
           </div>

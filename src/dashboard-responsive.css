@@ -225,33 +225,46 @@
   .content {
     margin-left: 0 !important;
     width: 100% !important;
-    padding-top: 60px !important;
-    padding-bottom: 20px !important;
+    padding-bottom: 12px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
 
   /* IMPROVED: ALL 6 Cards - Horizontal Scroll */
   .cnt1 {
     flex-direction: column !important;
-    padding: 12px !important;
-    gap: 16px !important;
+    gap: 10px !important;
     margin: 0 !important;
   }
 
   /* Container for ALL 6 cards in horizontal scroll */
+  /* 3-column grid on mobile without overflow */
   .cards {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 10px !important;
-    padding: 12px !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    align-items: start !important;
+    row-gap: 12px !important; /* vertical space between rows */
+    grid-auto-rows: 1fr !important; /* make each row equal height */
+    align-content: start !important;
   }
 
-
   .card-box {
-    flex: 0 0 calc(33.33% - 10px) !important;
-    height: auto !important;
-    border-radius: 12px !important;
+    width: 100% !important; /* fills grid column */
+    min-width: 0 !important; /* allow shrinking */
+    height: 100% !important; /* fill grid row for equal heights */
+    border-radius: 10px !important;
     box-shadow: 0 3px 10px rgba(0,0,0,0.12) !important;
-    padding: 16px !important;
+    padding: 8px !important; /* tight padding */
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    align-items: stretch !important;
   }
 
 
@@ -268,8 +281,7 @@
   /* Card Text - Optimized for horizontal scroll */
   .card-title {
     font-size: 13px !important;
-    font-weight: 700 !important;
-    margin-bottom: 6px !important;
+    margin-bottom: 4px !important;
     color: #1a1a1a !important;
   }
 
@@ -278,7 +290,7 @@
     line-height: 1.2 !important;
     opacity: 0.8 !important;
     color: #4a4a4a !important;
-    margin-bottom: 10px !important;
+    margin-bottom: 4px !important;
   }
 
   .card-value {
@@ -294,11 +306,7 @@
   .calendar {
     width: 100% !important;
     max-width: none !important;
-    margin: 0 !important;
-    padding: 16px !important;
-    background: white !important;
     border-radius: 14px !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
   }
 
   /* Mobile Table Toggle Section */

@@ -1,0 +1,668 @@
+/* employeeProfile-responsive.css */
+
+/* Mobile Responsive Styles for Employee Profile */
+@media (max-width: 768px) {
+  /* Global Mobile Reset */
+  * {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Dashboard Container */
+  .dashboardContainer {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  /* Mobile Header */
+  .mobile-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: #009205;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    box-sizing: border-box;
+    height: 60px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .hamburger {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-logo {
+    display: none !important;
+  }
+
+  .mobile-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .mobile-icon-bell {
+    color: #fff;
+    font-size: 20px;
+    padding: 8px;
+  }
+
+  .mobile-profile {
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  .mobile-profile-image {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .mobile-profile-dropdown {
+    position: fixed;
+    top: 65px;
+    right: 16px;
+    background-color: #fff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    padding: 8px 0;
+    width: 160px;
+    z-index: 1002;
+    border: 1px solid #e0e0e0;
+  }
+
+  .mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 998;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Hide desktop header on mobile */
+  .desktop-header {
+    display: none !important;
+  }
+
+  /* Hide desktop sidebar on mobile */
+  .desktop-sidebar {
+    transform: translateX(-100%);
+  }
+
+  /* Mobile Sidebar */
+  .mobile-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px !important;
+    height: 100vh;
+    background-color: #009205;
+    z-index: 1001;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    padding: 0 !important;
+    box-shadow: 2px 0 15px rgba(0, 0, 0, 0.1);
+  }
+
+  .sidebar-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 12px 16px !important;
+    background: #009205 !important;
+    height: 60px;
+    box-sizing: border-box;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .sidebar-close-btn {
+    background: none !important;
+    border: none !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    color: #ffffff !important;
+    padding: 8px !important;
+    width: 40px !important;
+    height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+  }
+
+  .sidebar-close-btn:active {
+    transform: scale(0.9) !important;
+  }
+
+  .logo-desktop {
+    display: none !important;
+  }
+
+  .logo-sidebar {
+    width: 40px !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  .sidebar-open {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar-closed {
+    transform: translateX(-100%) !important;
+  }
+
+  .sidebar-menu-link {
+    padding: 10px !important;
+  }
+
+  /* Mobile Content Area */
+  .content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    padding-top: 70px !important; /* keep space for mobile header */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 16px !important;
+  }
+
+  /* Back button adjustment */
+  .backBtn {
+    display: none !important;
+  }
+
+  .overviewCon {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Profile Header Section */
+  .profileCard {
+    flex-direction: column !important;
+    border-radius: 12px !important;
+  }
+
+  .profileHeader {
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 16px !important;
+  }
+
+  .profileImageWrapper {
+    margin: 0 auto !important;
+  }
+
+  .profileImage {
+    width: 80px !important;
+    height: 80px !important;
+  }
+
+  .initialsCircle {
+    font-size: 24px !important;
+    width: 50px !important;
+    height: 50px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .employeeName {
+    font-size: 18px !important;
+    text-align: center !important;
+  }
+
+  .employeePosition {
+    font-size: 13px !important;
+    text-align: center !important;
+  }
+
+  .employeeDepartment {
+    font-size: 12px !important;
+    text-align: center !important;
+  }
+
+  .badgesContainer {
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .smallBadge {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+  }
+
+  .infoGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .infoItem {
+    padding: 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Tabs */
+  .tabContainer {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    margin: 0 !important;
+  }
+
+  .tabContainer button {
+    flex: 1 !important;
+    min-width: 120px !important;
+    padding: 10px !important;
+    font-size: 13px !important;
+  }
+
+  /* Leave Card */
+  .leaveCardWrapper {
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  .leaveTopBar {
+    flex-direction: column !important;
+    gap: 16px !important;
+    align-items: stretch !important;
+  }
+
+  .leaveTitleGroup {
+    text-align: center !important;
+  }
+
+  .leaveCardTitle {
+    font-size: 18px !important;
+  }
+
+  .leaveControls {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+  }
+
+  .searchWrap {
+    width: 100% !important;
+  }
+
+  .leaveSearch {
+    width: 100% !important;
+  }
+
+  .exportGroup {
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .exportBtn {
+    flex: 1 !important;
+    min-width: 100px !important;
+    justify-content: center !important;
+  }
+
+  /* Leave Card Table */
+  .leaveCardTable {
+    font-size: 11px !important;
+  }
+
+  .leaveCardTableTh,
+  .leaveCardTableTd {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .leaveCardTable th[rowspan="2"],
+  .leaveCardTable th[rowSpan="2"],
+  .leaveCardTable td[rowspan="2"],
+  .leaveCardTable td[rowSpan="2"] {
+    padding: 6px !important;
+  }
+
+  /* Pagination */
+  .pagination {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: center !important;
+    margin-top: 16px !important;
+  }
+
+  .pageBtn {
+    padding: 6px !important;
+  }
+
+  .cardsRow {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .statCard {
+    flex-direction: row !important;
+    text-align: left !important;
+    padding: 10px !important;
+  }
+
+  .cardIconContainer {
+    margin: 0 auto 8px !important;
+  }
+
+  .combinedLayout {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  .calendarContainer {
+    padding: 12px !important;
+    margin-bottom: 0 !important;
+    width: 320px !important;
+  }
+
+  .calendarDay {
+    min-height: 24px !important;
+    font-size: 9px !important;
+  }
+
+  .weekDayHeader {
+    font-size: 9px !important;
+    padding: 2px !important;
+  }
+
+  .legend {
+    justify-content: space-around !important;
+  }
+
+  .legendItem {
+    flex-direction: column !important;
+    gap: 2px !important;
+  }
+
+  /* Filter Group */
+  .filterGroup {
+    flex-wrap: wrap !important;
+    padding: 10px !important;
+    justify-content: space-between !important;
+    width: 320px !important;
+  }
+
+  .filterSelect {
+    flex: 1 !important;
+    min-width: 120px !important;
+  }
+
+ .tableWrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 8px !important;
+    margin: 12px 16px 12px 12px !important;
+    padding: 0 !important;
+    width: 320px !important;
+    max-width: 320px !important;
+    position: relative !important;
+    left: -12px;
+    width: calc(100% + 24px) !important;
+  }
+
+  .tableWrapper::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    pointer-events: none;
+  }
+
+  .table {
+    min-width: 950px !important; /* Slightly wider to fit all columns */
+    width: auto !important;
+    margin: 0 !important;
+    border-collapse: collapse;
+  }
+
+  .th {
+    font-size: 10px !important;
+    padding: 8px 6px !important;
+  }
+
+  .td {
+    font-size: 10px !important;
+    padding: 6px !important;
+  }
+
+  .statusBadge {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+    min-width: 50px !important;
+  }
+
+  .hoursCell {
+    font-size: 10px !important;
+  }
+
+  .leaveType {
+    font-size: 9px !important;
+    padding: 2px 4px !important;
+  }
+
+  /* Modal Mobile */
+  .modal-content {
+    width: 90% !important;
+    max-width: 400px !important;
+    padding: 20px !important;
+    margin: 20px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Ensure desktop fixed header doesn't overlap mobile header */
+  header {
+    display: none !important;
+  }
+
+  /* Center main content children and constrain their width so inline-styled blocks align */
+  .content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    padding-top: 70px !important; /* keep space for mobile header */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 16px !important;
+  }
+
+  /* Make immediate children of .content centered and limited in width */
+  .content > * {
+    width: 100% !important;
+    max-width: 980px !important;
+    box-sizing: border-box !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Provide consistent spacing for large white cards (profile / leave / attendance) */
+  .content > *[style] {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* Reduce excessive horizontal overflow from tables */
+  .tableWrapper,
+  .table {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* Tablet Styles (769px to 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .dashboardContainer {
+    flex-direction: column !important;
+  }
+
+  .sidebar {
+    width: 240px !important;
+  }
+
+  .header {
+    left: 240px !important;
+    width: calc(100% - 240px) !important;
+  }
+
+  .content {
+    margin-left: 240px !important;
+    padding: 90px 20px 20px 20px !important;
+  }
+
+  .combinedLayout {
+    grid-template-columns: 280px 1fr !important;
+  }
+
+  .cardsRow {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .leaveCardTable {
+    font-size: 12px !important;
+  }
+
+  .leaveCardTableTh,
+  .leaveCardTableTd {
+    padding: 8px 10px !important;
+  }
+}
+
+/* Desktop styles */
+@media (min-width: 769px) {
+  /* Hide mobile elements on desktop */
+  .mobile-header,
+  .mobile-profile-dropdown,
+  .mobile-overlay,
+  .sidebar-header,
+  .sidebar-close-btn,
+  .logo-sidebar {
+    display: none !important;
+  }
+
+  /* Show desktop elements */
+  .desktop-sidebar {
+    display: block !important;
+  }
+
+  .desktop-header {
+    display: flex !important;
+  }
+
+  .logo-desktop {
+    display: block !important;
+  }
+}
+
+/* Additional utility classes */
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+}
+
+.mobile-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-text-size {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Ensure smooth transitions */
+.sidebar {
+  transition: transform 0.3s ease;
+}
+
+/* Animation for modal */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-overlay {
+  animation: fadeIn 0.2s ease;
+}
+
+/* Loading spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loadingSpinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Mobile specific styles for better touch targets */
+@media (max-width: 768px) {
+  button,
+  .btn,
+  .pageBtn,
+  .exportBtn,
+  .tabContainer button {
+    min-height: 44px !important; /* Apple HIG minimum touch target */
+    min-width: 44px !important;
+  }
+
+  input,
+  select {
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+  }
+
+  .sidebar-menu-link li {
+    padding: 12px 16px !important;
+  }
+
+  .sidebar-menu-link a {
+    padding: 12px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* Fix for mobile viewport */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+
+  .dashboardContainer {
+    min-height: 100vh !important;
+    position: relative !important;
+  }
+
+  .content {
+    min-height: calc(100vh - 60px) !important;
+  }
+}

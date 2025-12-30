@@ -1,0 +1,441 @@
+/* attendance-responsive.css */
+
+/* Mobile Responsive Styles for Attendance */
+@media (max-width: 768px) {
+  /* Global Mobile Reset */
+  * {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Mobile Header */
+  .attendance-mobile-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: #009205;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    box-sizing: border-box;
+    height: 60px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .attendance-hamburger {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .attendance-mobile-logo {
+    display: none !important;
+  }
+
+  .attendance-mobile-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .attendance-mobile-icon-bell {
+    color: #fff;
+    font-size: 20px;
+    padding: 8px;
+  }
+
+  .attendance-mobile-profile {
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  .attendance-mobile-profile-image {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .attendance-mobile-profile-dropdown {
+    position: fixed;
+    top: 65px;
+    right: 16px;
+    background-color: #fff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    padding: 8px 0;
+    width: 160px;
+    z-index: 1002;
+    border: 1px solid #e0e0e0;
+  }
+
+  .attendance-mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 998;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Hide desktop header on mobile */
+  .attendance-desktop-header {
+    display: none !important;
+  }
+
+  /* Hide desktop sidebar on mobile */
+  .attendance-desktop-sidebar {
+    transform: translateX(-100%);
+  }
+
+  /* Mobile Sidebar */
+  .attendance-mobile-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px !important;
+    height: 100vh;
+    background-color: #009205;
+    z-index: 1001;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    padding: 0 !important;
+    box-shadow: 2px 0 15px rgba(0, 0, 0, 0.1);
+  }
+
+  .attendance-sidebar-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 12px 16px !important;
+    background: #009205 !important;
+    height: 60px;
+    box-sizing: border-box;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .attendance-sidebar-close-btn {
+    background: none !important;
+    border: none !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    color: #ffffff !important;
+    padding: 8px !important;
+    width: 40px !important;
+    height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+  }
+
+  .attendance-logo-desktop {
+    display: none !important;
+  }
+
+  .attendance-logo-sidebar {
+    width: 40px !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  .attendance-sidebar-open {
+    transform: translateX(0) !important;
+  }
+
+  .attendance-sidebar-closed {
+    transform: translateX(-100%) !important;
+  }
+
+  .attendance-sidebar-menu-link {
+    padding: 10px !important;
+  }
+
+  /* Mobile Content Area */
+  .attendance-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  /* Header Section */
+  .attendance-header-section {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+  }
+
+  .attendance-title {
+    display: none !important;
+  }
+
+  .date-text {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    padding: 0 50px !important;
+  }
+
+  .attendance-title-line {
+    display: none !important;
+  }
+
+  .attendance-date-nav {
+    justify-content: center !important;
+    border: #e0e0e0 1px solid !important;
+    padding: 5px !important;
+    border-radius: 8px !important;
+  }
+
+  /* Summary Cards - Horizontal Scroll */
+  .attendance-summary-cards {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 12px 0 !important;
+    gap: 16px !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .attendance-summary-cards::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .attendance-card {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  .attendance-card-content {
+    margin-top: 0 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    height: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .attendance-card-data {
+    gap: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    height: 100% !important;
+  }
+
+  .attendance-data1 {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 30px !important;
+    border: #e0e0e0 1px solid !important;
+    border-radius: 8px !important;
+    margin-bottom: 10px !important;
+    padding: 12px !important;
+  }
+
+  .divider {
+    display: none !important;
+  }
+
+  .attendance-txtSum {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    margin-bottom: 10px !important;
+  }
+
+  .attendance-txtData {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    margin-top: auto !important;
+    line-height: 1.2 !important;
+  }
+
+  .attendance-txtlabel {
+    font-size: 13px !important;
+    color: #666 !important;
+    text-align: center !important;
+    margin-top: 8px !important;
+    justify-content: center !important;
+  }
+
+  /* Filters Section */
+  .attendance-inputs-section {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  .attendance-row1 {
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  .attendance-first-row {
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .attendance-input1 {
+    width: 100% !important;
+    padding: 12px 35px !important;
+    font-size: 14px !important;
+  }
+
+  .attendance-iconSearch {
+    margin-top: 16px !important;
+  }
+
+  .attendance-filter {
+    width: 100% !important;
+    padding: 12px !important;
+    font-size: 14px !important;
+  }
+
+  .attendance-row2 {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    justify-content: flex-start !important;
+  }
+
+  .attendance-btn1,
+  .attendance-btn2,
+  .attendance-btn3 {
+    padding: 10px 5px !important;
+    font-size: 14px !important;
+    min-width: 100px !important;
+  }
+
+  /* Table Container */
+  .attendance-table-container {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin-top: 10px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .attendance-table-wrapper {
+    min-width: 800px !important;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    padding: 12px 8px !important;
+    font-size: 12px !important;
+  }
+
+  .attendance-th {
+    white-space: nowrap !important;
+    font-size: 11px !important;
+  }
+
+  .attendance-timeTrack {
+    flex-direction: column !important;
+    gap: 4px !important;
+  }
+
+  .attendance-trackLine {
+    margin: 4px 0 !important;
+  }
+
+  .attendance-lineTable {
+    width: 30px !important;
+  }
+
+  /* Modal Mobile */
+  .attendance-modal-content {
+    width: 90% !important;
+    max-width: 400px !important;
+    padding: 20px !important;
+    margin: 20px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Dropdown Positioning */
+  .attendance-dropdown {
+    position: fixed !important;
+    top: auto !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 90% !important;
+    max-width: 300px !important;
+    margin-top: 10px !important;
+  }
+}
+
+/* Desktop styles */
+@media (min-width: 769px) {
+  /* Hide mobile elements on desktop */
+  .attendance-mobile-header,
+  .attendance-mobile-profile-dropdown,
+  .attendance-mobile-overlay,
+  .attendance-sidebar-header,
+  .attendance-sidebar-close-btn,
+  .attendance-logo-sidebar {
+    display: none !important;
+  }
+
+  /* Show desktop elements */
+  .attendance-desktop-sidebar {
+    display: block !important;
+  }
+
+  .attendance-desktop-header {
+    display: flex !important;
+  }
+
+  .attendance-logo-desktop {
+    display: block !important;
+  }
+}
+
+/* Additional utility classes */
+.attendance-mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+}
+
+.attendance-mobile-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attendance-mobile-text-size {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Status badges mobile optimization */
+.attendance-status-badge {
+  display: inline-block !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  min-width: 70px !important;
+  text-align: center !important;
+}

@@ -16,6 +16,7 @@ import {
   faImage,
   faTimes,
   faSpinner,
+  faSearch,
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -24,10 +25,11 @@ import { FaEllipsisV } from "react-icons/fa";
 function Announcement() {
   const [showModal, setShowModal] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
+  const [filteredAnnouncements, setFilteredAnnouncements] = useState([]);
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: "",
     details: "",
-    priority: "",
+    visibility: "All Employee",
   });
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,6 +44,10 @@ function Announcement() {
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [visibilityFilter, setVisibilityFilter] = useState("All");
 
   // Loading states
   const [loading, setLoading] = useState({
@@ -119,6 +125,7 @@ function Announcement() {
           };
         });
         setAnnouncements(cleanData);
+        setFilteredAnnouncements(cleanData);
       } catch (err) {
         console.error("Error fetching announcements:", err);
       } finally {
@@ -128,6 +135,31 @@ function Announcement() {
 
     fetchAnnouncements();
   }, []);
+
+  // Apply search and filter whenever searchQuery, visibilityFilter, or announcements change
+  useEffect(() => {
+    let result = announcements;
+
+    // Apply search filter
+    if (searchQuery.trim() !== "") {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(announcement =>
+        announcement.title.toLowerCase().includes(query) ||
+        announcement.details.toLowerCase().includes(query) ||
+        announcement.posted_by?.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply visibility filter
+    if (visibilityFilter !== "All") {
+      result = result.filter(announcement => 
+        announcement.visibility === visibilityFilter || 
+        (visibilityFilter === "All Employee" && !announcement.visibility)
+      );
+    }
+
+    setFilteredAnnouncements(result);
+  }, [searchQuery, visibilityFilter, announcements]);
 
   useEffect(() => {
     if (previewImage) {
@@ -156,13 +188,21 @@ function Announcement() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleVisibilityFilterChange = (e) => {
+    setVisibilityFilter(e.target.value);
+  };
+
   const addAnnouncement = async () => {
     const admin = JSON.parse(localStorage.getItem("admin"));
     
     const formData = new FormData();
     formData.append("title", newAnnouncement.title);
     formData.append("details", newAnnouncement.details);
-    formData.append("priority", newAnnouncement.priority);
+    formData.append("visibility", newAnnouncement.visibility);
     formData.append("created_by", admin.id);
 
     // Only append images
@@ -182,7 +222,7 @@ function Announcement() {
 
       const savedAnnouncement = await res.json();
       setAnnouncements([savedAnnouncement, ...announcements]);
-      setNewAnnouncement({ title: "", details: "", priority: "Normal" });
+      setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
       setImages([]);
       setShowModal(false);
     } catch (error) {
@@ -197,7 +237,7 @@ function Announcement() {
     setNewAnnouncement({
       title: announcementToEdit.title,
       details: announcementToEdit.details,
-      priority: announcementToEdit.priority,
+      visibility: announcementToEdit.visibility || "All Employee",
     });
     setImages([]);
     setEditingAnnouncement(announcementToEdit);
@@ -218,7 +258,7 @@ function Announcement() {
       const formData = new FormData();
       formData.append("title", newAnnouncement.title);
       formData.append("details", newAnnouncement.details);
-      formData.append("priority", newAnnouncement.priority);
+      formData.append("visibility", newAnnouncement.visibility);
       
       // Only append images
       images.forEach((img) => formData.append("images", img));
@@ -235,7 +275,7 @@ function Announcement() {
       setShowModal(false);
       setIsEditMode(false);
       setEditingAnnouncement(null);
-      setNewAnnouncement({ title: "", details: "", priority: "" });
+      setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
       setImages([]);
     } catch (err) {
       console.error(err);
@@ -260,6 +300,11 @@ function Announcement() {
     } finally {
       setLoading(prev => ({ ...prev, delete: false }));
     }
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setVisibilityFilter("All");
   };
 
   return (
@@ -353,16 +398,43 @@ function Announcement() {
 
           <div style={styles.announcementFilter}>
             <div style={styles.announcementLeft}>
-              <input style={styles.searchInput} placeholder="Search" />
-              <select style={styles.filterBtn}>
-                <option selected disabled required>Priority</option>
-                <option value="Normal">Normal</option>
-                <option value="Urgent">Urgent</option>
+              <div style={styles.searchContainer}>
+                <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+                <input 
+                  style={styles.searchInput} 
+                  placeholder="Search announcements..." 
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                />
+                {searchQuery && (
+                  <button 
+                    style={styles.clearSearchBtn}
+                    onClick={() => setSearchQuery("")}
+                    title="Clear search"
+                  >
+                    <FontAwesomeIcon icon={faTimes} />
+                  </button>
+                )}
+              </div>
+              
+              <select 
+                style={styles.filterBtn}
+                value={visibilityFilter}
+                onChange={handleVisibilityFilterChange}
+              >
+                <option value="All">All Visibility</option>
+                <option value="All Employee">All Employee</option>
+                <option value="Specific Department">Specific Department</option>
               </select>
-              <select style={styles.filterBtn}>
-                <option>Visibility</option>
-                <option>All Employee</option>
-              </select>
+              
+              {(searchQuery || visibilityFilter !== "All") && (
+                <button 
+                  style={styles.clearFilterBtn}
+                  onClick={clearFilters}
+                >
+                  Clear Filters
+                </button>
+              )}
             </div>
             <div>
               <button 
@@ -380,118 +452,139 @@ function Announcement() {
               <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
               <p>Loading announcements...</p>
             </div>
-          ) : announcements.length === 0 ? (
-            <p style={styles.noAnnouncementText}>
-              No announcements have been posted yet.
-            </p>
+          ) : filteredAnnouncements.length === 0 ? (
+            <div style={styles.noResultsContainer}>
+              <p style={styles.noAnnouncementText}>
+                {announcements.length === 0 
+                  ? "No announcements have been posted yet." 
+                  : "No announcements match your search criteria."}
+              </p>
+              {(searchQuery || visibilityFilter !== "All") && (
+                <button 
+                  style={styles.clearFilterBtn2}
+                  onClick={clearFilters}
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
           ) : (
-            announcements.map((announcement, index) => (
-              <div
-                key={index}
-                style={{
-                  ...styles.announcementCardContent,
-                  borderLeft: `10px solid ${getPriorityColor(announcement.priority)}`,
-                }}
-              >
-                <div style={styles.announcementRow1}>
-                  <div style={styles.announcementSender}>
-                    <div style={styles.announcementProfile}></div>
-                    <div style={styles.announcementName}>
-                      <p style={styles.lblName}>{announcement.posted_by}</p>
-                      <p style={styles.lblPosition}>{announcement.position}</p>
+            <div style={styles.announcementsList}>
+              <div style={styles.resultsCount}>
+                Showing {filteredAnnouncements.length} of {announcements.length} announcements
+              </div>
+              {filteredAnnouncements.map((announcement, index) => (
+                <div
+                  key={announcement.id || index}
+                  style={{
+                    ...styles.announcementCardContent,
+                    borderLeft: '10px solid #4A90E2', // All announcements have same border color
+                  }}
+                >
+                  <div style={styles.announcementRow1}>
+                    <div style={styles.announcementSender}>
+                      <div style={styles.announcementProfile}></div>
+                      <div style={styles.announcementName}>
+                        <p style={styles.lblName}>{announcement.posted_by}</p>
+                        <p style={styles.lblPosition}>{announcement.position}</p>
+                        {announcement.visibility && (
+                          <p style={styles.lblVisibility}>
+                            Visibility: {announcement.visibility}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div style={styles.announcementDate}>
+                      <p style={styles.lblDate}>{announcement.created_at}</p>
+
+                      <div style={{ position: "relative", display: "inline-block" }}>
+                        <button
+                          style={{
+                            ...styles.menuDots,
+                            ...((loading.update || loading.delete) && styles.menuDotsDisabled)
+                          }}
+                          onClick={() =>
+                            setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
+                          }
+                          onBlur={() => setMenuOpen(null)}
+                          disabled={loading.update || loading.delete}
+                        >
+                          <FaEllipsisV />
+                        </button>
+
+                        {menuOpen === announcement.id && (
+                          <div style={styles.menu}>
+                            <button
+                              style={styles.buttonMenu1}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => editAnnouncement(announcement.id)}
+                              disabled={loading.update}
+                            >
+                              {loading.update ? 'Editing...' : 'Edit'}
+                            </button>
+                            <button
+                              style={styles.buttonMenu}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => deleteAnnouncement(announcement.id)}
+                              disabled={loading.delete}
+                            >
+                              {loading.delete ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div style={styles.announcementDate}>
-                    <p style={styles.lblDate}>{announcement.created_at}</p>
-                    <p style={styles.lblPriority}>{announcement.priority}</p>
 
-                    <div style={{ position: "relative", display: "inline-block" }}>
-                      <button
-                        style={{
-                          ...styles.menuDots,
-                          ...((loading.update || loading.delete) && styles.menuDotsDisabled)
-                        }}
-                        onClick={() =>
-                          setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
-                        }
-                        onBlur={() => setMenuOpen(null)}
-                        disabled={loading.update || loading.delete}
-                      >
-                        <FaEllipsisV />
-                      </button>
+                  <div style={styles.announcementDetails}>
+                    <div style={styles.announcementText}>
+                      <p style={styles.lblTitle}>{announcement.title}</p>
+                      <p style={{
+                        ...styles.lblDetails,
+                        textAlign: "justify",
+                        display: "-webkit-box",
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        WebkitLineClamp: expanded ? "unset" : 2, 
+                      }}>
+                      {announcement.details}
+                      </p>
 
-                      {menuOpen === announcement.id && (
-                        <div style={styles.menu}>
-                          <button
-                            style={styles.buttonMenu1}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => editAnnouncement(announcement.id)}
-                            disabled={loading.update}
-                          >
-                            {loading.update ? 'Editing...' : 'Edit'}
-                          </button>
-                          <button
-                            style={styles.buttonMenu}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => deleteAnnouncement(announcement.id)}
-                            disabled={loading.delete}
-                          >
-                            {loading.delete ? 'Deleting...' : 'Delete'}
-                          </button>
+                      {/* Images */}
+                      {announcement.images && announcement.images.length > 0 && (
+                        <div style={{ marginTop: "10px" }}>
+                          {announcement.images.map((img, i) => (
+                            <img
+                              key={i}
+                              src={img} 
+                              alt={`attachment-${i}`}
+                              style={{ 
+                                maxWidth: "120px",
+                                maxHeight: "120px",
+                                marginRight: "10px",
+                                marginBottom: "10px",
+                                cursor: "pointer",
+                                borderRadius: "6px",
+                                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                              }}
+                              onClick={() => setPreviewImage(img)}
+                            />
+                          ))}
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
 
-                <div style={styles.announcementDetails}>
-                  <div style={styles.announcementText}>
-                    <p style={styles.lblTitle}>{announcement.title}</p>
-                    <p style={{
-                      ...styles.lblDetails,
-                      textAlign: "justify",
-                      display: "-webkit-box",
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                      WebkitLineClamp: expanded ? "unset" : 2, 
-                    }}>
-                    {announcement.details}
-                    </p>
-
-                    {/* Images */}
-                    {announcement.images && announcement.images.length > 0 && (
-                      <div style={{ marginTop: "10px" }}>
-                        {announcement.images.map((img, i) => (
-                          <img
-                            key={i}
-                            src={img} 
-                            alt={`attachment-${i}`}
-                            style={{ 
-                              maxWidth: "120px",
-                              maxHeight: "120px",
-                              marginRight: "10px",
-                              marginBottom: "10px",
-                              cursor: "pointer",
-                              borderRadius: "6px",
-                              boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                            }}
-                            onClick={() => setPreviewImage(img)}
-                          />
-                        ))}
-                      </div>
-                    )}
+                  <div style={styles.announcementRead}>
+                    {announcement.details.length > 100 && ( 
+                      <button onClick={toggleExpand} style={styles.readBtn}>
+                        {expanded ? "Show Less" : "Read More"}
+                      </button>
+                    )}                    
                   </div>
                 </div>
-
-                <div style={styles.announcementRead}>
-                  {announcement.details.length > 100 && ( 
-                    <button onClick={toggleExpand} style={styles.readBtn}>
-                      {expanded ? "Show Less" : "Read More"}
-                    </button>
-                  )}                    
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
 
           {previewImage && (
@@ -556,7 +649,7 @@ function Announcement() {
                       setShowModal(false);
                       setIsEditMode(false);
                       setEditingAnnouncement(null);
-                      setNewAnnouncement({ title: "", details: "", priority: "" });
+                      setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
                       setImages([]);
                     }}
                     disabled={loading.post || loading.update}
@@ -568,23 +661,16 @@ function Announcement() {
                 <div style={styles.modalBody}>
                   <div style={styles.formGrid}>
                     <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>To</label>
-                      <select style={styles.formSelect}>
-                        <option>All Employee</option>
-                      </select>
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Priority</label>
+                      <label style={styles.formLabel}>Visibility</label>
                       <select
                         style={styles.formSelect}
-                        name="priority"
-                        value={newAnnouncement.priority}
+                        name="visibility"
+                        value={newAnnouncement.visibility}
                         onChange={handleInputChange}
                         disabled={loading.post || loading.update}
                       >
-                        <option value="" disabled selected>Select Priority</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Urgent">Urgent</option>
+                        <option value="All Employee">All Employee</option>
+                        <option value="Specific Department">Specific Department</option>
                       </select>
                     </div>
                   </div>
@@ -671,7 +757,7 @@ function Announcement() {
                       setShowModal(false);
                       setIsEditMode(false);
                       setEditingAnnouncement(null);
-                      setNewAnnouncement({ title: "", details: "", priority: "" });
+                      setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
                       setImages([]);
                     }}
                     disabled={loading.post || loading.update}
@@ -738,79 +824,6 @@ function Announcement() {
     </div>
   );
 }
-
-
-// Add these new styles to your existing styles object
-const enhancedStyles = {
-  // Global Loading Overlay
-  globalLoadingOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  globalLoadingContent: {
-    backgroundColor: '#fff',
-    padding: '30px',
-    borderRadius: '12px',
-    textAlign: 'center',
-    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
-  },
-  loadingSpinner: {
-    fontSize: '24px',
-    color: '#009205',
-    marginBottom: '10px',
-  },
-  loadingText: {
-    margin: 0,
-    fontSize: '16px',
-    fontWeight: '500',
-    color: '#333',
-  },
-  
-  // Loading Container for announcements
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px',
-    color: '#666',
-  },
-  
-  // Disabled states
-  menuDotsDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  uploadButtonDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  deleteBtnDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-};
-
-// Priority colors
-const getPriorityColor = (priority) => {
-  switch (priority) {
-    case 'Normal': return '#F5A623';
-    case 'Urgent': return '#D0021B';
-    default: return '#4A90E2';
-  }
-};
 
 const styles = {
   dashboardContainer: {
@@ -892,11 +905,35 @@ const styles = {
     gap: '20px',
     justifyContent: 'flex-start',
   },
+  
+  // Search Container Styles
+  searchContainer: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
   searchInput: {
     width: '400px',
-    padding: '5px',
+    padding: '8px 35px 8px 35px',
     borderRadius: '5px',
-    border: '1px solid #00000070'
+    border: '1px solid #00000070',
+    fontSize: '14px',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '10px',
+    color: '#666',
+    fontSize: '14px',
+  },
+  clearSearchBtn: {
+    position: 'absolute',
+    right: '10px',
+    background: 'none',
+    border: 'none',
+    color: '#666',
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: '4px',
   },
 
   btnActive: {
@@ -908,27 +945,57 @@ const styles = {
   announcementFilter: {
     display: 'flex',
     justifyContent: 'space-between',
-    marginTop: '10px'
+    marginTop: '10px',
+    alignItems: 'center',
   },
 
   announcementLeft: {
     display: 'flex',
     gap: '10px',
+    alignItems: 'center',
   },
 
   filterBtn: {
-    padding: '5px',
+    padding: '8px 15px',
     borderRadius: '5px',
-    border: '1px solid #00000070'
+    border: '1px solid #00000070',
+    backgroundColor: 'white',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+
+  clearFilterBtn: {
+    padding: '8px 15px',
+    borderRadius: '5px',
+    border: '1px solid #ddd',
+    backgroundColor: '#f8f9fa',
+    color: '#666',
+    cursor: 'pointer',
+    fontSize: '14px',
+    transition: 'all 0.2s ease',
+  },
+  
+  clearFilterBtn2: {
+    padding: '10px 20px',
+    borderRadius: '5px',
+    border: '1px solid #ddd',
+    backgroundColor: '#f8f9fa',
+    color: '#666',
+    cursor: 'pointer',
+    fontSize: '14px',
+    marginTop: '10px',
+    transition: 'all 0.2s ease',
   },
 
   postBtn: {
-    padding: '5px 20px',
+    padding: '8px 20px',
     borderRadius: '5px',
     border: 'none',
     backgroundColor: '#A8FC0080',
     boxShadow: '2px 2px 2px rgba(0, 0, 0, 0.16)',
-    fontWeight: 500
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontSize: '14px',
   },
 
   announcementCardContent: {
@@ -937,7 +1004,8 @@ const styles = {
     borderRadius: '10px',
     borderLeft: '10px solid #4a90e2',
     boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.08)',
-    marginTop: ' 20px'
+    marginTop: '20px',
+    marginBottom: '20px',
   },
 
   announcementProfile: {
@@ -962,30 +1030,30 @@ const styles = {
     fontSize: '12px',
     color: '#6d6d6dfb'
   },
+  
+  lblVisibility: {
+    fontSize: '12px',
+    color: '#009205',
+    fontStyle: 'italic',
+    marginTop: '2px',
+  },
 
   announcementRow1: {
     display: 'flex',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
 
   announcementDate: {
     display:'flex',
     flexDirection: 'row',
-    gap: '5px',
+    gap: '10px',
     alignItems: 'center'
   },
 
   lblDate: {
     fontSize: '12px',
-  },
-
-  lblPriority: {
-    fontSize: '14px',
-    backgroundColor: '#ff5c5c',
-    padding: '2px 3px',
-    borderRadius: '5px',
-    color: '#fff',
-    fontWeight: '500'
+    color: '#666',
   },
 
   announcementDetails: {
@@ -998,11 +1066,13 @@ const styles = {
 
   lblTitle: {
     fontWeight: '600',
-    fontSize: '20px'
+    fontSize: '20px',
+    marginBottom: '8px',
   },
 
   lblDetails: {
     fontSize: '14px',
+    lineHeight: '1.6',
   },
 
   readBtn: {
@@ -1013,7 +1083,8 @@ const styles = {
     backgroundColor: '#4a90e2',
     color: '#fff',
     cursor: 'pointer',
-    transition: 'background-color 0.2s ease-in-out'
+    transition: 'background-color 0.2s ease-in-out',
+    fontSize: '14px',
   },
 
   modalOverlay: {
@@ -1029,7 +1100,6 @@ const styles = {
     zIndex: 9999
   },
 
-  // IMPROVED MODAL STYLES
   modalContainer: {
     backgroundColor: '#ffffff',
     width: '600px',
@@ -1084,10 +1154,9 @@ const styles = {
     backgroundColor: '#f8f9fa',
   },
 
-  // IMPROVED FORM STYLES
   formGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: '1fr',
     gap: '16px',
     marginBottom: '20px',
   },
@@ -1130,7 +1199,6 @@ const styles = {
     transition: 'all 0.2s ease',
   },
 
-  // IMPROVED UPLOAD SECTION
   uploadSection: {
     display: 'flex',
     gap: '12px',
@@ -1154,7 +1222,6 @@ const styles = {
     color: '#666',
   },
 
-  // IMPROVED ATTACHMENTS SECTION
   attachmentsSection: {
     marginTop: '20px',
     padding: '16px',
@@ -1204,7 +1271,6 @@ const styles = {
     justifyContent: 'center',
   },
 
-  // IMPROVED IMAGES PREVIEW
   imagesPreview: {
     display: 'flex',
     gap: '12px',
@@ -1239,7 +1305,6 @@ const styles = {
     justifyContent: 'center',
   },
 
-  // IMPROVED BUTTONS
   submitButton: {
     padding: '12px 24px',
     backgroundColor: '#009205',
@@ -1263,7 +1328,92 @@ const styles = {
     transition: 'all 0.2s ease',
   },
 
-  // Rest of the existing styles remain the same
+  // Loading and Results Styles
+  globalLoadingOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  globalLoadingContent: {
+    backgroundColor: '#fff',
+    padding: '30px',
+    borderRadius: '12px',
+    textAlign: 'center',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+  },
+  loadingSpinner: {
+    fontSize: '24px',
+    color: '#009205',
+    marginBottom: '10px',
+  },
+  loadingText: {
+    margin: 0,
+    fontSize: '16px',
+    fontWeight: '500',
+    color: '#333',
+  },
+  
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    color: '#666',
+  },
+  
+  noResultsContainer: {
+    textAlign: 'center',
+    padding: '40px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    marginTop: '20px',
+  },
+  
+  noAnnouncementText: {
+    textAlign: "center", 
+    marginTop: "20px",
+    color: "#777",
+    fontSize: '16px',
+  },
+  
+  resultsCount: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '10px',
+    fontStyle: 'italic',
+  },
+  
+  announcementsList: {
+    marginTop: '20px',
+  },
+
+  // Disabled states
+  menuDotsDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  uploadButtonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  deleteBtnDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+
+  // Rest of existing styles...
   inputsColumn: {
     display: 'flex',
     justifyContent: 'space-between'
@@ -1346,11 +1496,6 @@ const styles = {
     fontSize: '20px',
     fontWeight: '500'
   },
-  noAnnouncementText: {
-    textAlign: "center", 
-    marginTop: "50px",
-    color: "#777",
-  },
   menuDots: {
     background: 'none',
     border: 'none',
@@ -1375,16 +1520,20 @@ const styles = {
     border: 'none',
     background: 'none',
     cursor: 'pointer',
-    padding: '5px'
+    padding: '8px 12px',
+    textAlign: 'left',
+    fontSize: '14px',
   },
   buttonMenu1: {
-    borderBottom: '.5px solid rgba(219, 219, 219, 1)',
+    borderBottom: '1px solid #eee',
     borderRight: 'none',
     borderLeft: 'none',
     borderTop: 'none',
     background: 'none',
     cursor: 'pointer',
-    padding: '5px'
+    padding: '8px 12px',
+    textAlign: 'left',
+    fontSize: '14px',
   },
   deleteButtons: {
     display: 'flex',
@@ -1392,7 +1541,7 @@ const styles = {
     gap: '20px',
   },
   deleteBtn: {
-    padding: '5px 10px 5px 10px',
+    padding: '8px 20px',
     fontSize: '14px',
     fontWeight: 500,
     border: 'none',
@@ -1402,7 +1551,7 @@ const styles = {
     cursor: 'pointer'
   },
   cnldeleteBtn: {
-    padding: '5px 10px 5px 10px',
+    padding: '8px 20px',
     fontSize: '14px',
     fontWeight: 500,
     border: 'none',
@@ -1412,12 +1561,13 @@ const styles = {
   },
   questionDelete: {
     fontSize: '20px',
-    textAlign: 'center'
+    textAlign: 'center',
+    marginBottom: '20px',
   },
   modalContainerDel: {
     backgroundColor: '#ffffff',
     width: '500px',
-    padding: '25px',
+    padding: '30px',
     borderRadius: '12px',
     boxShadow: '0 10px 20px rgba(0, 0, 0, 0.2)',
     display: 'flex',
@@ -1460,9 +1610,6 @@ const styles = {
     fontWeight: '500',
     cursor: 'pointer',
   },
-
-  ...enhancedStyles
 };
-
 
 export default Announcement;

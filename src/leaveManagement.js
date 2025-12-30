@@ -35,7 +35,11 @@ import {
   faTrash,
   faExclamationTriangle,
   faWarning,
-  faCalendarDay
+  faCalendarDay,
+  faTimes,
+  faBars,
+  faEye,
+  faDownload
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -43,6 +47,8 @@ import './dashboardCalendar.css';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import Papa from 'papaparse';
 import SignatureCanvas from 'react-signature-canvas';
+import './leave-management-responsive.css';
+import './dashboard-responsive.css'; 
 
 function LeaveManagement() {
     const navigate = useNavigate();
@@ -68,6 +74,8 @@ function LeaveManagement() {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [filteredRequests, setFilteredRequests] = useState([]);
+    const [savedPDFs, setSavedPDFs] = useState([]);
+const [showSavedPDFsModal, setShowSavedPDFsModal] = useState(false);
 
 const [signatureMethod, setSignatureMethod] = useState(""); // "e-sign" or "traditional"
     const [signatureData, setSignatureData] = useState("");
@@ -93,6 +101,12 @@ const [showESignPad, setShowESignPad] = useState(false);
 const [signatureImage, setSignatureImage] = useState(null);
 const [isSignatureEmpty, setIsSignatureEmpty] = useState(true);
 
+// Add these with your other signature states
+const [uploadedSignature, setUploadedSignature] = useState(null);
+const [showUploadSignature, setShowUploadSignature] = useState(false);
+const [isUploadingSignature, setIsUploadingSignature] = useState(false);
+const [uploadedSignaturePreview, setUploadedSignaturePreview] = useState(null);
+
 const [leaveCalendarData, setLeaveCalendarData] = useState([]);
 const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
 const [calendarView, setCalendarView] = useState('day'); // 'day', 'month'
@@ -108,6 +122,9 @@ const [overlapCheckLoading, setOverlapCheckLoading] = useState(false);
 const [rejectionReason, setRejectionReason] = useState(""); // For pre-defined reasons
 const [customRejectionReason, setCustomRejectionReason] = useState(""); // For custom input
 const [showCustomReasonInput, setShowCustomReasonInput] = useState(false);
+// Add near other state declarations
+const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+const [showProfileMenu, setShowProfileMenu] = useState(false);
 
 // Pre-defined rejection reasons
 const rejectionReasons = [
@@ -118,6 +135,65 @@ const rejectionReasons = [
   "Pending work deliverables",
   "Other (specify below)"
 ];
+
+
+  const API_URL =
+    window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "http://10.115.128.197:5000";
+
+      // Add this useEffect near your other useEffect hooks
+useEffect(() => {
+  // Function to disable scrolling
+  const disableScroll = () => {
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+  };
+  
+  // Function to enable scrolling
+  const enableScroll = () => {
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+  };
+  
+  // Check if any modal is open
+  const isModalOpen = 
+    showActionModal || 
+    showUploadModal || 
+    showActualCSForm || 
+    showSignatureChoice || 
+    showESignPad || 
+    showUploadSignature || 
+    showSavedPDFsModal ||
+    showOverlapModal ||
+    isGeneratingCSForm;
+    
+  if (isModalOpen) {
+    disableScroll();
+  } else {
+    enableScroll();
+  }
+  
+  // Cleanup on unmount
+  return () => {
+    enableScroll();
+  };
+}, [
+  showActionModal, 
+  showUploadModal, 
+  showActualCSForm, 
+  showSignatureChoice, 
+  showESignPad, 
+  showUploadSignature, 
+  showSavedPDFsModal,
+  showOverlapModal,
+  isGeneratingCSForm
+]);
+
 
     useEffect(() => {
         let role = localStorage.getItem("role") || "";
@@ -158,7 +234,7 @@ const rejectionReasons = [
     const handleLogout = async () => {
         const user = JSON.parse(localStorage.getItem("admin"));
         if (user) {
-            await fetch("http://localhost:5000/api/auth/logout", {
+            await fetch(`${API_URL}/api/auth/logout`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userId: user.id, role: user.role }),
@@ -278,7 +354,7 @@ const rejectionReasons = [
 useEffect(() => {
     if (activeTab === "summary") {
         console.log("📊 Fetching leave summary data...");
-        fetch("http://localhost:5000/api/leave-requests")
+        fetch(`${API_URL}/api/leave-requests`)
             .then((res) => {
                 if (!res.ok) {
                     throw new Error(`HTTP error! status: ${res.status}`);
@@ -394,7 +470,7 @@ useEffect(() => {
 
     useEffect(() => {
         if (activeTab === "requests") {
-            fetch("http://localhost:5000/api/leave-requests")
+            fetch(`${API_URL}/api/leave-requests`)
                 .then((res) => res.json())
                 .then((data) => setRequests(data))
                 .catch((err) => console.error("Error fetching requests:", err));
@@ -440,7 +516,7 @@ const checkOverlappingLeaves = async (leaveRequestId) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch('http://localhost:5000/api/leave-requests/check-overlapping-leaves', {
+    const response = await fetch(`${API_URL}/api/leave-requests/check-overlapping-leaves`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(leaveRequestForBackend),
@@ -528,7 +604,7 @@ const handleApprove = async (requestId, remarks = "Approved via dashboard") => {
   // Normal approval path (for roles other than the ones above)
   (async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/approve`, {
+      const res = await fetch(`${API_URL}/api/leave-requests/${requestId}/approve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -576,7 +652,7 @@ const handleForceApprove = async () => {
   const role = admin.role?.toLowerCase().replace(" ", "_");
   
   try {
-    const res = await fetch(`http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`, {
+    const res = await fetch(`${API_URL}/api/leave-requests/${selectedRequest.id}/approve`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -658,7 +734,7 @@ const handleReject = (requestId, remarks = "Rejected via dashboard") => {
   // Original rejection logic for other roles
   (async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
+      const res = await fetch(`${API_URL}/api/leave-requests/${requestId}/reject`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -762,12 +838,17 @@ const generateAndShowCSForm = async () => {
 
     const role = admin.role?.toLowerCase().replace(" ", "_");
 
-    // DEBUG: Check what signature data we have
-    console.log("🔍 Frontend Signature Debug:");
-    console.log("Signature method:", signatureMethod);
-    console.log("Signature data available:", !!signatureData);
-    console.log("Signature data type:", typeof signatureData);
-    console.log("Signature data preview:", signatureData ? signatureData.substring(0, 100) : "No data");
+    // Prepare signature data based on method
+    let finalSignatureData = null;
+    
+    if (signatureMethod === "upload") {
+      finalSignatureData = uploadedSignature || signatureData;
+      console.log("📤 Using uploaded signature for form generation");
+    } else if (signatureMethod === "e-sign") {
+      finalSignatureData = signatureData;
+      console.log("🖋️ Using e-signature for form generation");
+    }
+    // For traditional method, signature data remains null
 
     // Build payload with user data INCLUDING SIGNATURE DATA
     const payload = {
@@ -788,18 +869,17 @@ const generateAndShowCSForm = async () => {
         action_remarks: actionRemarks,
         days_with_pay: daysWithPay
       },
-      // CRITICAL FIX: Ensure signature data is properly included
+      // Include signature information
       signature_method: signatureMethod,
-      signature_data: signatureData // This should be the base64 string
+      signature_data: finalSignatureData
     };
 
-    console.log("📦 Final payload being sent:", {
+    console.log("📦 Final payload for form generation:", {
       signature_method: payload.signature_method,
-      has_signature_data: !!payload.signature_data,
-      signature_data_length: payload.signature_data ? payload.signature_data.length : 0
+      has_signature_data: !!payload.signature_data
     });
 
-    const res = await fetch("http://localhost:5000/api/generate-cs-form", {
+    const res = await fetch(`${API_URL}/api/generate-cs-form`, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json"
@@ -822,12 +902,164 @@ const generateAndShowCSForm = async () => {
     });
 
     setShowActualCSForm(true);
+    
+    // For traditional method, show signature choice modal after form is generated
+    if (signatureMethod === "traditional") {
+      setShowSignatureChoice(true);
+    }
+    
   } catch (err) {
     console.error("Error generating CS Form:", err);
     alert("Failed generating CS Form: " + err.message);
   } finally {
     setIsGeneratingCSForm(false);
     setIsGeneratingForm(false);
+  }
+};
+
+// Add a function to clear all signature states
+const clearSignatureStates = () => {
+  setSignatureMethod("");
+  setSignatureData("");
+  setSignatureImage(null);
+  setUploadedSignature(null);
+  setUploadedSignaturePreview(null);
+  setShowSignatureChoice(false);
+  setShowESignPad(false);
+  setShowUploadSignature(false);
+  setIsSigning(false);
+  setIsSignatureEmpty(true);
+};
+
+const compressSignatureImage = (base64Image, maxWidth = 300, quality = 0.5) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Image;
+    
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scaleFactor = Math.min(maxWidth / img.width, 1); // Don't enlarge
+      canvas.width = img.width * scaleFactor;
+      canvas.height = img.height * scaleFactor;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // Compress to JPEG for smaller size (or PNG with lower quality)
+      const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+      console.log(`Compressed from ${base64Image.length} to ${compressedBase64.length} bytes`);
+      resolve(compressedBase64);
+    };
+    
+    img.onerror = () => {
+      console.log('Image loading error, returning original');
+      resolve(base64Image); // Fallback to original
+    };
+  });
+};
+
+// Handle signature image upload
+const handleSignatureUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  setIsUploadingSignature(true);
+  
+  try {
+    // Convert file to base64
+    const base64 = await convertToBase64(file);
+    
+    // COMPRESS the image first
+    const compressedBase64 = await compressSignatureImage(base64, 300, 0.5);
+    
+    // Then remove background
+    const processedSignature = await removeSignatureBackground(compressedBase64);
+    
+    setUploadedSignature(processedSignature);
+    setUploadedSignaturePreview(processedSignature);
+    
+    console.log("✅ Signature uploaded, compressed, and processed");
+  } catch (error) {
+    console.error("Error processing signature:", error);
+    alert("Failed to process signature image. Please try again with a clearer image.");
+  } finally {
+    setIsUploadingSignature(false);
+  }
+};
+
+// Convert file to base64
+const convertToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
+};
+
+// Remove background using backend API
+const removeSignatureBackground = async (base64Image) => {
+  try {
+    const response = await fetch(`${API_URL}/api/remove-signature-background`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Image }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Background removal failed');
+    }
+
+    const data = await response.json();
+    return data.processedImage;
+  } catch (error) {
+    console.error('Background removal error:', error);
+    // Fallback: return original image if background removal fails
+    return base64Image;
+  }
+};
+
+const handleUseUploadedSignature = async () => {
+  if (!uploadedSignature) {
+    alert("Please upload a signature first");
+    return;
+  }
+
+  console.log("💾 Processing uploaded signature...");
+  
+  try {
+    // Save the uploaded signature to state
+    setSignatureImage(uploadedSignature);
+    setSignatureData(uploadedSignature);
+    setSignatureMethod("upload");  // CRITICAL: Set method to "upload"
+    
+    // Save signature to database
+    if (selectedRequest) {
+      const admin = JSON.parse(localStorage.getItem("admin"));
+      const role = admin.role?.toLowerCase().replace(" ", "_");
+      
+      console.log("💾 Saving uploaded signature to database...");
+      const saved = await saveSignatureToDatabase(selectedRequest.id, uploadedSignature, role);
+      if (saved) {
+        console.log("✅ Uploaded signature saved to database");
+      }
+    }
+    
+    // Close all signature modals
+    setShowUploadSignature(false);
+    setShowSignatureChoice(false);
+    setUploadedSignature(null);
+    setUploadedSignaturePreview(null);
+    
+    console.log("✅ Uploaded signature saved. Signature method:", signatureMethod);
+    
+    // IMPORTANT: Don't automatically generate form - wait for user to click Approve/Reject
+    // Just show success message
+    alert("Signature uploaded successfully! Click 'Approve Request' or 'Reject Request' to proceed.");
+    
+  } catch (error) {
+    console.error("Error using uploaded signature:", error);
+    alert("Failed to save signature. Please try again.");
   }
 };
 
@@ -871,16 +1103,19 @@ useEffect(() => {
   });
 }, [signatureMethod, signatureData]);
 
+// Remove or fix this problematic useEffect
 useEffect(() => {
-  if (signatureMethod === "e-sign" && signatureData && isSigning === false) {
+  if ((signatureMethod === "e-sign" || signatureMethod === "upload") && signatureData && isSigning === false) {
     console.log("🟢 Signature is now ready, generating CS Form...");
     generateAndShowCSForm();
   }
-}, [signatureData, isSigning]);
+}, [signatureData, isSigning, signatureMethod]);
+
+
 
 const saveSignatureToDatabase = async (leaveApplicationId, signatureData, role) => {
   try {
-    const res = await fetch("http://localhost:5000/api/save-signature", {
+    const res = await fetch(`${API_URL}/api/save-signature`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -914,16 +1149,19 @@ const handleSaveSignature = async () => {
     
     console.log("💾 Saving signature...");
     
-    // Save signature to state
-    setSignatureImage(signatureDataURL);
-    setSignatureData(signatureDataURL);
+    // Compress e-signature too
+    const compressedSignature = await compressSignatureImage(signatureDataURL, 400, 0.7);
+    
+    // Save compressed signature to state
+    setSignatureImage(compressedSignature);
+    setSignatureData(compressedSignature);
     
     // Save signature to database
     if (selectedRequest) {
       const admin = JSON.parse(localStorage.getItem("admin"));
       const role = admin.role?.toLowerCase().replace(" ", "_");
       
-      const saved = await saveSignatureToDatabase(selectedRequest.id, signatureDataURL, role);
+      const saved = await saveSignatureToDatabase(selectedRequest.id, compressedSignature, role);
       if (saved) {
         console.log("✅ Signature saved to database");
       }
@@ -932,7 +1170,7 @@ const handleSaveSignature = async () => {
     setShowESignPad(false);
     setIsSigning(false);
     
-    console.log("✅ Signature saved to state:", !!signatureDataURL);
+    console.log("✅ Compressed signature saved to state:", compressedSignature.length);
   }
 };
 
@@ -966,7 +1204,6 @@ const completeCSFormApproval = async () => {
         return;
       }
       
-      // Use custom reason if provided, otherwise use selected reason
       const finalRemarks = showCustomReasonInput && customRejectionReason.trim() 
         ? customRejectionReason 
         : actionRemarks || rejectionReason;
@@ -976,52 +1213,67 @@ const completeCSFormApproval = async () => {
         return;
       }
       
-      // Update action remarks with the final reason
       setActionRemarks(finalRemarks);
     }
 
-    console.log("🔐 Completing action with:", {
-      actionType,
-      rejectionReason,
-      customRejectionReason,
-      actionRemarks,
-      signatureMethod,
+    console.log("🔐 Completing action with signature method:", signatureMethod);
+
+    // ✅ STEP 1: Generate and save PDF to database
+    console.log("📄 Generating and saving PDF to database...");
+    
+    const generatePayload = {
+      leave_application_id: selectedRequest.id,
+      days_with_pay: daysWithPay,
+      requesting_role: role,
+      action_type: actionType,
+      action_remarks: actionRemarks,
+      user_id: admin.id,
+      signature_data: signatureData || uploadedSignature,
+      signature_method: signatureMethod,
+      save_to_db: true // ✅ CRITICAL: Tell backend to save PDF
+    };
+
+    // Generate PDF and save to database
+    const generateRes = await fetch(`${API_URL}/api/generate-cs-form`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(generatePayload),
     });
 
-    // If using e-signature, ensure it's saved to database
-    if (signatureMethod === "e-sign" && signatureData) {
-      await saveSignatureToDatabase(selectedRequest.id, signatureData, role);
+    if (!generateRes.ok) {
+      throw new Error("Failed to generate and save PDF");
     }
 
-    // CRITICAL FIX: Use different endpoints for approve vs reject
+    // ✅ STEP 2: Now proceed with approval/rejection
     const endpoint = actionType === "approve" 
-      ? `http://localhost:5000/api/leave-requests/${selectedRequest.id}/approve`
-      : `http://localhost:5000/api/leave-requests/${selectedRequest.id}/reject`;
+      ? `${API_URL}/api/leave-requests/${selectedRequest.id}/approve`
+      : `${API_URL}/api/leave-requests/${selectedRequest.id}/reject`;
 
-    // Different remarks based on action type
     const remarks = actionType === "approve" 
       ? `Approved with CS Form No. 6 - ${daysWithPay} days with pay`
       : actionRemarks || "Rejected via CS Form";
 
-    const res = await fetch(endpoint, {
+    const payload = {
+      actionBy: admin.id || admin.email,
+      remarks: remarks,
+      role,
+      cs_form_signed: true,
+      signature_method: signatureMethod,
+      signature_data: signatureData || uploadedSignature,
+      days_with_pay: daysWithPay,
+      forceApprove: forceApprove,
+      rejection_reason: actionType === "reject" ? rejectionReason : null,
+      custom_rejection_reason: actionType === "reject" ? customRejectionReason : null
+    };
+
+    const finalRes = await fetch(endpoint, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        actionBy: admin.id || admin.email,
-        remarks: remarks,
-        role,
-        cs_form_signed: true,
-        signature_method: signatureMethod,
-        signature_data: signatureMethod === "e-sign" ? signatureData : null,
-        days_with_pay: daysWithPay,
-        forceApprove: forceApprove,
-        rejection_reason: actionType === "reject" ? rejectionReason : null,
-        custom_rejection_reason: actionType === "reject" ? customRejectionReason : null
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (res.ok) {
-      // Update frontend state based on action type
+    if (finalRes.ok) {
+      // Update frontend state
       setRequests(prev =>
         prev.map(req =>
           req.id === selectedRequest.id
@@ -1032,29 +1284,37 @@ const completeCSFormApproval = async () => {
                 approver_name: admin.name || admin.email,
                 remarks: remarks,
                 days_with_pay: daysWithPay,
-                rejection_reason: actionType === "reject" ? rejectionReason : null
+                rejection_reason: actionType === "reject" ? rejectionReason : null,
+                cs_form_generated: true // ✅ Add this flag
               }
             : req
         )
       );
 
-      alert(`Leave request ${actionType === "approve" ? "approved" : "rejected"} with ${signatureMethod === "e-sign" ? "E-Signature" : "Traditional Signature"}${actionType === "approve" ? ` - ${daysWithPay} days with pay` : ''}`);
+      alert(`Leave request ${actionType === "approve" ? "approved" : "rejected"} and CS Form saved to database!`);
 
-      // Close modals and reset states
+      // Close all modals
       setShowSignatureChoice(false);
       setShowESignPad(false);
+      setShowUploadSignature(false);
       setShowActualCSForm(false);
       setCsFormData(null);
       setShowOverlapModal(false);
-      setForceApprove(false);
+      
+      // Clear all states
+      setSignatureMethod("");
+      setSignatureData("");
+      setSignatureImage(null);
+      setUploadedSignature(null);
+      setUploadedSignaturePreview(null);
       setRejectionReason("");
       setCustomRejectionReason("");
       setShowCustomReasonInput(false);
 
-      // Refresh latest requests from server
+      // Refresh requests
       fetchRequests();
     } else {
-      const data = await res.json();
+      const data = await finalRes.json();
       alert(data.error || `Failed to ${actionType} via CS Form`);
     }
   } catch (err) {
@@ -1063,22 +1323,105 @@ const completeCSFormApproval = async () => {
   }
 };
 
-
-    const handleConfirmApproval = async () => {
-  // If using e-signature but no signature data, show e-sign pad
-  if (signatureMethod === "e-sign" && !signatureData) {
-    setShowESignPad(true);
-    setIsSigning(true);
-    return;
+// Add this function to your component
+const viewSavedPDFs = async (leaveApplicationId) => {
+  try {
+    const response = await fetch(`${API_URL}/api/leave-pdfs/${leaveApplicationId}`);
+    if (response.ok) {
+      const pdfs = await response.json();
+      
+      // Create a modal to show saved PDFs
+      setSavedPDFs(pdfs);
+      setShowSavedPDFsModal(true);
+    } else {
+      alert("Failed to fetch saved PDFs");
+    }
+  } catch (error) {
+    console.error("Error fetching saved PDFs:", error);
+    alert("Error fetching saved PDFs");
   }
-  
-  // If we have e-signature data, proceed to complete approval
-  if (signatureMethod === "e-sign" && signatureData) {
-    await completeCSFormApproval();
-  } else {
-    // For traditional signature, generate form first
-    await generateAndShowCSForm();
-    setShowSignatureChoice(true);
+};
+
+// Add download function
+const downloadPDF = async (pdfId) => {
+  try {
+    const response = await fetch(`${API_URL}/api/download-pdf/${pdfId}`);
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `CS_Form_${pdfId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } else {
+      alert("Failed to download PDF");
+    }
+  } catch (error) {
+    console.error("Error downloading PDF:", error);
+    alert("Error downloading PDF");
+  }
+};
+
+
+ const handleConfirmApproval = async () => {
+  console.log("🔄 handleConfirmApproval called with:", {
+    actionType,
+    signatureMethod,
+    hasSignatureData: !!signatureData,
+    hasUploadedSignature: !!uploadedSignature
+  });
+
+  try {
+    // Validate rejection reason if rejecting
+    if (actionType === "reject") {
+      if (!rejectionReason && !actionRemarks.trim()) {
+        alert("Please select or specify a reason for rejection");
+        return;
+      }
+      
+      if (rejectionReason === "Other (specify below)" && !customRejectionReason.trim()) {
+        alert("Please specify the reason for rejection");
+        return;
+      }
+    }
+
+    // Check which signature method is being used
+    if (signatureMethod === "upload") {
+      // For upload method: check if we have signature data
+      if (signatureData || uploadedSignature) {
+        console.log("📤 Using uploaded signature for approval");
+        await completeCSFormApproval();
+      } else {
+        // No uploaded signature yet, show upload modal
+        setShowUploadSignature(true);
+      }
+    } else if (signatureMethod === "e-sign") {
+      // For e-signature: check if we have signature data
+      if (signatureData) {
+        console.log("🖋️ Using e-signature for approval");
+        await completeCSFormApproval();
+      } else {
+        // No e-signature yet, show drawing pad
+        setShowESignPad(true);
+        setIsSigning(true);
+      }
+    } else if (signatureMethod === "traditional") {
+      // For traditional: generate form first, then print
+      console.log("🖨️ Using traditional signature method");
+      await generateAndShowCSForm();
+      // The signature choice modal will handle the printing
+    } else {
+      // No signature method selected yet, show choices
+      console.log("❓ No signature method selected, showing choices");
+      setShowSignatureChoice(true);
+    }
+    
+  } catch (error) {
+    console.error("Error confirming approval:", error);
+    alert("Error processing approval: " + error.message);
   }
 };
 
@@ -1128,7 +1471,7 @@ const completeCSFormApproval = async () => {
             const admin = JSON.parse(localStorage.getItem("admin"));
             const role = admin.role?.toLowerCase().replace(" ", "_");
 
-            const res = await fetch(`http://localhost:5000/api/leave-requests/${requestId}/reject`, {
+            const res = await fetch(`${API_URL}/api/leave-requests/${requestId}/reject`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -1164,7 +1507,7 @@ const completeCSFormApproval = async () => {
 
     // Add this function to fetch requests
     const fetchRequests = () => {
-        fetch("http://localhost:5000/api/leave-requests")
+        fetch(`${API_URL}/api/leave-requests`)
             .then((res) => res.json())
             .then((data) => setRequests(data))
             .catch((err) => console.error("Error fetching requests:", err));
@@ -1200,7 +1543,7 @@ const fetchLeaveCalendarData = async (date, view = 'month') => {
     const year = date.getFullYear();
     const month = date.getMonth() + 1; // JavaScript months are 0-indexed
     
-    const response = await fetch(`http://localhost:5000/api/leave-requests/leave-calendar/month/${year}/${month}`);
+    const response = await fetch(`${API_URL}/api/leave-requests/leave-calendar/month/${year}/${month}`);
     const data = await response.json();
     
     if (response.ok) {
@@ -1400,54 +1743,108 @@ const getLeaveAbbreviation = (leaveType) => {
 
   return (
     <div style={styles.dashboardContainer}>
-
-        <div style={styles.header}>
-            <input type="text" placeholder="Search..." style={styles.search} />
-            <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
-        </div>
-
-        <div style={styles.sidebar}>
-            <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-             <ul style={styles.sidebarList}>
-  {allowedMenus.map((item) => {
-    const isActive = location.pathname === item.to; // Check if current route matches
-
-    return (
-      <li
-        key={item.name}
-        style={{
-          ...(isActive ? styles.btnActive : {}), // Apply active tab background
-        }}
+   <div className="mobile-header">
+      <button 
+        className="hamburger"
+        onClick={() => setIsSidebarOpen(true)}
       >
-        <Link
-          style={{
-            ...styles.sb,
-            ...(isActive ? styles.btnActive : {}),
-          }}
-          to={item.to}
-        >
-          <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-        </Link>
-      </li>
-    );
-  })}
-
-  <li>
-    <Link
-      style={styles.sb}
-      to="#"
-      onClick={(e) => {
-        e.preventDefault();
-        setShowLogoutModal(true);
-      }}
-    >
-      <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-    </Link>
-  </li>
-</ul>
+        <FontAwesomeIcon icon={faBars} />
+      </button>
+      <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+      <div className="mobile-header-right">
+        <div className="notification-badge-container" style={{position: 'relative'}}>
+          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
+          {/* Add notification badge if needed */}
         </div>
+        <div className="mobile-profile">
+          {/* Add profile image if needed */}
+        </div>
+      </div>
+    </div>
 
-        <div style={styles.content}>
+    {/* Mobile Sidebar Overlay */}
+    {isSidebarOpen && (
+      <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+    )}
+
+    {/* Responsive Sidebar */}
+    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+      <div className="sidebar-header">
+        <button 
+          className="sidebar-close-btn"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+        <img 
+          className='logo-sidebar' 
+          src={require('./images/logo_ez.png')} 
+          alt="logo" 
+        />
+      </div>
+
+      <img 
+        src={require('./images/logo_ez.png')} 
+        alt="logo" 
+        style={styles.logo} 
+        className='logo-desktop'
+      />
+
+      <ul className='sidebar-menu-link' style={styles.sidebarList}>
+        {allowedMenus.map((item) => {
+          const isActive = location.pathname === item.to;
+          return (
+            <li
+              key={item.name}
+              style={{
+                ...(isActive ? styles.btnActive : {}),
+              }}
+            >
+              <Link
+                style={{
+                  ...styles.sb,
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+                to={item.to}
+                onClick={() => setIsSidebarOpen(false)}
+              >
+                <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+              </Link>
+            </li>
+          );
+        })}
+        <li>
+          <Link
+            style={styles.sb}
+            to="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setShowLogoutModal(true);
+              setIsSidebarOpen(false);
+            }}
+          >
+            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+          </Link>
+        </li>
+      </ul>
+    </div>
+
+    {/* Desktop Header */}
+    <div className="desktop-header" style={styles.header}>
+      <input type="text" placeholder="Search..." style={styles.search} />
+      
+      <div style={styles.headerRight}>
+        <div className="notification-badge-container" style={{position: 'relative'}}>
+          <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+        </div>
+        
+        {/* Add profile container if needed */}
+      </div>
+    </div>
+
+        
+
+        <div className="content" style={styles.content}>
 
               {showLogoutModal && (
         <div style={styles.modalOverlay}>
@@ -1578,7 +1975,7 @@ const getLeaveAbbreviation = (leaveType) => {
   </div>
 )}
 
-            <div style={styles.tabContainer}>
+            <div className="tabContainer" style={styles.tabContainer}>
                 <button
                     style={tabButtonStyle(activeTab === 'summary')}
                      onClick={() => setActiveTab('summary')}
@@ -1609,9 +2006,9 @@ const getLeaveAbbreviation = (leaveType) => {
 
             {activeTab === 'summary' && (
             <>
-            <div style={styles.header1}>
+            <div className='header1' style={styles.header1}>
                 <h3>Overview</h3>
-                <div style={styles.line}></div>
+                <div className='line' style={styles.line}></div>
 
                  <div style={styles.dateNav}>
                         <button style={styles.navButton} onClick={goToPreviousDay}>
@@ -1624,13 +2021,13 @@ const getLeaveAbbreviation = (leaveType) => {
                 </div>
             </div>
 
-                <div style={styles.summaryCards}>
+                <div className='summaryCards' style={styles.summaryCards}>
                     <div style={styles.card}>
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
-                                <p style={styles.txtlabel}>Total Requests</p>
-                                <p style={styles.txtData}>{filteredRecords.length}</p>
+                                <p className='card-title' style={styles.txtlabel}>Total Requests</p>
+                                <p className='card-value' style={styles.txtData}>{filteredRecords.length}</p>
                             </div>
                         </div>
                         </div>
@@ -1640,8 +2037,8 @@ const getLeaveAbbreviation = (leaveType) => {
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
-                                    <p style={styles.txtlabel}>Approved Leaves</p>
-                                    <p style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Approved').length}</p>
+                                    <p className='card-title' style={styles.txtlabel}>Approved Leaves</p>
+                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Approved').length}</p>
                                 </div>
                         </div>
                         </div>
@@ -1652,8 +2049,8 @@ const getLeaveAbbreviation = (leaveType) => {
                             <div style={styles.cardData}>
 
                                 <div style={styles.data1}>
-                                    <p style={styles.txtlabel}>Pending Leaves</p>
-                                    <p style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Pending').length}</p>
+                                    <p className='card-title' style={styles.txtlabel}>Pending Leaves</p>
+                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Pending').length}</p>
                                 </div>
                             </div>
                         </div>
@@ -1663,24 +2060,24 @@ const getLeaveAbbreviation = (leaveType) => {
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
-                                    <p style={styles.txtlabel}>Rejected Leaves</p>
-                                    <p style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Rejected').length}</p>
+                                    <p className='card-title' style={styles.txtlabel}>Rejected Leaves</p>
+                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Rejected').length}</p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-            <div style={styles.inputs}>
+            <div className='inputs' style={styles.inputs}>
 
-                <div style={styles.row1}>
+                <div className='row1' style={styles.row1}>
                     <div style={styles.firstRow}>
                         <FontAwesomeIcon icon={faSearch} style={styles.iconSearch}/>
-                        <input style={styles.input1} placeholder='Search Employee'/>
+                        <input className='input1' style={styles.input1} placeholder='Search Employee'/>
                     </div>
 
-                    <div style={styles.firstRow}>
-                        <select style={styles.filter}>
+                    <div className='firstRow' style={styles.firstRow}>
+                        <select className='filter' style={styles.filter}>
                             <option disabled selected>Leave Type</option>
                             <option>Sick Leave</option>
                             <option>Vacation Leave</option>
@@ -1711,16 +2108,16 @@ const getLeaveAbbreviation = (leaveType) => {
                     </div>
                 </div> 
                 
-                <div style={styles.row2}>
-                    <button style={styles.btn1}>
+                <div className='row2' style={styles.row2}>
+                    <button className='btn1' style={styles.btn1}>
                         <FontAwesomeIcon icon={faUpload} style={styles.iconBtn}/>
                         Export
                     </button>
-                    <button onClick={handlePrint} style={styles.btn2}>
+                    <button onClick={handlePrint} className='btn2' style={styles.btn2}>
                         <FontAwesomeIcon icon={faPrint} style={styles.iconBtn1}/>
                         Print
                     </button>
-                    <button onClick={handleRefresh} style={styles.btn3}>
+                    <button onClick={handleRefresh} className='btn3' style={styles.btn3}>
                         <FontAwesomeIcon icon={faRefresh} style={styles.iconBtn1}/>
                         Refresh
                     </button>
@@ -1728,8 +2125,8 @@ const getLeaveAbbreviation = (leaveType) => {
             </div>
         
 
-            <div style={styles.tableCon}>
-                <table style={styles.table}>
+            <div className='tableCon' style={styles.tableCon}>
+                <table className='table' style={styles.table}>
                     <thead>
                     <tr>
                         <th style={styles.th}>No.</th>
@@ -1789,14 +2186,14 @@ const getLeaveAbbreviation = (leaveType) => {
             )}
 
                 {activeTab === "requests" && (
-                <div style={styles.leaveRequests}>
+                <div className='leaveRequests' style={styles.leaveRequests}>
                     {/* HEADER WITH SEARCH AND FILTERS */}
-                    <div style={styles.requestsHeader}>
+                    <div className='requestsHeader' style={styles.requestsHeader}>
                     <div style={styles.headerTitle}>
                         <h2 style={styles.requestsTitle}>Leave Requests</h2>
                         <p style={styles.requestsSubtitle}>Review and manage employee leave applications</p>
                     </div>
-                    <div style={styles.headerControls}>
+                    <div className='headerControls' style={styles.headerControls}>
                         <div style={styles.searchBox}>
                             <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
                             <input 
@@ -1805,12 +2202,14 @@ const getLeaveAbbreviation = (leaveType) => {
                                 style={styles.searchInput}
                                 value={searchQuery}
                                 onChange={handleSearch}
+                                className='searchInput'
                             />
                         </div>
                         <select 
                             style={styles.statusFilter}
                             value={statusFilter}
                             onChange={handleStatusFilter}
+                            className='statusFilter'
                         >
                             <option value="all">All Status</option>
                             <option value="pending">Pending</option>
@@ -1822,6 +2221,7 @@ const getLeaveAbbreviation = (leaveType) => {
                             style={styles.clearFilterBtn}
                             onClick={clearFilters}
                             disabled={!searchQuery && statusFilter === "all"}
+                            className='clearFilterBtn'
                         >
                             Clear Filters
                         </button>
@@ -1829,9 +2229,9 @@ const getLeaveAbbreviation = (leaveType) => {
                     </div>
 
                     {/* MAIN CONTENT */}
-                    <div style={styles.requestsContent}>
+                    <div className='requestsContent' style={styles.requestsContent}>
                     {/* LEFT TABLE - IMPROVED DESIGN */}
-                    <div style={styles.leftSection}>
+                    <div className='leftSection' style={styles.leftSection}>
                         <div style={styles.tableHeader}>
                             <h3 style={styles.tableTitle}>
                                 Pending Requests ({filteredRequests.filter(req => req.status === 'Pending').length})
@@ -1844,15 +2244,15 @@ const getLeaveAbbreviation = (leaveType) => {
                             </div>
                         </div> 
 
-                        <div style={styles.tableContainer}>
-                        <table style={styles.leaveRequestsTable}>
+                        <div className='tableContainer' style={styles.tableContainer}>
+                        <table className='leaveRequestsTable' style={styles.leaveRequestsTable}>
                             <thead style={styles.leaveRequeststhead}>
                             <tr>
-                                <th style={styles.leaveRequestsColumn}>Employee</th>
-                                <th style={styles.leaveRequestsColumn}>Leave Type</th>
-                                <th style={styles.leaveRequestsColumn}>Duration</th>
-                                <th style={styles.leaveRequestsColumn}>Status</th>
-                                <th style={styles.leaveRequestsColumn}>Date Filed</th>
+                                <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Employee</th>
+                                <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Leave Type</th>
+                                <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Duration</th>
+                                <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Status</th>
+                                <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Date Filed</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -1866,7 +2266,7 @@ const getLeaveAbbreviation = (leaveType) => {
                                     backgroundColor: selectedRequest?.id === req.id ? '#f0f9ff' : 'transparent'
                                     }}
                                 >
-                                    <td style={styles.leaveRequestsRows}>
+                                    <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
                                     <div style={styles.employeeCell}>
                                         <img
                                         src={req.profile_picture || "/default-avatar.png"}
@@ -1881,12 +2281,12 @@ const getLeaveAbbreviation = (leaveType) => {
                                         </div>
                                     </div>
                                     </td>
-                                    <td style={styles.leaveRequestsRows}>
+                                    <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
                                     <span style={styles.leaveTypeTag}>
                                         {req.leave_type}
                                     </span>
                                     </td>
-                                    <td style={styles.leaveRequestsRows}>
+                                    <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
                                     <div style={styles.durationCell}>
                                         <div style={styles.durationDates}>
                                         {req.inclusive_date_start} - {req.inclusive_date_end}
@@ -1896,7 +2296,7 @@ const getLeaveAbbreviation = (leaveType) => {
                                         </div>
                                     </div>
                                     </td>
-                                    <td style={styles.leaveRequestsRows}>
+                                    <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
                                     <span style={{
                                         ...styles.statusBadge,
                                         ...(req.status === 'Approved' ? styles.statusApproved : 
@@ -1906,7 +2306,7 @@ const getLeaveAbbreviation = (leaveType) => {
                                         {req.status}
                                     </span>
                                     </td>
-                                    <td style={styles.leaveRequestsRows}>
+                                    <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
                                     {new Date(req.date_filing).toLocaleDateString()}
                                     </td>
                                 </tr>
@@ -1927,12 +2327,12 @@ const getLeaveAbbreviation = (leaveType) => {
                     </div>
 
                     {/* RIGHT PANEL - IMPROVED DESIGN */}
-                    <div style={styles.rightSection}>
+                    <div className="rightSection" style={styles.rightSection}>
                         {selectedRequest ? (
                         <>
                             {/* EMPLOYEE HEADER */}
-                            <div style={styles.employeeHeader}>
-                            <div style={styles.employeeCard}>
+                            <div className='employeeHeader' style={styles.employeeHeader}>
+                            <div className='employeeCard' style={styles.employeeCard}>
                                 <img
                                 src={selectedRequest.profile_picture || "/default-avatar.png"}
                                 alt="profile"
@@ -1955,7 +2355,7 @@ const getLeaveAbbreviation = (leaveType) => {
                             <div style={styles.detailsSection}>
                             <h4 style={styles.sectionTitle}>Leave Details</h4>
                             
-                            <div style={styles.detailsGrid}>
+                            <div className='detailsGrid' style={styles.detailsGrid}>
                                 <div style={styles.detailItem}>
                                 <label style={styles.detailLabel}>Leave Type</label>
                                 <span style={styles.detailValue}>{selectedRequest.leave_type}</span>
@@ -1993,7 +2393,7 @@ const getLeaveAbbreviation = (leaveType) => {
                             {/* APPROVAL PROGRESS */}
                             <div style={styles.approvalSection}>
                                 <h4 style={styles.sectionTitle}>Approval Progress</h4>
-                                <div style={styles.approvalSteps}>
+                                <div className='approvalSteps' style={styles.approvalSteps}>
                                 <div style={styles.approvalStep}>
                                     <div style={{
                                     ...styles.stepIndicator,
@@ -2067,9 +2467,10 @@ const getLeaveAbbreviation = (leaveType) => {
                               (userRole === "mayor" && 
                               selectedRequest.hr_status === "Approved" && 
                               (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending")) ? (
-                                <div style={styles.actionButtons}>
+                                <div className='actionButtons' style={styles.actionButtons}>
                                   <button
                                     style={styles.approveBtn}
+                                    className='approveBtn'
                                     onClick={() => {
                                       setActionType("approve");
                                       setActionRemarks("Approved via dashboard");
@@ -2093,6 +2494,7 @@ const getLeaveAbbreviation = (leaveType) => {
                                   </button>
                                   <button
                                     style={styles.rejectBtn}
+                                    className='rejectBtn'
                                     onClick={() => {
                                       setActionType("reject");
                                       setActionRemarks("Pending rejection reason...");
@@ -2154,8 +2556,86 @@ const getLeaveAbbreviation = (leaveType) => {
                             </p>
                         </div>
                         )}
+                        {selectedRequest?.cs_form_generated && (
+                          <button
+                            style={styles.viewPDFsBtn}
+                            onClick={() => viewSavedPDFs(selectedRequest?.id)}
+                            title="View saved PDF forms"
+                          >
+                            <FontAwesomeIcon icon={faFilePdf} />
+                            View Saved PDFs
+                          </button>
+                        )}
                     </div>
                     </div>
+
+
+
+{showSavedPDFsModal && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.savedPDFsModal}>
+      <h3 style={styles.modalTitle}>Saved CS Forms</h3>
+      
+      <div style={styles.pdfsList}>
+        {savedPDFs.length > 0 ? (
+          savedPDFs.map((pdf) => (
+            <div key={pdf.id} style={styles.pdfItem}>
+              <div style={styles.pdfInfo}>
+                <FontAwesomeIcon icon={faFilePdf} style={styles.pdfIcon} />
+                <div>
+                  <div style={styles.pdfName}>{pdf.pdf_filename}</div>
+                  <div style={styles.pdfMeta}>
+                    Generated by {pdf.generated_by} on{" "}
+                    {new Date(pdf.generated_at).toLocaleString()}
+                  </div>
+                  {pdf.signature_method && (
+                    <div style={styles.pdfMeta}>
+                      Signed via: {pdf.signature_method}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={styles.pdfActions}>
+                <button
+                  style={styles.downloadBtn}
+                  onClick={() => downloadPDF(pdf.id)}
+                >
+                  <FontAwesomeIcon icon={faDownload} />
+                  Download
+                </button>
+                <button
+                  style={styles.viewBtn}
+                  onClick={() => {
+                    // Open PDF in new window
+                    const url = `${API_URL}/api/download-pdf/${pdf.id}`;
+                    window.open(url, '_blank');
+                  }}
+                >
+                  <FontAwesomeIcon icon={faEye} />
+                  View
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div style={styles.noPDFs}>
+            <FontAwesomeIcon icon={faFilePdf} size="3x" />
+            <p>No saved PDFs found</p>
+          </div>
+        )}
+      </div>
+
+      <div style={styles.modalActions}>
+        <button
+          style={styles.cancelBtn}
+          onClick={() => setShowSavedPDFsModal(false)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
                     {/* CS FORM MODAL */}
 {showActualCSForm && csFormData && selectedRequest && (
@@ -2409,8 +2889,22 @@ const getLeaveAbbreviation = (leaveType) => {
             disabled={isSigning}
           >
             <FontAwesomeIcon icon={faSignature} />
-            {isSigning ? " Signing..." : " E-Signature"}
-            <span style={styles.methodDescription}>Sign digitally using your electronic signature</span>
+            {isSigning ? " Signing..." : " Draw Signature"}
+            <span style={styles.methodDescription}>Draw your signature using mouse or touchpad</span>
+          </button>
+          
+          {/* ADD THIS NEW UPLOAD OPTION */}
+          <button
+            style={styles.uploadSignBtn}
+            onClick={() => {
+              setSignatureMethod("upload");
+              setShowSignatureChoice(false);
+              setShowUploadSignature(true);
+            }}
+          >
+            <FontAwesomeIcon icon={faUpload} />
+            Upload Signature
+            <span style={styles.methodDescription}>Upload an image of your signature</span>
           </button>
           
           <button
@@ -2418,7 +2912,6 @@ const getLeaveAbbreviation = (leaveType) => {
             onClick={() => {
               setSignatureMethod("traditional");
               setShowSignatureChoice(false);
-              // For traditional, generate form immediately
               generateAndShowCSForm();
             }}
           >
@@ -2513,6 +3006,74 @@ const getLeaveAbbreviation = (leaveType) => {
           />
         </div>
       )}
+    </div>
+  </div>
+)}
+
+{/* Upload Signature Modal */}
+{showUploadSignature && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.uploadSignatureModal}>
+      <h3 style={styles.modalTitle}>Upload Signature</h3>
+      
+      <div style={styles.uploadInstructions}>
+        <p>Upload a clear image of your signature. We'll automatically remove the background.</p>
+        <ul style={styles.instructionsList}>
+          <li>Use a white background for best results</li>
+          <li>Ensure signature is clear and dark</li>
+          <li>PNG or JPG formats recommended</li>
+        </ul>
+      </div>
+
+      <div style={styles.uploadSection}>
+        <input
+          type="file"
+          accept=".png,.jpg,.jpeg"
+          onChange={handleSignatureUpload}
+          style={styles.fileInput}
+          id="signature-upload"
+          disabled={isUploadingSignature}
+        />
+        <label htmlFor="signature-upload" style={styles.uploadLabel}>
+          <FontAwesomeIcon icon={faUpload} />
+          {isUploadingSignature ? 'Processing...' : 'Choose Signature Image'}
+        </label>
+        
+        {uploadedSignaturePreview && (
+          <div style={styles.previewSection}>
+            <h4>Preview (Background Removed):</h4>
+            <div style={styles.previewContainer}>
+              <img 
+                src={uploadedSignaturePreview} 
+                alt="Signature preview" 
+                style={styles.signaturePreviewImg}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={styles.uploadActions}>
+        <button
+          style={styles.cancelBtn}
+          onClick={() => {
+            setShowUploadSignature(false);
+            setUploadedSignature(null);
+            setUploadedSignaturePreview(null);
+          }}
+        >
+          Cancel
+        </button>
+        
+        <button
+          style={styles.useUploadedBtn}
+          onClick={handleUseUploadedSignature}
+          disabled={!uploadedSignature || isUploadingSignature}
+        >
+          <FontAwesomeIcon icon={faCheckCircle} />
+          Use This Signature
+        </button>
+      </div>
     </div>
   </div>
 )}
@@ -5405,6 +5966,204 @@ loadingPreview: {
     height: '100%',
     color: '#666',
     backgroundColor: '#f8f9fa',
+},
+
+uploadSignatureModal: {
+  backgroundColor: '#fff',
+  padding: '30px',
+  borderRadius: '12px',
+  width: '500px',
+  maxHeight: '80vh',
+  overflowY: 'auto',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+uploadInstructions: {
+  marginBottom: '20px',
+  color: '#666',
+},
+instructionsList: {
+  margin: '10px 0 0 20px',
+  fontSize: '14px',
+  color: '#666',
+},
+uploadSection: {
+  marginBottom: '20px',
+  textAlign: 'center',
+},
+fileInput: {
+  display: 'none',
+},
+uploadLabel: {
+  display: 'inline-block',
+  padding: '12px 24px',
+  backgroundColor: '#007bff',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: '600',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  transition: 'all 0.2s ease',
+  margin: '0 auto 20px',
+  '&:hover': {
+    backgroundColor: '#0056b3',
+  },
+},
+previewSection: {
+  marginTop: '20px',
+  padding: '15px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+},
+previewContainer: {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  minHeight: '100px',
+  backgroundColor: '#fff',
+  borderRadius: '4px',
+  padding: '10px',
+  border: '1px solid #ccc',
+},
+signaturePreviewImg: {
+  maxWidth: '200px',
+  maxHeight: '100px',
+  objectFit: 'contain',
+},
+uploadActions: {
+  display: 'flex',
+  gap: '15px',
+  justifyContent: 'flex-end',
+  marginTop: '20px',
+},
+useUploadedBtn: {
+  padding: '12px 20px',
+  backgroundColor: '#28a745',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: '600',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  transition: 'all 0.2s ease',
+},
+uploadSignBtn: {
+  padding: '20px',
+  backgroundColor: '#6c757d',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  fontSize: '16px',
+  fontWeight: '600',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '8px',
+  transition: 'all 0.2s ease',
+},
+
+// Add to your styles object
+savedPDFsModal: {
+  backgroundColor: '#fff',
+  padding: '30px',
+  borderRadius: '12px',
+  width: '700px',
+  maxHeight: '80vh',
+  overflowY: 'auto',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+pdfsList: {
+  margin: '20px 0',
+  maxHeight: '400px',
+  overflowY: 'auto',
+},
+pdfItem: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '15px',
+  marginBottom: '10px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+},
+pdfInfo: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '15px',
+  flex: 1,
+},
+pdfIcon: {
+  fontSize: '24px',
+  color: '#dc3545',
+},
+pdfName: {
+  fontWeight: '600',
+  fontSize: '14px',
+  color: '#333',
+  marginBottom: '4px',
+},
+pdfMeta: {
+  fontSize: '12px',
+  color: '#666',
+},
+pdfActions: {
+  display: 'flex',
+  gap: '10px',
+},
+downloadBtn: {
+  padding: '8px 12px',
+  backgroundColor: '#007bff',
+  color: 'white',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '12px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '5px',
+},
+viewBtn: {
+  padding: '8px 12px',
+  backgroundColor: '#28a745',
+  color: 'white',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '12px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '5px',
+},
+noPDFs: {
+  textAlign: 'center',
+  padding: '40px',
+  color: '#666',
+},
+viewPDFsBtn: {
+  padding: '10px 16px',
+  backgroundColor: '#6f42c1',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  fontSize: '14px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  marginTop: '10px',
+  justifyContent: 'center',
+  marginBottom: '10px',
+  marginLeft: '10px',
+  marginRight: '10px'
 },
 
 };

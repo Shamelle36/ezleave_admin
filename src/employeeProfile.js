@@ -29,9 +29,20 @@ import {
   faUserClock,
   faCalendar,
   faTable,
+  faBars,
+  faTimes,
+  faBalanceScale,
+  faChartPie,
+  faCalendarPlus,
+  faCalendarMinus,
+  faEdit,
+  faSave,
+  faTimesCircle,
+  faCalculator
 } from "@fortawesome/free-solid-svg-icons";
 import "react-calendar/dist/Calendar.css";
 import "./dashboardCalendar.css";
+import "./employeeProfile-responsive.css";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 // External libs for export
@@ -46,6 +57,7 @@ function EmployeeProfile() {
   const [employee, setEmployee] = useState(null);
   const [leaveCards, setLeaveCards] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [leaveEntitlements, setLeaveEntitlements] = useState([]);
   const [activeTab, setActiveTab] = useState("overview");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const role = localStorage.getItem("role") || "admin";
@@ -60,6 +72,16 @@ function EmployeeProfile() {
   const [attendanceFilter, setAttendanceFilter] = useState("all");
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'descending' });
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [loadingLeaveBalances, setLoadingLeaveBalances] = useState(false);
+
+  // Leave balance editing states
+  const [editingLeaveId, setEditingLeaveId] = useState(null);
+  const [editedLeave, setEditedLeave] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [modalLeave, setModalLeave] = useState(null);
 
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -72,6 +94,11 @@ function EmployeeProfile() {
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
     { name: "Settings", icon: faCog, to: "#" },
   ];
+
+  const API_URL =
+    window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "http://10.115.128.197:5000";
 
   const allowedMenus = menuItems.filter((item) => {
     if (role === "admin") return true;
@@ -99,17 +126,182 @@ function EmployeeProfile() {
     [filteredLeave.length, rowsPerPage]
   );
 
+  // Calculate leave entitlements summary
+  const leaveSummary = useMemo(() => {
+    if (!leaveEntitlements.length) return null;
+    
+    const totalEntitlements = leaveEntitlements.reduce((sum, leave) => sum + (leave.total_days || 0), 0);
+    const totalUsed = leaveEntitlements.reduce((sum, leave) => sum + (leave.used_days || 0), 0);
+    const totalRemaining = leaveEntitlements.reduce((sum, leave) => sum + (leave.remaining || 0), 0);
+    
+    // Calculate by category
+    const sickLeaves = leaveEntitlements.filter(l => 
+      l.leave_type.includes('Sick') || l.leave_type === 'SL'
+    );
+    const vacationLeaves = leaveEntitlements.filter(l => 
+      l.leave_type.includes('Vacation') || l.leave_type === 'VL'
+    );
+    const specialLeaves = leaveEntitlements.filter(l => 
+      !l.leave_type.includes('Sick') && 
+      !l.leave_type.includes('Vacation') &&
+      !['VL', 'SL'].includes(l.leave_type)
+    );
+    
+    return {
+      totalEntitlements,
+      totalUsed,
+      totalRemaining,
+      byCategory: {
+        sick: sickLeaves.reduce((sum, l) => sum + (l.remaining || 0), 0),
+        vacation: vacationLeaves.reduce((sum, l) => sum + (l.remaining || 0), 0),
+        special: specialLeaves.reduce((sum, l) => sum + (l.remaining || 0), 0),
+      }
+    };
+  }, [leaveEntitlements]);
+
   useEffect(() => {
     if (activeTab === "attendance" && id) {
       fetchAllAttendanceData();
     }
   }, [activeTab, id]);
 
+  // Fetch leave entitlements
+  const fetchLeaveEntitlements = async () => {
+    if (!id) return;
+    
+    setLoadingLeaveBalances(true);
+    try {
+      const response = await fetch(`${API_URL}/api/employees/${id}/leave-balances`);
+      if (response.ok) {
+        const data = await response.json();
+        setLeaveEntitlements(data.leaveBalances || []);
+      }
+    } catch (err) {
+      console.error("❌ Error fetching leave entitlements:", err);
+    } finally {
+      setLoadingLeaveBalances(false);
+    }
+  };
+
+  useEffect(() => {
+    if (employee) {
+      fetchLeaveEntitlements();
+    }
+  }, [employee]);
+
+  // Start editing leave balance
+  const handleEditLeave = (leave) => {
+    setModalLeave(leave);
+    setEditedLeave({
+      total_days: leave.total_days || 0,
+      used_days: leave.used_days || 0,
+      remaining: leave.remaining || 0
+    });
+    setShowEditModal(true);
+  };
+
+  // Save edited leave balance
+  const handleSaveLeave = async () => {
+    if (!modalLeave || !editedLeave.total_days || !employee) return;
+
+    setIsSaving(true);
+    try {
+      // Calculate remaining days
+      const remaining = editedLeave.total_days - editedLeave.used_days;
+
+      // Find the original leave type code (reverse mapping)
+      const leaveTypeMap = {
+        "Vacation Leave": "VL",
+        "Sick Leave": "SL",
+        "Mandatory/Forced Leave": "ML",
+        "Maternity Leave": "MAT",
+        "Paternity Leave": "PAT",
+        "Special Privilege Leave": "SPL",
+        "Solo Parent Leave": "SOLO",
+        "Study Leave": "STUDY",
+        "VAWC Leave": "VAWC",
+        "Rehabilitation Leave": "RL",
+        "Special Leave Benefits for Women": "SLBW",
+        "Special Emergency (Calamity) Leave": "CALAMITY",
+        "Monetization of Leave Credits": "MOL",
+        "Terminal Leave": "TL",
+        "Adoption Leave": "AL"
+      };
+
+      const shortCode = leaveTypeMap[modalLeave.leave_type] || modalLeave.leave_type;
+
+      const response = await fetch(`${API_URL}/api/employees/leave-entitlements/update`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: employee.id,
+          leaveType: shortCode,
+          year: modalLeave.year,
+          totalDays: parseFloat(editedLeave.total_days),
+          usedDays: parseFloat(editedLeave.used_days)
+        }),
+      });
+
+      if (response.ok) {
+        // Update local state
+        setLeaveEntitlements(prev => prev.map(leave => 
+          leave.leave_type === modalLeave.leave_type && leave.year === modalLeave.year
+            ? {
+                ...leave,
+                total_days: parseFloat(editedLeave.total_days),
+                used_days: parseFloat(editedLeave.used_days),
+                remaining: remaining
+              }
+            : leave
+        ));
+
+        setShowEditModal(false);
+        setModalLeave(null);
+        setEditedLeave({});
+
+        // Show success message
+        alert("Leave balance updated successfully!");
+      } else {
+        throw new Error("Failed to update leave balance");
+      }
+    } catch (err) {
+      console.error("❌ Error updating leave balance:", err);
+      alert("Failed to update leave balance. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setShowEditModal(false);
+    setModalLeave(null);
+    setEditedLeave({});
+  };
+
+  // Update edited values
+  const handleInputChange = (field, value) => {
+    setEditedLeave(prev => {
+      const updated = { ...prev, [field]: parseFloat(value) || 0 };
+      
+      // Auto-calculate remaining if either total_days or used_days changes
+      if (field === 'total_days' || field === 'used_days') {
+        const total = field === 'total_days' ? parseFloat(value) || 0 : prev.total_days || 0;
+        const used = field === 'used_days' ? parseFloat(value) || 0 : prev.used_days || 0;
+        updated.remaining = Math.max(0, total - used);
+      }
+      
+      return updated;
+    });
+  };
+
   const fetchAllAttendanceData = async () => {
     setLoadingAttendance(true);
     try {
       const response = await fetch(
-        `http://localhost:5000/api/attendance/employee/${id}`
+        `${API_URL}/api/attendance/employee/${id}`
       );
       const data = await response.json();
       setAttendanceLogs(data.attendanceLogs || []);
@@ -319,7 +511,7 @@ function EmployeeProfile() {
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin"));
     if (user) {
-      await fetch("http://localhost:5000/api/auth/logout", {
+      await fetch(`${API_URL}/api/auth/logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, role: user.role }),
@@ -330,7 +522,7 @@ function EmployeeProfile() {
   };
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/leave-cards/employeeLeave/${id}`)
+    fetch(`${API_URL}/api/leave-cards/employeeLeave/${id}`)
       .then((res) => res.json())
       .then((data) => {
         setEmployee(data.employee || null);
@@ -344,7 +536,7 @@ function EmployeeProfile() {
     if (!employee || leaveCards.length === 0) return;
 
     try {
-      const response = await fetch("http://localhost:5000/api/exportPdf/export-pdf", {
+      const response = await fetch(`${API_URL}/api/exportPdf/export-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ employee, leaveCards }),
@@ -441,7 +633,7 @@ function EmployeeProfile() {
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
     return (
-      <div style={styles.calendarContainer}>
+      <div className="calendarContainer" style={styles.calendarContainer}>
         <div style={styles.calendarHeader}>
           <button 
             style={styles.calendarNavButton}
@@ -462,7 +654,7 @@ function EmployeeProfile() {
         
         <div style={styles.calendarGrid}>
           {weekDays.map(day => (
-            <div key={day} style={styles.weekDayHeader}>
+            <div className="weekDayHeader" key={day} style={styles.weekDayHeader}>
               {day}
             </div>
           ))}
@@ -470,6 +662,7 @@ function EmployeeProfile() {
           {days.map((date, index) => (
             <div
               key={index}
+              className="calendarDay"
               style={{
                 ...styles.calendarDay,
                 backgroundColor: date ? getDayColor(date) : 'transparent',
@@ -483,20 +676,20 @@ function EmployeeProfile() {
           ))}
         </div>
         
-        <div style={styles.legend}>
-          <div style={styles.legendItem}>
+        <div className="legend" style={styles.legend}>
+          <div className="legendItem" style={styles.legendItem}>
             <div style={{...styles.legendColor, backgroundColor: '#d4edda', borderColor: '#28a745'}}></div>
             <span style={styles.legendText}>Present</span>
           </div>
-          <div style={styles.legendItem}>
+          <div className="legendItem" style={styles.legendItem}>
             <div style={{...styles.legendColor, backgroundColor: '#f8d7da', borderColor: '#dc3545'}}></div>
             <span style={styles.legendText}>Absent</span>
           </div>
-          <div style={styles.legendItem}>
+          <div className="legendItem" style={styles.legendItem}>
             <div style={{...styles.legendColor, backgroundColor: '#fff3cd', borderColor: '#ffc107'}}></div>
             <span style={styles.legendText}>Late</span>
           </div>
-          <div style={styles.legendItem}>
+          <div className="legendItem" style={styles.legendItem}>
             <div style={{...styles.legendColor, backgroundColor: '#cce7ff', borderColor: '#17a2b8'}}></div>
             <span style={styles.legendText}>On Leave</span>
           </div>
@@ -505,11 +698,246 @@ function EmployeeProfile() {
     );
   };
 
+  // Leave Balance Card Component with Edit Button
+  const LeaveBalanceCard = ({ leave }) => {
+    const percentage = leave.total_days > 0 
+      ? Math.min(100, (leave.used_days / leave.total_days) * 100) 
+      : 0;
+    
+    const getLeaveColor = (type) => {
+      const lowerType = type.toLowerCase();
+      if (lowerType.includes('sick')) return '#dc2626';
+      if (lowerType.includes('vacation')) return '#059669';
+      if (lowerType.includes('maternity')) return '#7c3aed';
+      if (lowerType.includes('paternity')) return '#3b82f6';
+      if (lowerType.includes('mandatory')) return '#f59e0b';
+      return '#6b7280';
+    };
+    
+    const color = getLeaveColor(leave.leave_type);
+    
+    return (
+      <div style={{
+        ...styles.leaveBalanceCard,
+        borderLeft: `4px solid ${color}`,
+        borderTop: `1px solid ${color}20`
+      }}>
+        <div style={styles.leaveBalanceHeader}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h4 style={{...styles.leaveBalanceTitle, color}}>
+              {leave.leave_type}
+            </h4>
+            <div style={styles.leaveYearBadge}>
+              {leave.year}
+            </div>
+          </div>
+          {role === "admin" && (
+            <button 
+              style={styles.editLeaveBtn}
+              onClick={() => handleEditLeave(leave)}
+              title="Edit leave balance"
+            >
+              <FontAwesomeIcon icon={faEdit} />
+            </button>
+          )}
+        </div>
+        
+        <div style={styles.leaveBalanceProgress}>
+          <div style={styles.progressBarContainer}>
+            <div 
+              style={{
+                ...styles.progressBar,
+                width: `${percentage}%`,
+                backgroundColor: color
+              }}
+            />
+          </div>
+          <div style={styles.progressStats}>
+            <span style={styles.usedText}>
+              Used: <strong>{leave.used_days || 0}</strong> days
+            </span>
+            <span style={styles.percentageText}>
+              {percentage.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+        
+        <div style={styles.leaveBalanceNumbers}>
+          <div style={styles.balanceItem}>
+            <FontAwesomeIcon icon={faCalendarPlus} style={{...styles.balanceIcon, color}} />
+            <div>
+              <div style={styles.balanceLabel}>Total</div>
+              <div style={styles.balanceValue}>{leave.total_days || 0}</div>
+            </div>
+          </div>
+          <div style={styles.balanceDivider} />
+          <div style={styles.balanceItem}>
+            <FontAwesomeIcon icon={faCalendarMinus} style={{...styles.balanceIcon, color}} />
+            <div>
+              <div style={styles.balanceLabel}>Used</div>
+              <div style={styles.balanceValue}>{leave.used_days || 0}</div>
+            </div>
+          </div>
+          <div style={styles.balanceDivider} />
+          <div style={styles.balanceItem}>
+            <FontAwesomeIcon icon={faBalanceScale} style={{...styles.balanceIcon, color}} />
+            <div>
+              <div style={styles.balanceLabel}>Remaining</div>
+              <div style={styles.balanceValue}>{leave.remaining || 0}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Edit Leave Balance Modal
+  const EditLeaveModal = () => {
+    if (!showEditModal || !modalLeave) return null;
+
+    return (
+      <div style={styles.modalOverlay}>
+        <div style={styles.editModalContent}>
+          <div style={styles.editModalHeader}>
+            <h3 style={styles.editModalTitle}>
+              <FontAwesomeIcon icon={faEdit} style={{ marginRight: '8px' }} />
+              Edit Leave Balance
+            </h3>
+            <button onClick={handleCancelEdit} style={styles.closeModalBtn}>
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          </div>
+          
+          <div style={styles.editModalBody}>
+            <div style={styles.leaveInfoHeader}>
+              <div style={{...styles.leaveTypeBadge, backgroundColor: getLeaveColor(modalLeave.leave_type) + '20', color: getLeaveColor(modalLeave.leave_type) }}>
+                {modalLeave.leave_type}
+              </div>
+              <div style={styles.yearBadge}>{modalLeave.year}</div>
+            </div>
+            
+            <div style={styles.editInputGroup}>
+              <label style={styles.editLabel}>
+                Total Days (Entitlement)
+                <input
+                  type="number"
+                  value={editedLeave.total_days || 0}
+                  onChange={(e) => handleInputChange('total_days', e.target.value)}
+                  style={styles.editInput}
+                  min="0"
+                  step="0.5"
+                />
+              </label>
+              
+              <label style={styles.editLabel}>
+                Used Days
+                <input
+                  type="number"
+                  value={editedLeave.used_days || 0}
+                  onChange={(e) => handleInputChange('used_days', e.target.value)}
+                  style={styles.editInput}
+                  min="0"
+                  max={editedLeave.total_days || 0}
+                  step="0.5"
+                />
+              </label>
+              
+              <div style={styles.calculationRow}>
+                <div style={styles.calcItem}>
+                  <div style={styles.calcLabel}>Total Days</div>
+                  <div style={styles.calcValue}>{editedLeave.total_days || 0}</div>
+                </div>
+                <div style={styles.calcMinus}>−</div>
+                <div style={styles.calcItem}>
+                  <div style={styles.calcLabel}>Used Days</div>
+                  <div style={styles.calcValue}>{editedLeave.used_days || 0}</div>
+                </div>
+                <div style={styles.calcEquals}>=</div>
+                <div style={styles.calcItem}>
+                  <div style={styles.calcLabel}>Remaining</div>
+                  <div style={{...styles.calcValue, color: editedLeave.remaining >= 0 ? '#059669' : '#dc2626', fontWeight: '700' }}>
+                    {editedLeave.remaining || 0}
+                  </div>
+                </div>
+              </div>
+              
+              {editedLeave.used_days > editedLeave.total_days && (
+                <div style={styles.warningMessage}>
+                  <FontAwesomeIcon icon={faCalculator} style={{ marginRight: '6px' }} />
+                  Warning: Used days exceed total days!
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div style={styles.editModalFooter}>
+            <button 
+              onClick={handleCancelEdit} 
+              style={styles.cancelEditBtn}
+              disabled={isSaving}
+            >
+              <FontAwesomeIcon icon={faTimesCircle} /> Cancel
+            </button>
+            <button 
+              onClick={handleSaveLeave} 
+              style={styles.saveEditBtn}
+              disabled={isSaving || editedLeave.total_days < 0 || editedLeave.used_days < 0}
+            >
+              {isSaving ? (
+                <>
+                  <div style={styles.savingSpinner}></div> Saving...
+                </>
+              ) : (
+                <>
+                  <FontAwesomeIcon icon={faSave} /> Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper function for leave color
+  const getLeaveColor = (type) => {
+    const lowerType = type.toLowerCase();
+    if (lowerType.includes('sick')) return '#dc2626';
+    if (lowerType.includes('vacation')) return '#059669';
+    if (lowerType.includes('maternity')) return '#7c3aed';
+    if (lowerType.includes('paternity')) return '#3b82f6';
+    if (lowerType.includes('mandatory')) return '#f59e0b';
+    return '#6b7280';
+  };
+
   return (
     <div style={styles.dashboardContainer}>
+      {/* Edit Leave Balance Modal */}
+      <EditLeaveModal />
+
       {/* Sidebar */}
-      <aside style={styles.sidebar}>
-        <img src={require("./images/logo_ez.png")} alt="logo" style={styles.logo} />
+      <aside  className={`mobile-sidebar desktop-sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} 
+        style={styles.sidebar} >
+        <div className="sidebar-header">
+          <button 
+            className="sidebar-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+          <img 
+            className='logo-sidebar' 
+            src={require("./images/logo_ez.png")} 
+            alt="logo" 
+          />
+        </div>
+
+        <img 
+          src={require("./images/logo_ez.png")} 
+          alt="logo" 
+          style={styles.logo} 
+          className='logo-desktop'
+        />
         <ul style={styles.sidebarList}>
           {allowedMenus.map((item) => {
             const isActive = location.pathname === item.to;
@@ -536,19 +964,35 @@ function EmployeeProfile() {
         </ul>
       </aside>
 
+      <div className="mobile-header">
+        <button 
+          className="hamburger"
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <FontAwesomeIcon icon={faBars} />
+        </button>
+        <img src={require("./images/logo_ez.png")} alt="logo" className="mobile-logo" />
+        <div className="mobile-header-right">
+          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
+        </div>
+      </div>
+
+      {isSidebarOpen && (
+        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+
       {/* Header */}
       <header style={styles.header}>
         <button onClick={() => navigate(-1)} style={styles.backBtn}>
           <FontAwesomeIcon icon={faArrowLeft} />
         </button>
         <div style={styles.headerRight}>
-          <input type="text" placeholder="Search..." style={styles.search} />
           <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
         </div>
       </header>
 
       {/* Main Content */}
-      <main style={styles.content1}>
+      <main className="content" style={styles.content1}>
         {showLogoutModal && (
           <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
@@ -567,64 +1011,110 @@ function EmployeeProfile() {
         ) : (
           <>
             {/* Tabs */}
-            <div style={styles.tabContainer}>
-              <button style={tabButtonStyle(activeTab === "overview")} onClick={() => setActiveTab("overview")}>Overview</button>
+            <div className="tabContainer" style={styles.tabContainer}>
+              <button  style={tabButtonStyle(activeTab === "overview")} onClick={() => setActiveTab("overview")}>Overview</button>
               <button style={tabButtonStyle(activeTab === "attendance")} onClick={() => setActiveTab("attendance")}>Attendance</button>
+              <button style={tabButtonStyle(activeTab === "leave-balances")} onClick={() => setActiveTab("leave-balances")}>
+                Leave Balances
+              </button>
             </div>
 
             {/* Overview */}
             {activeTab === "overview" && (
-              <div style={styles.overviewCon}>
-                <div style={styles.profileCard}>
-                  <div style={styles.profileHeader}>
-                    <div style={styles.profileImageWrapper}>
+              <div className="overviewCon" style={styles.overviewCon}>
+                <div className="profileCard" style={styles.profileCard}>
+                  <div className="profileHeader" style={styles.profileHeader}>
+                    <div className="profileImageWrapper" style={styles.profileImageWrapper}>
                       {employee.profile_picture ? (
-                        <img src={employee.profile_picture} alt="Profile" style={styles.profileImage} />
+                        <img src={employee.profile_picture} alt="Profile" style={styles.profileImage} className="profileImage"/>
                       ) : (
                         <div style={styles.initialsCircle}>
                           {employee.full_name?.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                         </div>
                       )}
                     </div>
-                    <div style={styles.profileHeaderText}>
-                      <h2 style={styles.employeeName}>{employee.full_name}</h2>
-                      <p style={styles.employeePosition}>{employee.position || "No position listed"}</p>
-                      <p style={styles.employeeDepartment}>{employee.department || "-"}</p>
+                    <div className="profileHeaderText" style={styles.profileHeaderText}>
+                      <h2 className="employeeName" style={styles.employeeName}>{employee.first_name} {employee.last_name}</h2>
+                      <p className="employeePosition" style={styles.employeePosition}>{employee.position || "No position listed"}</p>
+                      <p className="employeeDepartment" style={styles.employeeDepartment}>{employee.department || "-"}</p>
 
-                      <div style={styles.badgesContainer}>
-                        <div style={styles.smallBadge}><strong>ID:</strong> {employee.id_number}</div>
-                        <div style={styles.smallBadge}><strong>Hired:</strong> {employee.date_hired ? new Date(employee.date_hired).toLocaleDateString() : "-"}</div>
-                        <div style={styles.smallBadge}><strong>Status:</strong> {employee.employment_status}</div>
+                      <div className="badgesContainer" style={styles.badgesContainer}>
+                        <div className="smallBadge" style={styles.smallBadge}><strong>ID:</strong> {employee.id_number}</div>
+                        <div className="smallBadge" style={styles.smallBadge}><strong>Hired:</strong> {employee.date_hired ? new Date(employee.date_hired).toLocaleDateString() : "-"}</div>
+                        <div className="smallBadge" style={styles.smallBadge}><strong>Status:</strong> {employee.employment_status}</div>
                       </div>
                     </div>
                   </div>
 
-                  <div style={styles.infoGrid}>
-                    <div style={styles.infoItem}><strong>Gender</strong><div style={styles.infoValue}>{employee.gender || "-"}</div></div>
-                    <div style={styles.infoItem}><strong>Civil Status</strong><div style={styles.infoValue}>{employee.civil_status || "-"}</div></div>
-                    <div style={styles.infoItem}><strong>Email</strong><div style={styles.infoValue}>{employee.email || "-"}</div></div>
-                    <div style={styles.infoItem}><strong>Contact</strong><div style={styles.infoValue}>{employee.contact_number || "-"}</div></div>
+                  <div className="infoGrid" style={styles.infoGrid}>
+                    <div className="infoItem" style={styles.infoItem}><strong>Gender</strong><div style={styles.infoValue}>{employee.gender || "-"}</div></div>
+                    <div className="infoItem" style={styles.infoItem}><strong>Civil Status</strong><div style={styles.infoValue}>{employee.civil_status || "-"}</div></div>
+                    <div className="infoItem" style={styles.infoItem}><strong>Email</strong><div style={styles.infoValue}>{employee.email || "-"}</div></div>
+                    <div className="infoItem" style={styles.infoItem}><strong>Contact</strong><div style={styles.infoValue}>{employee.contact_number || "-"}</div></div>
                   </div>
                 </div>
 
+                {/* Quick Leave Balances Summary (in Overview tab) */}
+                {leaveEntitlements.length > 0 && (
+                  <div className="leaveSummaryCard" style={styles.leaveSummaryCard}>
+                    <div style={styles.leaveSummaryHeader}>
+                      <FontAwesomeIcon icon={faBalanceScale} style={styles.summaryIcon} />
+                      <h3 style={styles.leaveSummaryTitle}>Leave Balances Summary</h3>
+                    </div>
+                    <div style={styles.leaveSummaryStats}>
+                      <div style={styles.summaryStat}>
+                        <div style={styles.summaryStatValue}>{leaveSummary?.totalRemaining || 0}</div>
+                        <div style={styles.summaryStatLabel}>Days Remaining</div>
+                      </div>
+                      <div style={styles.summaryDivider} />
+                      <div style={styles.summaryStat}>
+                        <div style={styles.summaryStatValue}>{leaveSummary?.totalUsed || 0}</div>
+                        <div style={styles.summaryStatLabel}>Days Used</div>
+                      </div>
+                      <div style={styles.summaryDivider} />
+                      <div style={styles.summaryStat}>
+                        <div style={styles.summaryStatValue}>{leaveSummary?.totalEntitlements || 0}</div>
+                        <div style={styles.summaryStatLabel}>Total Entitlement</div>
+                      </div>
+                    </div>
+                    <div style={styles.leaveSummaryCategories}>
+                      <div style={{...styles.categoryBadge, backgroundColor: '#fef2f2', color: '#dc2626'}}>
+                        Sick: {leaveSummary?.byCategory?.sick || 0} days
+                      </div>
+                      <div style={{...styles.categoryBadge, backgroundColor: '#f0fdf4', color: '#059669'}}>
+                        Vacation: {leaveSummary?.byCategory?.vacation || 0} days
+                      </div>
+                      <div style={{...styles.categoryBadge, backgroundColor: '#f8fafc', color: '#475569'}}>
+                        Special: {leaveSummary?.byCategory?.special || 0} days
+                      </div>
+                    </div>
+                    <button 
+                      style={styles.viewAllBalancesBtn}
+                      onClick={() => setActiveTab("leave-balances")}
+                    >
+                      View All Balances <FontAwesomeIcon icon={faChevronRight} />
+                    </button>
+                  </div>
+                )}
+
                 {/* Leave Card */}
-                <div style={styles.leaveCardWrapper}>
-                  <div style={styles.leaveTopBar}>
-                    <div style={styles.leaveTitleGroup}>
+                <div className="leaveCardWrapper" style={styles.leaveCardWrapper}>
+                  <div className="leaveTopBar" style={styles.leaveTopBar}>
+                    <div className="leaveTitleGroup" style={styles.leaveTitleGroup}>
                       <h3 style={styles.leaveCardTitle}>Leave Card</h3>
                     </div>
 
-                    <div style={styles.leaveControls}>
+                    <div className="leaveControls" style={styles.leaveControls}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <button title="Toggle compact view" onClick={() => setCompactView(v => !v)} style={styles.iconBtn}>
                           <FontAwesomeIcon icon={compactView ? faExpandAlt : faCompressAlt} />
                         </button>
 
-                        <div style={styles.exportGroup}>
-                          <button style={styles.exportBtn} title="Export to PDF" onClick={exportToPDF}>
+                        <div className="exportGroup" style={styles.exportGroup}>
+                          <button className="exportBtn" style={styles.exportBtn} title="Export to PDF" onClick={exportToPDF}>
                             <FontAwesomeIcon icon={faFilePdf} /> PDF
                           </button>
-                          <button style={styles.exportBtn} title="Export to Excel" onClick={exportToExcelAll}>
+                          <button className="exportBtn" style={styles.exportBtn} title="Export to Excel" onClick={exportToExcelAll}>
                             <FontAwesomeIcon icon={faFileExcel} /> Excel
                           </button>
                         </div>
@@ -634,24 +1124,24 @@ function EmployeeProfile() {
 
                   {/* Table */}
                   <div style={{ overflowX: "auto", maxHeight: compactView ? 380 : 560 }}>
-                    <table style={{ ...styles.leaveCardTable, fontSize: compactView ? 12 : 13 }}>
+                    <table className="leaveCardTable" style={{ ...styles.leaveCardTable, fontSize: compactView ? 12 : 13 }}>
                       <thead>
                         <tr>
-                          <th rowSpan="2" style={styles.leaveCardTableTh}>#</th>
-                          <th rowSpan="2" style={styles.leaveCardTableTh}>Period</th>
-                          <th rowSpan="2" style={styles.leaveCardTableTh}>Particulars</th>
-                          <th colSpan="4" style={styles.leaveCardTableTh}>Vacation Leave</th>
-                          <th colSpan="4" style={styles.leaveCardTableTh}>Sick Leave</th>
-                          <th rowSpan="2" style={styles.leaveCardTableTh}>Remarks</th>
+                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>#</th>
+                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Period</th>
+                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Particulars</th>
+                          <th className="leaveCardTableTh" colSpan="4" style={styles.leaveCardTableTh}>Vacation Leave</th>
+                          <th className="leaveCardTableTh" colSpan="4" style={styles.leaveCardTableTh}>Sick Leave</th>
+                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Remarks</th>
                         </tr>
                         <tr>
-                          <th style={styles.leaveCardTableTh}>Earned</th>
-                          <th style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
-                          <th style={styles.leaveCardTableTh}>Balance</th>
-                          <th style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
-                          <th style={styles.leaveCardTableTh}>Earned</th>
-                          <th style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
-                          <th style={styles.leaveCardTableTh}>Balance</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Earned</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Balance</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Earned</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
+                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Balance</th>
                           <th style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
                         </tr>
                       </thead>
@@ -666,18 +1156,18 @@ function EmployeeProfile() {
                                   ((page - 1) * rowsPerPage + idx) % 2 === 0 ? "#fff" : "#fbfbfb",
                               }}
                             >
-                              <td style={styles.leaveCardTableTd}>{(page - 1) * rowsPerPage + idx + 1}</td>
-                              <td style={styles.leaveCardTableTd}>{row.period || "-"}</td>
-                              <td style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>{row.particulars || "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.vl_earned ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.vl_used ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.vl_balance ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.vl_abs_wop ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.sl_earned ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.sl_used ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.sl_balance ?? "-"}</td>
-                              <td style={styles.leaveCardTableTd}>{row.sl_abs_wop ?? "-"}</td>
-                              <td style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{(page - 1) * rowsPerPage + idx + 1}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.period || "-"}</td>
+                              <td className="leaveCardTableTd" style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>{row.particulars || "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_earned ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_used ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_balance ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_abs_wop ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_earned ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_used ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_balance ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_abs_wop ?? "-"}</td>
+                              <td className="leaveCardTableTd" style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>
                                 {row.remarks || "-"}
                               </td>
                             </tr>
@@ -694,9 +1184,9 @@ function EmployeeProfile() {
                   </div>
 
                   {/* Pagination */}
-                  <div style={styles.pagination}>
+                  <div className="pagination" style={styles.pagination}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <button style={styles.pageBtn} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                      <button className="pageBtn" style={styles.pageBtn} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                         <FontAwesomeIcon icon={faChevronLeft} />
                       </button>
                       <div style={{ fontSize: 13 }}>Page</div>
@@ -717,7 +1207,7 @@ function EmployeeProfile() {
 
             {/* Attendance */}
             {activeTab === "attendance" && (
-              <div style={styles.attendanceContainer}>
+              <div className="attendanceContainer" style={styles.attendanceContainer}>
                 {loadingAttendance ? (
                   <div style={styles.loadingMessage}>
                     <div style={styles.loadingSpinner}></div>
@@ -726,12 +1216,12 @@ function EmployeeProfile() {
                 ) : attendanceLogs.length > 0 ? (
                   <>
                     {/* Enhanced Statistics Cards */}
-                    <div style={styles.cardsRow}>
-                      <div style={styles.statCard}>
-                        <div style={styles.cardIconContainer}>
+                    <div className="cardsRow" style={styles.cardsRow}>
+                      <div className="statCard" style={styles.statCard}>
+                        <div className="cardIconContainer" style={styles.cardIconContainer}>
                           <FontAwesomeIcon icon={faCalendarDay} style={styles.cardIcon} />
                         </div>
-                        <div style={styles.cardContent}>
+                        <div className="cardContent" style={styles.cardContent}>
                           <h4 style={styles.cardTitle}>Present</h4>
                           <p style={styles.cardValue}>{attendanceStats?.present || 0}</p>
                           <small style={styles.cardSubtext}>
@@ -739,11 +1229,11 @@ function EmployeeProfile() {
                           </small>
                         </div>
                       </div>
-                      <div style={styles.statCard}>
-                        <div style={styles.cardIconContainer}>
+                      <div className="statCard" style={styles.statCard}>
+                        <div className="cardIconContainer" style={styles.cardIconContainer}>
                           <FontAwesomeIcon icon={faUserClock} style={styles.cardIcon} />
                         </div>
-                        <div style={styles.cardContent}>
+                        <div className="cardContent" style={styles.cardContent}>
                           <h4 style={styles.cardTitle}>Absent</h4>
                           <p style={styles.cardValue}>{attendanceStats?.absent || 0}</p>
                           <small style={styles.cardSubtext}>
@@ -751,11 +1241,11 @@ function EmployeeProfile() {
                           </small>
                         </div>
                       </div>
-                      <div style={styles.statCard}>
-                        <div style={styles.cardIconContainer}>
+                      <div className="statCard" style={styles.statCard}>
+                        <div className="cardIconContainer" style={styles.cardIconContainer}>
                           <FontAwesomeIcon icon={faClock} style={styles.cardIcon} />
                         </div>
-                        <div style={styles.cardContent}>
+                        <div className="cardContent" style={styles.cardContent}>
                           <h4 style={styles.cardTitle}>Late</h4>
                           <p style={styles.cardValue}>{attendanceStats?.late || 0}</p>
                           <small style={styles.cardSubtext}>
@@ -763,11 +1253,11 @@ function EmployeeProfile() {
                           </small>
                         </div>
                       </div>
-                      <div style={styles.statCard}>
-                        <div style={styles.cardIconContainer}>
+                      <div className="statCard" style={styles.statCard}>
+                        <div className="cardIconContainer" style={styles.cardIconContainer}>
                           <FontAwesomeIcon icon={faCalendarAlt} style={styles.cardIcon} />
                         </div>
-                        <div style={styles.cardContent}>
+                        <div className="cardContent" style={styles.cardContent}>
                           <h4 style={styles.cardTitle}>On Leave</h4>
                           <p style={styles.cardValue}>{attendanceStats?.onLeave || 0}</p>
                           <small style={styles.cardSubtext}>
@@ -778,21 +1268,22 @@ function EmployeeProfile() {
                     </div>
 
                     {/* Combined Calendar and Table Layout */}
-                    <div style={styles.combinedLayout}>
+                    <div className="combinedLayout" style={styles.combinedLayout}>
                       {/* Calendar Section */}
-                      <div style={styles.calendarSection}>
+                      <div className="calendarSection" style={styles.calendarSection}>
                         <CalendarView />
                       </div>
 
                       {/* Table Section */}
                       <div style={styles.tableSection}>
                         {/* Filter Controls */}
-                        <div style={styles.filterGroup}>
+                        <div className="filterGroup" style={styles.filterGroup}>
                           <FontAwesomeIcon icon={faFilter} style={styles.filterIcon} />
                           <select 
                             value={attendanceFilter} 
                             onChange={(e) => setAttendanceFilter(e.target.value)}
                             style={styles.filterSelect}
+                            className="filterSelect"
                           >
                             <option value="all">All Records</option>
                             <option value="present">Present Only</option>
@@ -806,43 +1297,43 @@ function EmployeeProfile() {
                         </div>
 
                         {/* Enhanced Attendance Table */}
-                        <div style={styles.tableWrapper}>
-                          <table style={styles.table}>
+                        <div className="tableWrapper" style={styles.tableWrapper}>
+                          <table className="table" style={styles.table}>
                             <thead>
                               <tr>
                                 <th 
+                                  className="th"
                                   style={styles.th} 
                                   onClick={() => handleSort('attendance_date')}
-                                  className="sortable"
                                 >
                                   Date
                                   <FontAwesomeIcon icon={faSort} style={styles.sortIcon} />
                                 </th>
-                                <th style={styles.th}>Day</th>
-                                <th style={styles.th}>Status</th>
-                                <th style={styles.th}>AM In</th>
-                                <th style={styles.th}>AM Out</th>
-                                <th style={styles.th}>PM In</th>
-                                <th style={styles.th}>PM Out</th>
-                                <th style={styles.th}>Hours</th>
-                                <th style={styles.th}>Leave Type</th>
+                                <th className="th" style={styles.th}>Day</th>
+                                <th className="th" style={styles.th}>Status</th>
+                                <th className="th" style={styles.th}>AM In</th>
+                                <th className="th" style={styles.th}>AM Out</th>
+                                <th className="th" style={styles.th}>PM In</th>
+                                <th className="th" style={styles.th}>PM Out</th>
+                                <th className="th" style={styles.th}>Hours</th>
+                                <th className="th" style={styles.th}>Leave Type</th>
                               </tr>
                             </thead>
                             <tbody>
                               {filteredAndSortedAttendance.map((log, idx) => (
                                 <tr key={idx} style={styles.tableRow}>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     {new Date(log.attendance_date).toLocaleDateString('en-PH', {
                                       month: 'short',
                                       day: 'numeric'
                                     })}
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     {new Date(log.attendance_date).toLocaleDateString('en-PH', {
                                       weekday: 'short'
                                     })}
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     <div style={{
                                       ...styles.statusBadge,
                                       ...getStatusStyle(log.status || 'Absent')
@@ -850,32 +1341,32 @@ function EmployeeProfile() {
                                       {log.status || 'Absent'}
                                     </div>
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     <div style={getTimeStyle(log.am_checkin, 'AM')}>
                                       {log.am_checkin ? log.am_checkin.substring(0, 5) : "-"}
                                     </div>
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     <div style={getTimeStyle(log.am_checkout, 'AM')}>
                                       {log.am_checkout ? log.am_checkout.substring(0, 5) : "-"}
                                     </div>
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     <div style={getTimeStyle(log.pm_checkin, 'PM')}>
                                       {log.pm_checkin ? log.pm_checkin.substring(0, 5) : "-"}
                                     </div>
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     <div style={getTimeStyle(log.pm_checkout, 'PM')}>
                                       {log.pm_checkout ? log.pm_checkout.substring(0, 5) : "-"}
                                     </div>
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     <div style={styles.hoursCell}>
                                       {log.total_hours ? `${parseFloat(log.total_hours).toFixed(1)}h` : "-"}
                                     </div>
                                   </td>
-                                  <td style={styles.td}>
+                                  <td className="td" style={styles.td}>
                                     {log.leave_type ? (
                                       <div style={styles.leaveType}>
                                         {log.leave_type}
@@ -907,6 +1398,79 @@ function EmployeeProfile() {
                     <FontAwesomeIcon icon={faCalendarDay} style={styles.noRecordsIcon} />
                     <h3>No Attendance Records</h3>
                     <p>No attendance data found for this employee.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Leave Balances Tab */}
+            {activeTab === "leave-balances" && (
+              <div className="leaveBalancesContainer" style={styles.leaveBalancesContainer}>
+                <div style={styles.leaveBalancesHeader}>
+                  <FontAwesomeIcon icon={faBalanceScale} style={styles.balancesHeaderIcon} />
+                  <div>
+                    <h2 style={styles.balancesTitle}>Leave Balances</h2>
+                    <p style={styles.balancesSubtitle}>
+                      Current leave entitlements and usage for {employee.first_name} {employee.last_name}
+                      {role === "admin" && " - Click edit icon to adjust balances"}
+                    </p>
+                  </div>
+                </div>
+
+                {loadingLeaveBalances ? (
+                  <div style={styles.loadingMessage}>
+                    <div style={styles.loadingSpinner}></div>
+                    Loading leave balances...
+                  </div>
+                ) : leaveEntitlements.length > 0 ? (
+                  <>
+                    {/* Leave Balance Cards Grid */}
+                    <div className="balancesGrid" style={styles.balancesGrid}>
+                      {leaveEntitlements
+                        .sort((a, b) => {
+                          // Sort by remaining days (descending)
+                          return (b.remaining || 0) - (a.remaining || 0);
+                        })
+                        .map((leave, index) => (
+                          <LeaveBalanceCard key={`${leave.leave_type}-${leave.year}-${index}`} leave={leave} />
+                        ))}
+                    </div>
+
+                    {/* Leave Type Legend */}
+                    <div style={styles.leaveLegend}>
+                      <h4 style={styles.legendTitle}>Leave Type Colors:</h4>
+                      <div style={styles.legendItems}>
+                        <div style={styles.legendItem}>
+                          <div style={{...styles.legendColor, backgroundColor: '#dc2626'}}></div>
+                          <span style={styles.legendText}>Sick Leave</span>
+                        </div>
+                        <div style={styles.legendItem}>
+                          <div style={{...styles.legendColor, backgroundColor: '#059669'}}></div>
+                          <span style={styles.legendText}>Vacation Leave</span>
+                        </div>
+                        <div style={styles.legendItem}>
+                          <div style={{...styles.legendColor, backgroundColor: '#7c3aed'}}></div>
+                          <span style={styles.legendText}>Maternity Leave</span>
+                        </div>
+                        <div style={styles.legendItem}>
+                          <div style={{...styles.legendColor, backgroundColor: '#3b82f6'}}></div>
+                          <span style={styles.legendText}>Paternity Leave</span>
+                        </div>
+                        <div style={styles.legendItem}>
+                          <div style={{...styles.legendColor, backgroundColor: '#f59e0b'}}></div>
+                          <span style={styles.legendText}>Special Leaves</span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={styles.noLeaveBalances}>
+                    <FontAwesomeIcon icon={faBalanceScale} style={styles.noBalancesIcon} />
+                    <h3>No Leave Entitlements</h3>
+                    <p>This employee doesn't have any leave entitlements recorded yet.</p>
+                    <p style={styles.noBalancesNote}>
+                      Note: Leave entitlements are automatically created for eligible employees (Temporary, Permanent, Contractual, Casual, or Coterminous).
+                    </p>
                   </div>
                 )}
               </div>
@@ -990,8 +1554,6 @@ const styles = {
   },
 
   profileImageWrapper: {
-    width: "90px",
-    height: "90px",
     borderRadius: "50%",
     overflow: "hidden",
     backgroundColor: "#f3fff3",
@@ -1003,7 +1565,7 @@ const styles = {
 
   profileImage: {
     width: "90px",
-    height: "90px",
+    height: 'auto',
     borderRadius: "50%"
   },
 
@@ -1054,6 +1616,492 @@ const styles = {
     marginTop: 4,
     color: "#222",
     fontWeight: 600,
+  },
+
+  /* LEAVE BALANCES STYLES */
+  leaveSummaryCard: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+    border: '1px solid #e6e6e6',
+  },
+  leaveSummaryHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '20px',
+  },
+  summaryIcon: {
+    fontSize: '24px',
+    color: '#009205',
+  },
+  leaveSummaryTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#111',
+    margin: 0,
+  },
+  leaveSummaryStats: {
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: '20px',
+    padding: '20px 0',
+    backgroundColor: '#f8fdf7',
+    borderRadius: '8px',
+  },
+  summaryStat: {
+    textAlign: 'center',
+    flex: 1,
+  },
+  summaryStatValue: {
+    fontSize: '32px',
+    fontWeight: '700',
+    color: '#009205',
+    lineHeight: 1,
+  },
+  summaryStatLabel: {
+    fontSize: '12px',
+    color: '#666',
+    marginTop: '4px',
+  },
+  summaryDivider: {
+    width: '1px',
+    height: '40px',
+    backgroundColor: '#e0e0e0',
+  },
+  leaveSummaryCategories: {
+    display: 'flex',
+    gap: '10px',
+    flexWrap: 'wrap',
+    marginBottom: '20px',
+  },
+  categoryBadge: {
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: '500',
+  },
+  viewAllBalancesBtn: {
+    width: '100%',
+    padding: '12px',
+    backgroundColor: '#f0fdf4',
+    color: '#009205',
+    border: '1px solid #bbf7d0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+  },
+
+  // Leave Balances Container
+  leaveBalancesContainer: {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  leaveBalancesHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+  },
+  balancesHeaderIcon: {
+    fontSize: '32px',
+    color: '#009205',
+  },
+  balancesTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#111',
+    margin: 0,
+  },
+  balancesSubtitle: {
+    fontSize: '14px',
+    color: '#666',
+    margin: '4px 0 0 0',
+  },
+
+  // Edit Leave Button
+  editLeaveBtn: {
+    backgroundColor: 'transparent',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    cursor: 'pointer',
+    color: '#64748b',
+    fontSize: '12px',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Balances Summary
+  balancesSummary: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '15px',
+  },
+  summaryCard: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+    border: '1px solid #e6e6e6',
+  },
+  summaryCardIcon: {
+    fontSize: '28px',
+    color: '#009205',
+  },
+  summaryCardValue: {
+    fontSize: '28px',
+    fontWeight: '700',
+    color: '#111',
+    lineHeight: 1,
+  },
+  summaryCardLabel: {
+    fontSize: '12px',
+    color: '#666',
+    marginTop: '4px',
+  },
+
+  // Balances Grid
+  balancesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+    gap: '16px',
+  },
+
+  // Leave Balance Card
+  leaveBalanceCard: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+    border: '1px solid #e6e6e6',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+  },
+  leaveBalanceHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '16px',
+  },
+  leaveBalanceTitle: {
+    fontSize: '16px',
+    fontWeight: '700',
+    margin: 0,
+  },
+  leaveYearBadge: {
+    backgroundColor: '#f1f5f9',
+    color: '#475569',
+    fontSize: '11px',
+    fontWeight: '600',
+    padding: '4px 8px',
+    borderRadius: '12px',
+  },
+  leaveBalanceProgress: {
+    marginBottom: '16px',
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: '8px',
+    backgroundColor: '#f1f5f9',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    marginBottom: '8px',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: '4px',
+    transition: 'width 0.3s ease',
+  },
+  progressStats: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '12px',
+    color: '#666',
+  },
+  usedText: {
+    fontWeight: '500',
+  },
+  percentageText: {
+    fontWeight: '600',
+    color: '#111',
+  },
+  leaveBalanceNumbers: {
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    padding: '12px 0',
+    backgroundColor: '#f8fafc',
+    borderRadius: '8px',
+  },
+  balanceItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  balanceIcon: {
+    fontSize: '16px',
+  },
+  balanceLabel: {
+    fontSize: '11px',
+    color: '#666',
+    marginBottom: '2px',
+  },
+  balanceValue: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#111',
+  },
+  balanceDivider: {
+    width: '1px',
+    height: '30px',
+    backgroundColor: '#e2e8f0',
+  },
+
+  // Edit Leave Modal
+  editModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '24px',
+    width: '500px',
+    maxWidth: '90vw',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+  },
+  editModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  editModalTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#111',
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  closeModalBtn: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    fontSize: '18px',
+    color: '#64748b',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '4px',
+    transition: 'all 0.2s ease',
+  },
+  editModalBody: {
+    marginBottom: '24px',
+  },
+  leaveInfoHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  leaveTypeBadge: {
+    padding: '8px 16px',
+    borderRadius: '20px',
+    fontSize: '14px',
+    fontWeight: '600',
+  },
+  yearBadge: {
+    backgroundColor: '#f1f5f9',
+    color: '#475569',
+    padding: '4px 12px',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: '600',
+  },
+  editInputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  editLabel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#334155',
+  },
+  editInput: {
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    fontSize: '16px',
+    fontWeight: '500',
+    color: '#111',
+    transition: 'all 0.2s ease',
+  },
+  calculationRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    padding: '20px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    marginTop: '8px',
+  },
+  calcItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  calcLabel: {
+    fontSize: '11px',
+    color: '#64748b',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+  },
+  calcValue: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#111',
+  },
+  calcMinus: {
+    fontSize: '24px',
+    color: '#64748b',
+    fontWeight: '300',
+  },
+  calcEquals: {
+    fontSize: '24px',
+    color: '#64748b',
+    fontWeight: '300',
+  },
+  warningMessage: {
+    backgroundColor: '#fef2f2',
+    color: '#dc2626',
+    padding: '12px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '500',
+    display: 'flex',
+    alignItems: 'center',
+    border: '1px solid #fecaca',
+  },
+  editModalFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
+    paddingTop: '20px',
+    borderTop: '1px solid #e2e8f0',
+  },
+  cancelEditBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#f1f5f9',
+    color: '#64748b',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'all 0.2s ease',
+  },
+  saveEditBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#009205',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'all 0.2s ease',
+  },
+  savingSpinner: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderTop: '2px solid #fff',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+  },
+
+  // Leave Legend
+  leaveLegend: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+    border: '1px solid #e6e6e6',
+  },
+  legendTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#111',
+    marginBottom: '12px',
+  },
+  legendItems: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '16px',
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  legendColor: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '3px',
+  },
+  legendText: {
+    fontSize: '12px',
+    color: '#666',
+  },
+
+  // No Leave Balances
+  noLeaveBalances: {
+    textAlign: 'center',
+    padding: '60px 20px',
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+  },
+  noBalancesIcon: {
+    fontSize: '48px',
+    color: '#cbd5e1',
+    marginBottom: '16px',
+  },
+  noBalancesNote: {
+    fontSize: '12px',
+    color: '#94a3b8',
+    marginTop: '12px',
+    maxWidth: '400px',
+    margin: '12px auto 0',
   },
 
   /* LEAVE CARD */
@@ -1304,14 +2352,13 @@ leaveCardTableTd: {
     fontSize: '9px'
   },
 
-  // Enhanced Table
   tableWrapper: {
     backgroundColor: '#fff',
     borderRadius: '8px',
     border: '1px solid #e2e8f0',
-    overflow: 'hidden',
+    overflowX: 'auto',
     boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    flex: 1
+    flex: 1,
   },
   table: {
     width: '100%',
@@ -1423,11 +2470,46 @@ leaveCardTableTd: {
   },
 
   // Modal
-  modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: '#fff', padding: '30px', borderRadius: '10px', width: '400px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' },
-  modalActions: { display: 'flex', justifyContent: 'space-around', marginTop: '20px' },
-  cancelBtn: { padding: '10px 20px', borderRadius: '6px', border: '1px solid #ccc', backgroundColor: '#fff', cursor: 'pointer' },
-  confirmBtn: { padding: '10px 20px', borderRadius: '6px', border: 'none', backgroundColor: '#009205', color: '#fff', cursor: 'pointer' },
+  modalOverlay: { 
+    position: 'fixed', 
+    top: 0, 
+    left: 0, 
+    width: '100%', 
+    height: '100%', 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    zIndex: 1000 
+  },
+  modalContent: { 
+    backgroundColor: '#fff', 
+    padding: '30px', 
+    borderRadius: '10px', 
+    width: '400px', 
+    textAlign: 'center', 
+    boxShadow: '0 2px 10px rgba(0,0,0,0.2)' 
+  },
+  modalActions: { 
+    display: 'flex', 
+    justifyContent: 'space-around', 
+    marginTop: '20px' 
+  },
+  cancelBtn: { 
+    padding: '10px 20px', 
+    borderRadius: '6px', 
+    border: '1px solid #ccc', 
+    backgroundColor: '#fff', 
+    cursor: 'pointer' 
+  },
+  confirmBtn: { 
+    padding: '10px 20px', 
+    borderRadius: '6px', 
+    border: 'none', 
+    backgroundColor: '#009205', 
+    color: '#fff', 
+    cursor: 'pointer' 
+  },
 };
 
 // Add CSS animation for spinner

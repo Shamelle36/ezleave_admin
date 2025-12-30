@@ -33,14 +33,18 @@ import {
   faHistory,
   faTrash,
   faArrowLeft,
-  faPlus
+  faPlus,
+  faCalendarPlus,
+  faCalendarMinus,
+  faFlag
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { useState, useRef } from 'react';
 import './dashboardCalendar.css';
-import './dashboard-responsive.css'; // Import the responsive CSS
+import './dashboard-responsive.css';
 import './App.css';
+import ProfileDropdown from './profileDropdown.js';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 function Dashboard() {
@@ -80,9 +84,10 @@ function Dashboard() {
   const [department, setDepartment] = useState(localStorage.getItem("department") || "");
   const [officeHead, setOfficeHead] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeTable, setActiveTable] = useState('attendance'); // 'attendance' or 'leave'
+  const [activeTable, setActiveTable] = useState('attendance');
   const [hoverInfo, setHoverInfo] = useState(null); 
   const [notifications, setNotifications] = useState([]);
+  const [isMobileView, setIsMobileView] = useState(false);
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -97,6 +102,21 @@ function Dashboard() {
   const [editingDay, setEditingDay] = useState(null);
   const [isLoadingTimeSettings, setIsLoadingTimeSettings] = useState(false);
   const tooltipRef = useRef(null);
+  const [apiHolidays, setApiHolidays] = useState([]);
+  const [isLoadingApiHolidays, setIsLoadingApiHolidays] = useState(false);
+  const [holidayYear, setHolidayYear] = useState(new Date().getFullYear());
+
+  // Add Local Holiday state variables
+  const [showLocalHolidayModal, setShowLocalHolidayModal] = useState(false);
+  const [localHolidays, setLocalHolidays] = useState([]);
+  const [newHoliday, setNewHoliday] = useState({
+    date: '',
+    name: '',
+    description: '',
+    is_recurring: false
+  });
+  const [editingHoliday, setEditingHoliday] = useState(null);
+  const [isLoadingHolidays, setIsLoadingHolidays] = useState(false);
 
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -142,103 +162,214 @@ function Dashboard() {
     "Adoption Leave"
   ];
 
-  const holidays = [
-    { date: "2025-12-25", name: "Christmas Day" },
-    { date: "2025-12-30", name: "Rizal Day" },
-    { date: "2025-01-01", name: "New Year’s Day" }
+  // Update holidays array to include local holidays
+  const nationalHolidays = [
+    { date: "2025-12-25", name: "Christmas Day", type: "national" },
+    { date: "2025-12-30", name: "Rizal Day", type: "national" },
+    { date: "2025-01-01", name: "New Year's Day", type: "national" }
   ];
 
-  // Add this useEffect after your other useEffects
-useEffect(() => {
-  if (showTermsModal) {
-    fetchTermsAndConditions();
+  const holidays = [...apiHolidays, ...localHolidays];
+
+  
+
+  useEffect(() => {
+  // Check if any modal is open
+  const isAnyModalOpen = 
+    showSettingsModal || 
+    showTermsModal || 
+    showTimeSettingsModal || 
+    showLocalHolidayModal || 
+    showProfileModal || 
+    showLogoutModal;
+  
+  if (isAnyModalOpen) {
+    // Store current scroll position
+    const scrollY = window.scrollY;
+    
+    // Prevent scroll
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    
+    // Restore scroll position when modal closes
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      window.scrollTo(0, scrollY);
+    };
   }
-}, [showTermsModal]);
+}, [showSettingsModal, showTermsModal, showTimeSettingsModal, showLocalHolidayModal, showProfileModal, showLogoutModal]);
 
-
-const normalizeFilingDate = (str) => {
-  if (!str) return null;
-
-  // Example: "November 28, 2025"
-  const [monthName, dayComma, year] = str.split(" ");
-  const day = dayComma.replace(",", "");
-
-  const monthIndex = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
-  ].indexOf(monthName);
-
-  if (monthIndex === -1) return null;
-
-  const month = String(monthIndex + 1).padStart(2, "0");
-  const dayStr = String(day).padStart(2, "0");
-
-  return `${year}-${month}-${dayStr}`;
-};
-
-useEffect(() => {
-  const fetchTimeSettings = async () => {
-    setIsLoadingTimeSettings(true);
-    try {
-      const response = await fetch(`${API_URL}/api/attendance/settings/time`);
-      if (response.ok) {
-        const data = await response.json();
-        setAttendanceTimeSettings(data);
-      } else {
-        console.warn('Failed to fetch time settings from server');
-        // Don't set any defaults - let the modal handle empty state
-        setAttendanceTimeSettings({});
-      }
-    } catch (error) {
-      console.error('Error fetching time settings:', error);
-      setAttendanceTimeSettings({});
-    } finally {
-      setIsLoadingTimeSettings(false);
+  // Add this useEffect after your other useEffects
+  useEffect(() => {
+    if (showTermsModal) {
+      fetchTermsAndConditions();
     }
-  };
+  }, [showTermsModal]);
 
-  fetchTimeSettings();
+  useEffect(() => {
+  // Load local holidays when dashboard loads
+  fetchLocalHolidays();
 }, []);
 
-const checkIfLate = (checkinTime, dayOfWeek) => {
-  if (!checkinTime || !attendanceTimeSettings || Object.keys(attendanceTimeSettings).length === 0) return false;
-  
-  const dayMapping = {
-    0: 'sunday',
-    1: 'monday',
-    2: 'tuesday',
-    3: 'wednesday',
-    4: 'thursday',
-    5: 'friday',
-    6: 'saturday'
+  // Add useEffect to load local holidays
+useEffect(() => {
+  if (showLocalHolidayModal) {
+    fetchLocalHolidays();
+  }
+}, [showLocalHolidayModal]);
+
+  const normalizeFilingDate = (str) => {
+    if (!str) return null;
+
+    const [monthName, dayComma, year] = str.split(" ");
+    const day = dayComma.replace(",", "");
+
+    const monthIndex = [
+      "January","February","March","April","May","June",
+      "July","August","September","October","November","December"
+    ].indexOf(monthName);
+
+    if (monthIndex === -1) return null;
+
+    const month = String(monthIndex + 1).padStart(2, "0");
+    const dayStr = String(day).padStart(2, "0");
+
+    return `${year}-${month}-${dayStr}`;
   };
-  
-  const day = dayMapping[dayOfWeek];
-  const settings = attendanceTimeSettings[day];
-  
-  // If no settings or day is inactive, don't mark as late
-  if (!settings || !settings.is_active) return false;
-  
-  const [checkinHour, checkinMinute] = checkinTime.split(':').map(Number);
-  const [startHour, startMinute] = settings.start.split(':').map(Number);
-  
-  const checkinTotal = checkinHour * 60 + checkinMinute;
-  const startTotal = startHour * 60 + startMinute;
-  
-  return checkinTotal > startTotal;
-};
 
+  useEffect(() => {
+    const checkMobile = () => {
+      if (typeof window !== 'undefined') setIsMobileView(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
+  // Prevent body scroll when calendar tooltip is shown as modal on mobile
+  useEffect(() => {
+    if (hoverInfo && hoverInfo.isModal) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [hoverInfo]);
 
-// Helper function to format date in YYYY-MM-DD format using local timezone
-const formatDateLocal = (date) => {
+  useEffect(() => {
+    const fetchTimeSettings = async () => {
+      setIsLoadingTimeSettings(true);
+      try {
+        const response = await fetch(`${API_URL}/api/attendance/settings/time`);
+        if (response.ok) {
+          const data = await response.json();
+          setAttendanceTimeSettings(data);
+        } else {
+          console.warn('Failed to fetch time settings from server');
+          setAttendanceTimeSettings({});
+        }
+      } catch (error) {
+        console.error('Error fetching time settings:', error);
+        setAttendanceTimeSettings({});
+      } finally {
+        setIsLoadingTimeSettings(false);
+      }
+    };
+
+    fetchTimeSettings();
+  }, []);
+
+  // Fetch API holidays when component mounts
+useEffect(() => {
+  const currentYear = new Date().getFullYear();
+  setHolidayYear(currentYear);
+  fetchApiHolidays(currentYear);
+}, []);
+
+// Also fetch holidays when year changes in calendar
+useEffect(() => {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  if (year !== holidayYear) {
+    setHolidayYear(year);
+    fetchApiHolidays(year);
+  }
+}, [date]);
+
+  // Fetch Philippine holidays from free API
+const fetchApiHolidays = async (year) => {
+  setIsLoadingApiHolidays(true);
+  try {
+    // Using Nager.Date API - free, no API key needed
+    const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/PH`);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch holidays: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Format the API data to match our structure
+    const formattedHolidays = data.map(holiday => ({
+      id: `api-${holiday.date}`,
+      date: holiday.date, // Already in YYYY-MM-DD format
+      name: holiday.localName || holiday.name,
+      type: 'national', // All from this API are national holidays
+      description: holiday.types?.join(', ') || 'Public Holiday',
+      isRecurring: true, // Most national holidays recur yearly
+      source: 'api'
+    }));
+    
+    console.log(`Fetched ${formattedHolidays.length} holidays for ${year}`);
+    setApiHolidays(formattedHolidays);
+    
+  } catch (error) {
+    console.error('Error fetching holidays from API:', error);
+    
+    // Fallback to basic Philippine holidays if API fails
+  } finally {
+    setIsLoadingApiHolidays(false);
+  }
 };
 
-const renderTileContent = ({ date, view }) => {
+  const checkIfLate = (checkinTime, dayOfWeek) => {
+    if (!checkinTime || !attendanceTimeSettings || Object.keys(attendanceTimeSettings).length === 0) return false;
+    
+    const dayMapping = {
+      0: 'sunday',
+      1: 'monday',
+      2: 'tuesday',
+      3: 'wednesday',
+      4: 'thursday',
+      5: 'friday',
+      6: 'saturday'
+    };
+    
+    const day = dayMapping[dayOfWeek];
+    const settings = attendanceTimeSettings[day];
+    
+    if (!settings || !settings.is_active) return false;
+    
+    const [checkinHour, checkinMinute] = checkinTime.split(':').map(Number);
+    const [startHour, startMinute] = settings.start.split(':').map(Number);
+    
+    const checkinTotal = checkinHour * 60 + checkinMinute;
+    const startTotal = startHour * 60 + startMinute;
+    
+    return checkinTotal > startTotal;
+  };
+
+  const formatDateLocal = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+ const renderTileContent = ({ date, view }) => {
   if (view !== "month") return null;
 
   const dateStr = formatDateLocal(date);
@@ -254,9 +385,27 @@ const renderTileContent = ({ date, view }) => {
           className="tile-hover-trigger"
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const tooltipHeight = 400; // Estimated tooltip height
+            const tooltipWidth = 300;
+            
+            // Calculate position to prevent overflow
+            let top = rect.top + window.scrollY;
+            let left = rect.left + window.scrollX;
+            
+            // Adjust if tooltip would overflow bottom of viewport
+            if (top + tooltipHeight > window.scrollY + viewportHeight - 20) {
+              top = Math.max(10, window.scrollY + viewportHeight - tooltipHeight - 20);
+            }
+            
+            // Adjust if tooltip would overflow right of viewport
+            if (left + tooltipWidth > window.scrollX + window.innerWidth - 20) {
+              left = Math.max(10, window.scrollX + window.innerWidth - tooltipWidth - 20);
+            }
+            
             setHoverInfo({
-              x: rect.left + window.scrollX,
-              y: rect.top + window.scrollY,
+              x: left,
+              y: top,
               date: dateStr,
               leaves: leavesOnThisDay,
               holiday,
@@ -264,10 +413,31 @@ const renderTileContent = ({ date, view }) => {
               scrollY: window.scrollY
             });
           }}
+          onClick={(e) => {
+            if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const viewportHeight = window.innerHeight;
+              const tooltipHeight = 400;
+              
+              let top = rect.top + window.scrollY;
+              if (top + tooltipHeight > window.scrollY + viewportHeight - 20) {
+                top = Math.max(10, window.scrollY + viewportHeight - tooltipHeight - 20);
+              }
+              
+              setHoverInfo({
+                x: rect.left + window.scrollX,
+                y: top,
+                date: dateStr,
+                leaves: leavesOnThisDay,
+                holiday,
+                scrollX: window.scrollX,
+                scrollY: window.scrollY,
+                isModal: true
+              });
+            }
+          }}
           onMouseLeave={(e) => {
-            // Don't immediately close - let the tooltip handle its own mouse leave
             setTimeout(() => {
-              // Check if mouse is still over tooltip
               const tooltip = document.querySelector('.calendar-tooltip');
               if (!tooltip || !tooltip.matches(':hover')) {
                 setHoverInfo(null);
@@ -285,16 +455,16 @@ const renderTileContent = ({ date, view }) => {
           }}
         />
         
-        {/* Visual indicators */}
         {holiday && (
           <FontAwesomeIcon 
-            icon={faStar} 
+            icon={holiday.source === 'api' ? faFlag : faStar} 
             style={{
               position: 'absolute',
               top: '2px',
               right: '2px',
               fontSize: '10px',
-              color: '#ff6b6b',
+              color: holiday.source === 'api' ? '#dc3545' : 
+                     holiday.type === 'local' ? '#ff8c00' : '#ff6b6b',
               filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))'
             }} 
           />
@@ -320,21 +490,21 @@ const renderTileContent = ({ date, view }) => {
   return null;
 };
 
-const tileClassName = ({ date, view }) => {
-  if (view !== "month") return "";
+  const tileClassName = ({ date, view }) => {
+    if (view !== "month") return "";
 
-  const dateStr = formatDateLocal(date);
-  
-  const isHoliday = holidays.some(h => h.date === dateStr);
-  const hasLeave = leaveRequests.some(
-    leave => normalizeFilingDate(leave.date_filing) === dateStr
-  );
+    const dateStr = formatDateLocal(date);
+    
+    const isHoliday = holidays.some(h => h.date === dateStr);
+    const hasLeave = leaveRequests.some(
+      leave => normalizeFilingDate(leave.date_filing) === dateStr
+    );
 
-  if (isHoliday) return "holiday-highlight";
-  if (hasLeave) return "leave-highlight";
+    if (isHoliday) return "holiday-highlight";
+    if (hasLeave) return "leave-highlight";
 
-  return "";
-};
+    return "";
+  };
 
   const handleSelect = (option) => {
     setSelected(option);
@@ -344,7 +514,104 @@ const tileClassName = ({ date, view }) => {
   const API_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "http://10.242.224.105:5000";
+    : "http://10.115.128.197:5000";
+
+const fetchLocalHolidays = async () => {
+  setIsLoadingHolidays(true);
+  try {
+    const response = await fetch(`${API_URL}/api/holidays/local`);
+    if (response.ok) {
+      const data = await response.json();
+      // Ensure the date is in YYYY-MM-DD format and add type property
+      const holidaysWithType = data.map(holiday => ({
+        ...holiday,
+        date: holiday.date.split('T')[0], // Remove time portion if present
+        type: 'local'
+      }));
+      setLocalHolidays(holidaysWithType);
+    } else {
+      console.warn('Failed to fetch local holidays');
+      setLocalHolidays([]);
+    }
+  } catch (error) {
+    console.error('Error fetching local holidays:', error);
+      setLocalHolidays([]);
+  } finally {
+    setIsLoadingHolidays(false);
+  }
+};
+
+  // Add holiday functions
+  const saveHoliday = async () => {
+  if (!newHoliday.date || !newHoliday.name.trim()) {
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  try {
+    const url = editingHoliday 
+      ? `${API_URL}/api/holidays/local/${editingHoliday.id}`
+      : `${API_URL}/api/holidays/local`;
+    
+    const method = editingHoliday ? 'PUT' : 'POST';
+    
+    const holidayData = {
+      ...newHoliday,
+      type: 'local' // Add type property
+    };
+    
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(holidayData)
+    });
+
+    if (response.ok) {
+      alert(editingHoliday ? 'Holiday updated successfully!' : 'Holiday added successfully!');
+      fetchLocalHolidays();
+      setNewHoliday({ date: '', name: '', description: '', is_recurring: false });
+      setEditingHoliday(null);
+    } else {
+      const errorData = await response.json();
+      alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
+    }
+  } catch (error) {
+    console.error('Error saving holiday:', error);
+    alert('Error saving holiday. Check console.');
+  }
+};
+
+  const deleteHoliday = async (id) => {
+    if (window.confirm('Are you sure you want to delete this holiday?')) {
+      try {
+        const response = await fetch(`${API_URL}/api/holidays/local/${id}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          alert('Holiday deleted successfully!');
+          fetchLocalHolidays();
+        } else {
+          alert('Failed to delete holiday');
+        }
+      } catch (error) {
+        console.error('Error deleting holiday:', error);
+        alert('Error deleting holiday');
+      }
+    }
+  };
+
+  const editHoliday = (holiday) => {
+    setEditingHoliday(holiday);
+    setNewHoliday({
+      date: holiday.date,
+      name: holiday.name,
+      description: holiday.description || '',
+      is_recurring: holiday.is_recurring || false
+    });
+  };
 
   // Fetch attendance statistics
   useEffect(() => {
@@ -359,11 +626,9 @@ const tileClassName = ({ date, view }) => {
 
       const data = await response.json();
       
-      // Get day of week for today
       const todayDate = new Date();
-      const dayOfWeek = todayDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const dayOfWeek = todayDate.getDay();
 
-      // Calculate stats from attendance data with late checking
       let present = 0;
       let absent = 0;
       let late = 0;
@@ -374,11 +639,9 @@ const tileClassName = ({ date, view }) => {
         if (hasAttendance) {
           present++;
           
-          // Check if late in the morning
           if (log.am_checkin && checkIfLate(log.am_checkin, dayOfWeek)) {
             late++;
           }
-          // Check if late in the afternoon (if no AM checkin but has PM checkin)
           else if (!log.am_checkin && log.pm_checkin && checkIfLate(log.pm_checkin, dayOfWeek)) {
             late++;
           }
@@ -450,13 +713,11 @@ const tileClassName = ({ date, view }) => {
  useEffect(() => {
   const fetchAllData = async () => {
     try {
-      // Fetch leave requests (which contain notifications)
       const leaveRes = await fetch(`${API_URL}/api/leave-requests`);
       const leaveData = await leaveRes.json();
       
-      // Extract notifications from leave requests
       const extractedNotifications = leaveData
-        .filter(item => item.notification) // Only items with notifications
+        .filter(item => item.notification)
         .map(item => ({
           id: item.notification.id || `notif-${item.id}`,
           type: item.notification.type || "leave_filed",
@@ -468,7 +729,7 @@ const tileClassName = ({ date, view }) => {
           leaveType: item.leave_type,
           status: item.status
         }))
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by date
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
       console.log("Extracted notifications:", extractedNotifications);
       setNotifications(extractedNotifications);
@@ -523,52 +784,39 @@ const tileClassName = ({ date, view }) => {
     return () => clearInterval(interval);
   }, []);
 
-  const cardsData = [
-    {
-      title: 'Total Employees',
-      description: '5% increase more than last month',
-      value: employeeCount,
-      background: styles.card, 
-      paddingTop: '5px',
-    },
-    {
-      title: 'Pending Leave Requests',
-      description: '3% less than last month',
-      value: leaveCounts.pending,
-      background: styles.card,
-      paddingTop: '20px',
-    },
-    {
-      title: 'Approved Leave Requests',
-      description: '5% less than last month',
-      value: leaveCounts.approved,
-      background: styles.card,
-      paddingTop: '20px',
-    },
-    {
-      title: 'Present Employees',
-      description: '2% increase more than last month',
-      value: attendanceStats.present,
-      background: styles.card1,
-      paddingTop: '5px',
-    },
-    {
-      title: 'Absent Employees',
-      description: '2% less than last month',
-      value: attendanceStats.absent,
-      background: styles.card2,
-      paddingTop: '20px',
-    },
-    {
-      title: 'Late Employees',
-      description: '2% less than last month',
-      value: attendanceStats.late,
-      background: styles.card3,
-      paddingTop: '20px',
-    },
-  ];
+ const cardsData = [
+  {
+    title: 'Total Employees',
+    value: employeeCount,
+    background: styles.card, 
+  },
+  {
+    title: 'Pending Leave Requests',
+    value: leaveCounts.pending,
+    background: styles.card,
+  },
+  {
+    title: 'Approved Leave Requests',
+    value: leaveCounts.approved,
+    background: styles.card,
+  },
+  {
+    title: 'Present Employees',
+    value: attendanceStats.present,
+    background: styles.card1,
+  },
+  {
+    title: 'Absent Employees',
+    value: attendanceStats.absent,
+    background: styles.card2,
+  },
+  {
+    title: 'Late Employees',
+    value: attendanceStats.late,
+    background: styles.card3,
+  },
+];
 
-  // FIXED: getNotificationStyle function with all notification types
   const getNotificationStyle = (type) => {
     console.log("Getting style for notification type:", type);
     
@@ -669,22 +917,6 @@ const tileClassName = ({ date, view }) => {
     navigate("/");
   };
 
-  useEffect(() => {
-    const fetchAdmin = async () => {
-      const storedAdmin = JSON.parse(localStorage.getItem("admin"));
-      if (!storedAdmin?.id) return;
-
-      try {
-        const res = await fetch(`${API_URL}/api/auth/useradmin/${storedAdmin.id}`);
-        const data = await res.json();
-        setAdmin(data);
-      } catch (err) {
-        console.error("Error fetching admin data:", err);
-      }
-    };
-
-    fetchAdmin();
-  }, []);
 
   useEffect(() => {
     const fetchInitialProfile = async () => {
@@ -743,128 +975,114 @@ const tileClassName = ({ date, view }) => {
     fetchProfileData();
   }, [showProfileModal]);
   
-  // Add these functions after handleLogout (around line 400)
-
-// Replace the existing fetchTermsAndConditions function with this:
-const fetchTermsAndConditions = async () => {
-  try {
-    // Fetch active terms
-    const response = await fetch(`${API_URL}/api/terms/active`);
-    const data = await response.json();
-    
-    // Check if response is valid
-    if (data && data.content) {
-      setTermsContent(data.content);
-      setActiveTermsVersion(data);
-    } else {
+  const fetchTermsAndConditions = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/terms/active`);
+      const data = await response.json();
+      
+      if (data && data.content) {
+        setTermsContent(data.content);
+        setActiveTermsVersion(data);
+      } else {
+        setTermsContent('');
+        setActiveTermsVersion(null);
+      }
+      
+      try {
+        const versionsRes = await fetch(`${API_URL}/api/terms`);
+        const versionsData = await versionsRes.json();
+        
+        if (Array.isArray(versionsData)) {
+          setTermsVersions(versionsData);
+        } else if (versionsData && Array.isArray(versionsData.data)) {
+          setTermsVersions(versionsData.data);
+        } else if (versionsData && versionsData.versions) {
+          setTermsVersions(versionsData.versions);
+        } else {
+          setTermsVersions([]);
+          console.warn('API returned non-array data:', versionsData);
+        }
+      } catch (versionsError) {
+        console.error('Error fetching versions:', versionsError);
+        setTermsVersions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching active terms:', error);
       setTermsContent('');
       setActiveTermsVersion(null);
-    }
-    
-    // Fetch all versions - handle potential errors
-    try {
-      const versionsRes = await fetch(`${API_URL}/api/terms`);
-      const versionsData = await versionsRes.json();
-      
-      // Ensure versionsData is an array
-      if (Array.isArray(versionsData)) {
-        setTermsVersions(versionsData);
-      } else if (versionsData && Array.isArray(versionsData.data)) {
-        // Some APIs wrap arrays in a data property
-        setTermsVersions(versionsData.data);
-      } else if (versionsData && versionsData.versions) {
-        // Some APIs use a versions property
-        setTermsVersions(versionsData.versions);
-      } else {
-        // Default to empty array
-        setTermsVersions([]);
-        console.warn('API returned non-array data:', versionsData);
-      }
-    } catch (versionsError) {
-      console.error('Error fetching versions:', versionsError);
       setTermsVersions([]);
     }
-  } catch (error) {
-    console.error('Error fetching active terms:', error);
-    setTermsContent('');
-    setActiveTermsVersion(null);
-    setTermsVersions([]);
-  }
-};
+  };
 
-// Update the saveTermsAndConditions function:
-const saveTermsAndConditions = async () => {
-  if (!termsContent.trim()) {
-    alert('Please enter Terms & Conditions content');
-    return;
-  }
-
-  // Safely calculate next version number
-  const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
-  const version = newTermsVersion || `v${versionCount + 1}.0`;
-  
-  try {
-    const response = await fetch(`${API_URL}/api/terms`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        version,
-        content: termsContent
-      })
-    });
-
-    if (response.ok) {
-      alert('Terms & Conditions saved successfully!');
-      setIsEditingTerms(false);
-      fetchTermsAndConditions();
-      setNewTermsVersion('');
-    } else {
-      const errorData = await response.json();
-      alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
+  const saveTermsAndConditions = async () => {
+    if (!termsContent.trim()) {
+      alert('Please enter Terms & Conditions content');
+      return;
     }
-  } catch (error) {
-    console.error('Error saving terms:', error);
-    alert('Error saving Terms & Conditions. Check console.');
-  }
-};
 
-// Activate a version
-const activateTermsVersion = async (id) => {
-  try {
-    const response = await fetch(`${API_URL}/api/terms/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ is_active: true })
-    });
+    const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
+    const version = newTermsVersion || `v${versionCount + 1}.0`;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/terms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          version,
+          content: termsContent
+        })
+      });
 
-    if (response.ok) {
-      fetchTermsAndConditions();
+      if (response.ok) {
+        alert('Terms & Conditions saved successfully!');
+        setIsEditingTerms(false);
+        fetchTermsAndConditions();
+        setNewTermsVersion('');
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error saving terms:', error);
+      alert('Error saving Terms & Conditions. Check console.');
     }
-  } catch (error) {
-    console.error('Error activating version:', error);
-  }
-};
+  };
 
-// Delete a version
-const deleteTermsVersion = async (id) => {
-  if (window.confirm('Are you sure you want to delete this version?')) {
+  const activateTermsVersion = async (id) => {
     try {
       const response = await fetch(`${API_URL}/api/terms/${id}`, {
-        method: 'DELETE'
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_active: true })
       });
 
       if (response.ok) {
         fetchTermsAndConditions();
       }
     } catch (error) {
-      console.error('Error deleting version:', error);
+      console.error('Error activating version:', error);
     }
-  }
-};
+  };
+
+  const deleteTermsVersion = async (id) => {
+    if (window.confirm('Are you sure you want to delete this version?')) {
+      try {
+        const response = await fetch(`${API_URL}/api/terms/${id}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          fetchTermsAndConditions();
+        }
+      } catch (error) {
+        console.error('Error deleting version:', error);
+      }
+    }
+  };
 
   return (
     <div style={styles.dashboardContainer}>
@@ -878,18 +1096,15 @@ const deleteTermsVersion = async (id) => {
         </button>
         <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
         <div className="mobile-header-right">
-          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
-          <div className="mobile-profile" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-            <img
-              src={
-                admin?.profile_picture ||
-                profileData?.profile_picture ||
-                "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
-              }
-              alt="Profile"
-              className="mobile-profile-image"
-            />
-          </div>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={true}
+          />
         </div>
       </div>
 
@@ -917,602 +1132,666 @@ const deleteTermsVersion = async (id) => {
       )}
 
       {/* Settings Modal */}
-{showSettingsModal && (
-  <div style={styles.modalOverlay}>
-    <div style={styles.settingsModalContent}>
-      <div style={styles.settingsModalHeader}>
-        <h2 style={styles.settingsModalTitle}>
-          <FontAwesomeIcon icon={faCog} /> Settings
-        </h2>
-        <button 
-          style={styles.closeButton}
-          onClick={() => setShowSettingsModal(false)}
-        >
-          <FontAwesomeIcon icon={faTimes} />
-        </button>
-      </div>
-
-      <div style={styles.settingsSections}>
-        <button 
-          style={styles.settingsSectionButton}
-          onClick={() => {
-            setShowSettingsModal(false);
-            setShowTermsModal(true);
-          }}
-        >
-          <FontAwesomeIcon icon={faFileContract} style={{marginRight: '10px'}} />
-          Terms & Conditions Management
-        </button>
-
-        <button 
-          style={styles.settingsSectionButton}
-          onClick={() => {
-            setShowSettingsModal(false);
-            setShowTimeSettingsModal(true);
-          }}
-        >
-          <FontAwesomeIcon icon={faClock} style={{marginRight: '10px'}} />
-          Attendance Time Settings
-        </button>
-        
-        <button style={styles.settingsSectionButton}>
-          <FontAwesomeIcon icon={faBell} style={{marginRight: '10px'}} />
-          Notification Settings
-        </button>
-        
-        <button style={styles.settingsSectionButton}>
-          <FontAwesomeIcon icon={faUserShield} style={{marginRight: '10px'}} />
-          Privacy & Security
-        </button>
-        
-        <button style={styles.settingsSectionButton}>
-          <FontAwesomeIcon icon={faUsers} style={{marginRight: '10px'}} />
-          User Permissions
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-{/* Terms & Conditions Modal */}
-{showTermsModal && (
-  <div style={styles.modalOverlay}>
-    <div style={styles.termsModalContent}>
-      <div style={styles.termsModalHeader}>
-        <h2 style={styles.termsModalTitle}>
-          <FontAwesomeIcon icon={faFileContract} /> Terms & Conditions
-        </h2>
-        <button 
-          style={styles.closeButton}
-          onClick={() => {
-            setShowTermsModal(false);
-            setIsEditingTerms(false);
-          }}
-        >
-          <FontAwesomeIcon icon={faTimes} />
-        </button>
-      </div>
-
-      {/* Active Version Info */}
-      <div style={styles.activeTermsCard}>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <h4>Active Version</h4>
-          {activeTermsVersion && (
-            <span style={styles.activeBadge}>ACTIVE</span>
-          )}
-        </div>
-        {activeTermsVersion ? (
-          <div>
-            <p><strong>Version:</strong> {activeTermsVersion.version}</p>
-            <p><strong>Created:</strong> {new Date(activeTermsVersion.created_at).toLocaleDateString()}</p>
-          </div>
-        ) : (
-          <p>No active terms found</p>
-        )}
-      </div>
-
-      {/* Terms Content */}
-      <div style={styles.termsContentSection}>
-        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
-          <h4>Terms & Conditions Content</h4>
-          {!isEditingTerms ? (
-            <button 
-              style={styles.editButton}
-              onClick={() => setIsEditingTerms(true)}
-            >
-              <FontAwesomeIcon icon={faEdit} /> Edit
-            </button>
-          ) : (
-            <div style={{display: 'flex', gap: '10px'}}>
+      {showSettingsModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.settingsModalContent}>
+            <div style={styles.settingsModalHeader}>
+              <h2 style={styles.settingsModalTitle}>
+                <FontAwesomeIcon icon={faCog} /> Settings
+              </h2>
               <button 
-                style={styles.saveButton}
-                onClick={saveTermsAndConditions}
+                style={styles.closeButton}
+                onClick={() => setShowSettingsModal(false)}
               >
-                <FontAwesomeIcon icon={faSave} /> Save
-              </button>
-              <button 
-                style={styles.cancelButton}
-                onClick={() => setIsEditingTerms(false)}
-              >
-                <FontAwesomeIcon icon={faTimes} /> Cancel
+                <FontAwesomeIcon icon={faTimes} />
               </button>
             </div>
-          )}
+
+            <div style={styles.settingsSections}>
+              <button 
+                style={styles.settingsSectionButton}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowTermsModal(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faFileContract} style={{marginRight: '10px'}} />
+                Terms & Conditions Management
+              </button>
+
+              <button 
+                style={styles.settingsSectionButton}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowTimeSettingsModal(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faClock} style={{marginRight: '10px'}} />
+                Attendance Time Settings
+              </button>
+              
+              {/* Local Holiday Settings Button */}
+              <button 
+                style={styles.settingsSectionButton}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowLocalHolidayModal(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faCalendarDay} style={{marginRight: '10px'}} />
+                Local Holiday Settings
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-        {isEditingTerms && (
-          <div style={{marginBottom: '15px'}}>
-            <input
-              type="text"
-              placeholder="Version (e.g., v2.0)"
-              value={newTermsVersion}
-              onChange={(e) => setNewTermsVersion(e.target.value)}
-              style={styles.versionInput}
-            />
-          </div>
-        )}
+      {/* Terms & Conditions Modal */}
+      {showTermsModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.termsModalContent}>
+            <div style={styles.termsModalHeader}>
+              <h2 style={styles.termsModalTitle}>
+                <FontAwesomeIcon icon={faFileContract} /> Terms & Conditions
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => {
+                  setShowTermsModal(false);
+                  setIsEditingTerms(false);
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
 
-        {isEditingTerms ? (
-          <textarea
-            value={termsContent}
-            onChange={(e) => setTermsContent(e.target.value)}
-            style={styles.termsTextarea}
-            rows={15}
-            placeholder="Enter Terms & Conditions content here..."
-          />
-        ) : (
-          <div style={styles.termsViewer}>
-            {termsContent || 'No Terms & Conditions content available.'}
-          </div>
-        )}
-      </div>
-
-      {/* Version History */}
-      <div style={styles.versionHistory}>
-        <h4><FontAwesomeIcon icon={faHistory} /> Version History</h4>
-        <div style={{maxHeight: '200px', overflowY: 'auto'}}>
-          {termsVersions.map(version => (
-            <div 
-              key={version.id} 
-              style={{
-                ...styles.versionItem,
-                borderLeft: version.is_active ? '4px solid #009205' : '4px solid #ccc'
-              }}
-            >
-              <div style={{flex: 1}}>
-                <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                  <strong>Version {version.version}</strong>
-                  {version.is_active && <span style={styles.activeBadge}>ACTIVE</span>}
-                </div>
-                <p style={{fontSize: '12px', color: '#666', margin: '5px 0'}}>
-                  Created: {new Date(version.created_at).toLocaleDateString()}
-                </p>
+            <div style={styles.activeTermsCard}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <h4>Active Version</h4>
+                {activeTermsVersion && (
+                  <span style={styles.activeBadge}>ACTIVE</span>
+                )}
               </div>
-              <div style={{display: 'flex', gap: '5px'}}>
-                {!version.is_active && (
-                  <>
+              {activeTermsVersion ? (
+                <div>
+                  <p><strong>Version:</strong> {activeTermsVersion.version}</p>
+                  <p><strong>Created:</strong> {new Date(activeTermsVersion.created_at).toLocaleDateString()}</p>
+                </div>
+              ) : (
+                <p>No active terms found</p>
+              )}
+            </div>
+
+            <div style={styles.termsContentSection}>
+              <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
+                <h4>Terms & Conditions Content</h4>
+                {!isEditingTerms ? (
+                  <button 
+                    style={styles.editButton}
+                    onClick={() => setIsEditingTerms(true)}
+                  >
+                    <FontAwesomeIcon icon={faEdit} /> Edit
+                  </button>
+                ) : (
+                  <div style={{display: 'flex', gap: '10px'}}>
                     <button 
-                      style={styles.smallButton}
-                      onClick={() => activateTermsVersion(version.id)}
+                      style={styles.saveButton}
+                      onClick={saveTermsAndConditions}
                     >
-                      Activate
+                      <FontAwesomeIcon icon={faSave} /> Save
                     </button>
                     <button 
-                      style={{...styles.smallButton, background: '#dc3545'}}
-                      onClick={() => deleteTermsVersion(version.id)}
+                      style={styles.cancelButton}
+                      onClick={() => setIsEditingTerms(false)}
                     >
-                      <FontAwesomeIcon icon={faTrash} />
+                      <FontAwesomeIcon icon={faTimes} /> Cancel
                     </button>
-                  </>
+                  </div>
+                )}
+              </div>
+
+              {isEditingTerms && (
+                <div style={{marginBottom: '15px'}}>
+                  <input
+                    type="text"
+                    placeholder="Version (e.g., v2.0)"
+                    value={newTermsVersion}
+                    onChange={(e) => setNewTermsVersion(e.target.value)}
+                    style={styles.versionInput}
+                  />
+                </div>
+              )}
+
+              {isEditingTerms ? (
+                <textarea
+                  value={termsContent}
+                  onChange={(e) => setTermsContent(e.target.value)}
+                  style={styles.termsTextarea}
+                  rows={15}
+                  placeholder="Enter Terms & Conditions content here..."
+                />
+              ) : (
+                <div style={styles.termsViewer}>
+                  {termsContent || 'No Terms & Conditions content available.'}
+                </div>
+              )}
+            </div>
+
+            <div style={styles.versionHistory}>
+              <h4><FontAwesomeIcon icon={faHistory} /> Version History</h4>
+              <div style={{maxHeight: '200px', overflowY: 'auto'}}>
+                {termsVersions.map(version => (
+                  <div 
+                    key={version.id} 
+                    style={styles.versionItem}
+                  >
+                    <div style={{flex: 1}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <strong>Version {version.version}</strong>
+                        {version.is_active && <span style={styles.activeBadge}>ACTIVE</span>}
+                      </div>
+                      <p style={{fontSize: '12px', color: '#666', margin: '5px 0'}}>
+                        Created: {new Date(version.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div style={{display: 'flex', gap: '5px'}}>
+                      {!version.is_active && (
+                        <>
+                          <button 
+                            style={styles.smallButton}
+                            onClick={() => activateTermsVersion(version.id)}
+                          >
+                            Activate
+                          </button>
+                          <button 
+                            style={{...styles.smallButton, background: '#dc3545'}}
+                            onClick={() => deleteTermsVersion(version.id)}
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Settings Modal */}
+      {showTimeSettingsModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.timeSettingsModalContent}>
+            <div style={styles.timeSettingsModalHeader}>
+              <h2 style={styles.timeSettingsModalTitle}>
+                <FontAwesomeIcon icon={faClock} /> Attendance Time Settings
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => {
+                  setShowTimeSettingsModal(false);
+                  setEditingDay(null);
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            <div style={styles.timeSettingsContent}>
+              <p style={styles.timeSettingsDescription}>
+                Set the official working hours for each day of the week. 
+                Employees checking in after the start time will be marked as late.
+              </p>
+
+              {isLoadingTimeSettings ? (
+                <div style={styles.loadingContainer}>
+                  <p>Loading time settings...</p>
+                </div>
+              ) : (
+                <>
+                  <div style={styles.timeSettingsGrid}>
+                    {[
+                      { key: 'monday', label: 'Monday' },
+                      { key: 'tuesday', label: 'Tuesday' },
+                      { key: 'wednesday', label: 'Wednesday' },
+                      { key: 'thursday', label: 'Thursday' },
+                      { key: 'friday', label: 'Friday' },
+                      { key: 'saturday', label: 'Saturday' },
+                      { key: 'sunday', label: 'Sunday' }
+                    ].map(({ key, label }) => {
+                      const config = attendanceTimeSettings[key] || {};
+                      const isActive = config.is_active !== undefined ? config.is_active : true;
+                      const startTime = config.start || '';
+                      const endTime = config.end || '';
+                      const isTimeSet = startTime && endTime;
+                      
+                      return (
+                        <div key={key} style={{
+                          ...styles.timeSettingCard,
+                          opacity: isActive ? 1 : 0.7,
+                          borderColor: isActive ? '#e9ecef' : '#ccc'
+                        }}>
+                          <div style={styles.timeSettingHeader}>
+                            <div>
+                              <h4 style={styles.dayName}>
+                                {label}
+                              </h4>
+                              {!isActive && (
+                                <span style={styles.inactiveBadge}>INACTIVE</span>
+                              )}
+                            </div>
+                            {editingDay === key ? (
+                              <button 
+                                style={styles.saveTimeButton}
+                                onClick={() => setEditingDay(null)}
+                              >
+                                Done
+                              </button>
+                            ) : (
+                              <button 
+                                style={styles.editTimeButton}
+                                onClick={() => setEditingDay(key)}
+                                disabled={!isActive}
+                              >
+                                {isTimeSet ? 'Edit' : 'Add'}
+                              </button>
+                            )}
+                          </div>
+                          
+                          {editingDay === key ? (
+                            <div style={styles.timeInputs}>
+                              <div style={styles.timeInputGroup}>
+                                <label style={styles.timeLabel}>Start Time</label>
+                                <input
+                                  type="time"
+                                  value={startTime}
+                                  onChange={(e) => {
+                                    setAttendanceTimeSettings(prev => ({
+                                      ...prev,
+                                      [key]: { 
+                                        ...prev[key], 
+                                        start: e.target.value,
+                                        end: endTime || '17:00',
+                                        is_active: true
+                                      }
+                                    }));
+                                  }}
+                                  style={styles.timeInput}
+                                />
+                              </div>
+                              <div style={styles.timeInputGroup}>
+                                <label style={styles.timeLabel}>End Time</label>
+                                <input
+                                  type="time"
+                                  value={endTime}
+                                  onChange={(e) => {
+                                    setAttendanceTimeSettings(prev => ({
+                                      ...prev,
+                                      [key]: { 
+                                        ...prev[key], 
+                                        end: e.target.value,
+                                        start: startTime || '08:00',
+                                        is_active: true
+                                      }
+                                    }));
+                                  }}
+                                  style={styles.timeInput}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={styles.timeDisplay}>
+                              {isTimeSet ? (
+                                <>
+                                  <div style={styles.timeSlot}>
+                                    <FontAwesomeIcon icon={faArrowRight} style={styles.timeIcon} />
+                                    <span style={styles.timeText}>Start: {startTime}</span>
+                                  </div>
+                                  <div style={styles.timeSlot}>
+                                    <FontAwesomeIcon icon={faArrowLeft} style={styles.timeIcon} />
+                                    <span style={styles.timeText}>End: {endTime}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div style={styles.noTimeSet}>
+                                  <FontAwesomeIcon icon={faClock} style={styles.noTimeIcon} />
+                                  <span style={styles.noTimeText}>Time not set</span>
+                                  <button 
+                                    style={styles.addTimeButton}
+                                    onClick={() => setEditingDay(key)}
+                                  >
+                                    <FontAwesomeIcon icon={faPlus} /> Add Time
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={styles.timeSettingsActions}>
+                    <button 
+                      style={styles.saveAllButton}
+                      onClick={async () => {
+                        try {
+                          const settingsToSave = {};
+                          const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                          
+                          days.forEach(day => {
+                            const config = attendanceTimeSettings[day] || {};
+                            if (config.start && config.end) {
+                              settingsToSave[day] = {
+                                start: config.start,
+                                end: config.end,
+                                is_active: config.is_active !== false
+                              };
+                            }
+                          });
+                          
+                          if (Object.keys(settingsToSave).length === 0) {
+                            alert('Please add at least one time setting');
+                            return;
+                          }
+                          
+                          console.log('Saving settings:', settingsToSave);
+                          
+                          const response = await fetch(`${API_URL}/api/attendance/settings/time`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(settingsToSave)
+                          });
+
+                          if (response.ok) {
+                            alert('Attendance time settings saved successfully!');
+                            setShowTimeSettingsModal(false);
+                            setEditingDay(null);
+                            
+                            const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
+                            if (refreshResponse.ok) {
+                              const data = await refreshResponse.json();
+                              setAttendanceTimeSettings(data);
+                            }
+                          } else {
+                            const errorData = await response.json();
+                            alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
+                          }
+                        } catch (error) {
+                          console.error('Error saving time settings:', error);
+                          alert('Error saving settings. Check console.');
+                        }
+                      }}
+                    >
+                      Save All Settings
+                    </button>
+                    <button 
+                      style={styles.resetButton}
+                      onClick={async () => {
+                        if (window.confirm('Are you sure you want to reset all time settings to default?')) {
+                          try {
+                            const response = await fetch(`${API_URL}/api/attendance/settings/time/reset`, {
+                              method: 'POST'
+                            });
+
+                            if (response.ok) {
+                              alert('Settings reset to default successfully!');
+                              const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
+                              if (refreshResponse.ok) {
+                                const data = await refreshResponse.json();
+                                setAttendanceTimeSettings(data);
+                              }
+                            } else {
+                              alert('Failed to reset settings');
+                            }
+                          } catch (error) {
+                            console.error('Error resetting settings:', error);
+                            alert('Error resetting settings');
+                          }
+                        }
+                      }}
+                    >
+                       Reset to Default
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Local Holiday Modal */}
+      {showLocalHolidayModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.localHolidayModalContent}>
+            <div style={styles.localHolidayModalHeader}>
+              <h2 style={styles.localHolidayModalTitle}>
+                <FontAwesomeIcon icon={faCalendarDay} /> Local Holiday Settings
+              </h2>
+              <button 
+                style={styles.closeButton}
+                onClick={() => {
+                  setShowLocalHolidayModal(false);
+                  setEditingHoliday(null);
+                  setNewHoliday({ date: '', name: '', description: '', is_recurring: false });
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            <div style={styles.localHolidayContent}>
+              {/* Add/Edit Holiday Form */}
+              <div style={styles.holidayFormSection}>
+                <h4 style={styles.sectionTitle}>
+                  {editingHoliday ? 'Edit Local Holiday' : 'Add Local Holiday'}
+                </h4>
+                
+                <div style={styles.holidayForm}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Holiday Date</label>
+                    <input
+                      type="date"
+                      value={newHoliday.date}
+                      onChange={(e) => setNewHoliday({...newHoliday, date: e.target.value})}
+                      style={styles.dateInput}
+                    />
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Holiday Name</label>
+                    <input
+                      type="text"
+                      value={newHoliday.name}
+                      onChange={(e) => setNewHoliday({...newHoliday, name: e.target.value})}
+                      style={styles.textInput}
+                      placeholder="e.g., Local Foundation Day"
+                    />
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Description (Optional)</label>
+                    <textarea
+                      value={newHoliday.description}
+                      onChange={(e) => setNewHoliday({...newHoliday, description: e.target.value})}
+                      style={styles.textareaInput}
+                      placeholder="Brief description of the holiday"
+                      rows={3}
+                    />
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={styles.checkboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={newHoliday.is_recurring}
+                        onChange={(e) => setNewHoliday({...newHoliday, is_recurring: e.target.checked})}
+                        style={styles.checkboxInput}
+                      />
+                      Recurring Holiday (Repeat every year)
+                    </label>
+                  </div>
+                  
+                  <div style={styles.formButtons}>
+                    <button 
+                      style={styles.saveButton}
+                      onClick={saveHoliday}
+                    >
+                      {editingHoliday ? ' Update Holiday' : ' Save Holiday'}
+                    </button>
+                    
+                    {editingHoliday && (
+                      <button 
+                        style={styles.cancelButton}
+                        onClick={() => {
+                          setEditingHoliday(null);
+                          setNewHoliday({ date: '', name: '', description: '', is_recurring: false });
+                        }}
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Holiday List */}
+              <div style={styles.holidayListSection}>
+                <h4 style={styles.sectionTitle}>Local Holidays ({localHolidays.length})</h4>
+                
+                {isLoadingHolidays ? (
+                  <div style={styles.loadingContainer}>
+                    <p>Loading holidays...</p>
+                  </div>
+                ) : localHolidays.length > 0 ? (
+                  <div style={styles.holidayList}>
+                    {localHolidays.map((holiday, index) => (
+                      <div key={holiday.id || index} style={styles.holidayItem}>
+                        <div style={styles.holidayInfo}>
+                          <div style={styles.holidayDate}>
+                            <FontAwesomeIcon icon={faCalendarAlt} style={{marginRight: '8px'}} />
+                            {holiday.date}
+                            {holiday.is_recurring && (
+                              <span style={styles.recurringBadge}>
+                                <FontAwesomeIcon icon={faHistory} /> Yearly
+                              </span>
+                            )}
+                          </div>
+                          <div style={styles.holidayName}>{holiday.name}</div>
+                          {holiday.description && (
+                            <div style={styles.holidayDescription}>{holiday.description}</div>
+                          )}
+                        </div>
+                        <div style={styles.holidayActions}>
+                          <button 
+                            style={styles.editHolidayButton}
+                            onClick={() => editHoliday(holiday)}
+                          >
+                            <FontAwesomeIcon icon={faEdit} />
+                          </button>
+                          <button 
+                            style={styles.deleteHolidayButton}
+                            onClick={() => deleteHoliday(holiday.id)}
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={styles.noHolidays}>
+                    <FontAwesomeIcon icon={faCalendarDay} style={styles.noHolidaysIcon} />
+                    <p>No local holidays added yet.</p>
+                    <p style={styles.noHolidaysSubtext}>Add local holidays to appear on the calendar.</p>
+                  </div>
                 )}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-{showTimeSettingsModal && (
-  <div style={styles.modalOverlay}>
-    <div style={styles.timeSettingsModalContent}>
-      <div style={styles.timeSettingsModalHeader}>
-        <h2 style={styles.timeSettingsModalTitle}>
-          <FontAwesomeIcon icon={faClock} /> Attendance Time Settings
-        </h2>
-        <button 
-          style={styles.closeButton}
-          onClick={() => {
-            setShowTimeSettingsModal(false);
-            setEditingDay(null);
-          }}
-        >
-          <FontAwesomeIcon icon={faTimes} />
-        </button>
-      </div>
-
-      <div style={styles.timeSettingsContent}>
-        <p style={styles.timeSettingsDescription}>
-          Set the official working hours for each day of the week. 
-          Employees checking in after the start time will be marked as late.
-        </p>
-
-        {isLoadingTimeSettings ? (
-          <div style={styles.loadingContainer}>
-            <p>Loading time settings...</p>
           </div>
-        ) : (
-          <>
-            <div style={styles.timeSettingsGrid}>
-              {/* Define all days of the week */}
-              {[
-                { key: 'monday', label: 'Monday (Early Start)' },
-                { key: 'tuesday', label: 'Tuesday' },
-                { key: 'wednesday', label: 'Wednesday' },
-                { key: 'thursday', label: 'Thursday' },
-                { key: 'friday', label: 'Friday' },
-                { key: 'saturday', label: 'Saturday' },
-                { key: 'sunday', label: 'Sunday' }
-              ].map(({ key, label }) => {
-                // Get config or use default empty structure
-                const config = attendanceTimeSettings[key] || {};
-                
-                // Determine if day is active (default to true if not set)
-                const isActive = config.is_active !== undefined ? config.is_active : true;
-                
-                // Get start/end times or use empty strings
-                const startTime = config.start || '';
-                const endTime = config.end || '';
-                
-                // Check if time is set
-                const isTimeSet = startTime && endTime;
-                
-                return (
-                  <div key={key} style={{
-                    ...styles.timeSettingCard,
-                    opacity: isActive ? 1 : 0.7,
-                    borderColor: isActive ? '#e9ecef' : '#ccc'
-                  }}>
-                    <div style={styles.timeSettingHeader}>
-                      <div>
-                        <h4 style={styles.dayName}>
-                          {label}
-                        </h4>
-                        {!isActive && (
-                          <span style={styles.inactiveBadge}>INACTIVE</span>
-                        )}
-                      </div>
-                      {editingDay === key ? (
-                        <button 
-                          style={styles.saveTimeButton}
-                          onClick={() => setEditingDay(null)}
-                        >
-                          Done
-                        </button>
-                      ) : (
-                        <button 
-                          style={styles.editTimeButton}
-                          onClick={() => setEditingDay(key)}
-                          disabled={!isActive}
-                        >
-                          {isTimeSet ? 'Edit' : 'Add'}
-                        </button>
-                      )}
-                    </div>
-                    
-                    {editingDay === key ? (
-                      <div style={styles.timeInputs}>
-                        <div style={styles.timeInputGroup}>
-                          <label style={styles.timeLabel}>Start Time</label>
-                          <input
-                            type="time"
-                            value={startTime}
-                            onChange={(e) => {
-                              setAttendanceTimeSettings(prev => ({
-                                ...prev,
-                                [key]: { 
-                                  ...prev[key], 
-                                  start: e.target.value,
-                                  end: endTime || '17:00',
-                                  is_active: true
-                                }
-                              }));
-                            }}
-                            style={styles.timeInput}
-                          />
-                        </div>
-                        <div style={styles.timeInputGroup}>
-                          <label style={styles.timeLabel}>End Time</label>
-                          <input
-                            type="time"
-                            value={endTime}
-                            onChange={(e) => {
-                              setAttendanceTimeSettings(prev => ({
-                                ...prev,
-                                [key]: { 
-                                  ...prev[key], 
-                                  end: e.target.value,
-                                  start: startTime || '08:00',
-                                  is_active: true
-                                }
-                              }));
-                            }}
-                            style={styles.timeInput}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={styles.timeDisplay}>
-                        {isTimeSet ? (
-                          <>
-                            <div style={styles.timeSlot}>
-                              <FontAwesomeIcon icon={faArrowRight} style={styles.timeIcon} />
-                              <span style={styles.timeText}>Start: {startTime}</span>
-                            </div>
-                            <div style={styles.timeSlot}>
-                              <FontAwesomeIcon icon={faArrowLeft} style={styles.timeIcon} />
-                              <span style={styles.timeText}>End: {endTime}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div style={styles.noTimeSet}>
-                            <FontAwesomeIcon icon={faClock} style={styles.noTimeIcon} />
-                            <span style={styles.noTimeText}>Time not set</span>
-                            <button 
-                              style={styles.addTimeButton}
-                              onClick={() => setEditingDay(key)}
-                            >
-                              <FontAwesomeIcon icon={faPlus} /> Add Time
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+        </div>
+      )}
 
-            <div style={styles.timeSettingsActions}>
-              <button 
-                style={styles.saveAllButton}
-                onClick={async () => {
-                  try {
-                    // Prepare data for saving - only include days with times
-                    const settingsToSave = {};
-                    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                    
-                    days.forEach(day => {
-                      const config = attendanceTimeSettings[day] || {};
-                      if (config.start && config.end) {
-                        settingsToSave[day] = {
-                          start: config.start,
-                          end: config.end,
-                          is_active: config.is_active !== false // Default to true if not set
-                        };
-                      }
-                    });
-                    
-                    if (Object.keys(settingsToSave).length === 0) {
-                      alert('Please add at least one time setting');
-                      return;
-                    }
-                    
-                    console.log('Saving settings:', settingsToSave);
-                    
-                    const response = await fetch(`${API_URL}/api/attendance/settings/time`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify(settingsToSave)
-                    });
+      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+        <div className="sidebar-header">
+          <button 
+            className="sidebar-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+          <img 
+            className='logo-sidebar' 
+            src={require('./images/logo_ez.png')} 
+            alt="logo" 
+          />
+        </div>
 
-                    if (response.ok) {
-                      alert('Attendance time settings saved successfully!');
-                      setShowTimeSettingsModal(false);
-                      setEditingDay(null);
-                      
-                      // Refresh settings from server
-                      const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
-                      if (refreshResponse.ok) {
-                        const data = await refreshResponse.json();
-                        setAttendanceTimeSettings(data);
-                      }
-                    } else {
-                      const errorData = await response.json();
-                      alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
-                    }
-                  } catch (error) {
-                    console.error('Error saving time settings:', error);
-                    alert('Error saving settings. Check console.');
-                  }
-                }}
-              >
-                <FontAwesomeIcon icon={faSave} /> Save All Settings
-              </button>
-              <button 
-                style={styles.resetButton}
-                onClick={async () => {
-                  if (window.confirm('Are you sure you want to reset all time settings to default?')) {
-                    try {
-                      const response = await fetch(`${API_URL}/api/attendance/settings/time/reset`, {
-                        method: 'POST'
-                      });
-
-                      if (response.ok) {
-                        alert('Settings reset to default successfully!');
-                        // Refresh settings
-                        const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
-                        if (refreshResponse.ok) {
-                          const data = await refreshResponse.json();
-                          setAttendanceTimeSettings(data);
-                        }
-                      } else {
-                        alert('Failed to reset settings');
-                      }
-                    } catch (error) {
-                      console.error('Error resetting settings:', error);
-                      alert('Error resetting settings');
-                    }
-                  }
-                }}
-              >
-                <FontAwesomeIcon icon={faHistory} /> Reset to Default
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  </div>
-)}
-
-
-    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
-      <div className="sidebar-header">
-        <button 
-          className="sidebar-close-btn"
-          onClick={() => setIsSidebarOpen(false)}
-        >
-          <FontAwesomeIcon icon={faTimes} />
-        </button>
-        {/* MOVED: Logo inside sidebar header */}
         <img 
-          className='logo-sidebar' 
           src={require('./images/logo_ez.png')} 
           alt="logo" 
+          style={styles.logo} 
+          className='logo-desktop'
         />
-      </div>
 
-       <img 
-        src={require('./images/logo_ez.png')} 
-        alt="logo" 
-        style={styles.logo} 
-        className='logo-desktop'
-      />
+        <ul className='sidebar-menu-link' style={styles.sidebarList}>
+          {allowedMenus.map((item) => {
+            const isActive = location.pathname === item.to;
 
-      <ul className='sidebar-menu-link' style={styles.sidebarList}>
-       {allowedMenus.map((item) => {
-          const isActive = location.pathname === item.to;
+            return (
+              <li
+                key={item.name}
+                style={{
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+              >
+                <Link
+                  style={{
+                    ...styles.sb,
+                    ...(isActive ? styles.btnActive : {}),
+                  }}
+                  to={item.to}
+                  onClick={() => setIsSidebarOpen(false)}
+                >
+                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+                </Link>
+              </li>
+            );
+          })}
 
-        return (
-          <li
-            key={item.name}
-          
-            style={{
-              ...(isActive ? styles.btnActive : {}),
-            }}
-          >
+          <li>
             <Link
-              style={{
-                ...styles.sb,
-                ...(isActive ? styles.btnActive : {}),
+              style={styles.sb}
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowLogoutModal(true);
+                setIsSidebarOpen(false);
               }}
-              to={item.to}
-              onClick={() => setIsSidebarOpen(false)}
             >
-              <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
             </Link>
           </li>
-        );
-      })}
-
-
-        <li>
-          <Link
-            style={styles.sb}
-            to="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setShowLogoutModal(true);
-              setIsSidebarOpen(false);
-            }}
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-          </Link>
-        </li>
-      </ul>
-    </div>
+        </ul>
+      </div>
 
       {/* Desktop Header */}
       <div className="desktop-header" style={styles.header}>
-        <input type="text" placeholder="Search..." style={styles.search} />
-
         <div style={styles.headerRight}>
-          <div className="notification-badge-container" style={{position: 'relative'}}>
-            <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
-            {notifications.length > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-5px',
-                right: '-5px',
-                backgroundColor: '#ff4444',
-                color: 'white',
-                borderRadius: '50%',
-                width: '18px',
-                height: '18px',
-                fontSize: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 'bold'
-              }}>
-                {notifications.length}
-              </span>
-            )}
-          </div>
-
-          <div style={styles.profileContainer}>
-            <div
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              style={styles.profileInfo}
-            >
-              <img
-                src={
-                  admin?.profile_picture ||
-                  profileData?.profile_picture ||
-                  "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
-                }
-                alt="Profile"
-                style={styles.profileImage}
-              />
-              <div style={styles.profileDetails}>
-                <p style={styles.profileName}>
-                  {admin?.full_name ||
-                    profileData?.full_name ||
-                    "Loading..."}
-                </p>
-                <p style={styles.profileRole}>
-                  {admin?.role || profileData?.role || ""}
-                </p>
-              </div>
-            </div>
-
-            {showProfileMenu && (
-              <div style={styles.profileDropdown}>
-                <button style={styles.dropdownItem} onClick={() => setShowProfileModal(true)}>
-                  <FontAwesomeIcon icon={faUserCog} style={styles.dropdownIcon} /> My Profile
-                </button>
-                <button 
-                  style={styles.dropdownItem}
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    setShowSettingsModal(true);
-                  }}
-                >
-                  <FontAwesomeIcon icon={faCog} style={styles.dropdownIcon} /> Settings
-                </button>
-                <button
-                  style={styles.dropdownItem}
-                  onClick={() => setShowLogoutModal(true)}
-                >
-                  <FontAwesomeIcon icon={faSignOutAlt} style={styles.dropdownIcon} /> Logout
-                </button>
-              </div>
-            )}
-          </div>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
+          />
         </div>
       </div>
 
@@ -1533,49 +1812,49 @@ const deleteTermsVersion = async (id) => {
                   style={styles.modalImage}
                   
                 />
-              <div className="photo-overlay">
-                <label htmlFor="profileUpload" className="change-photo-btn">
-                  {isUploading ? "Uploading..." : "Change Photo"}
-                </label>
+                <div className="photo-overlay">
+                  <label htmlFor="profileUpload" className="change-photo-btn">
+                    {isUploading ? "Uploading..." : "Change Photo"}
+                  </label>
 
-                <input
-                  id="profileUpload"
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
+                  <input
+                    id="profileUpload"
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
 
-                    setIsUploading(true);
-                    const formData = new FormData();
-                    formData.append("file", file);
-                    formData.append("upload_preset", "profile_picture");
+                      setIsUploading(true);
+                      const formData = new FormData();
+                      formData.append("file", file);
+                      formData.append("upload_preset", "profile_picture");
 
-                    try {
-                      const res = await fetch(
-                        "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
-                        { method: "POST", body: formData }
-                      );
-                      const data = await res.json();
+                      try {
+                        const res = await fetch(
+                          "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
+                          { method: "POST", body: formData }
+                        );
+                        const data = await res.json();
 
-                      if (data.secure_url) {
-                        setProfileData((prev) => ({
-                          ...prev,
-                          profile_picture: data.secure_url,
-                        }));
-                      } else {
-                        alert("Upload failed");
+                        if (data.secure_url) {
+                          setProfileData((prev) => ({
+                            ...prev,
+                            profile_picture: data.secure_url,
+                          }));
+                        } else {
+                          alert("Upload failed");
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        alert("Upload error");
+                      } finally {
+                        setIsUploading(false);
                       }
-                    } catch (err) {
-                      console.error(err);
-                      alert("Upload error");
-                    } finally {
-                      setIsUploading(false);
-                    }
-                  }}
-                />
-              </div>
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1697,441 +1976,440 @@ const deleteTermsVersion = async (id) => {
           </div>
         )}
 
-{hoverInfo && (
-  <div
-    className="calendar-tooltip"
-    ref={tooltipRef}
-    style={{
-      position: "fixed",
-      top: `${Math.max(10, hoverInfo.y - hoverInfo.scrollY)}px`,
-      left: `${Math.max(10, hoverInfo.x - hoverInfo.scrollX - 280)}px`,
-      background: "#ffffff",
-      padding: "16px",
-      borderRadius: "8px",
-      boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08)",
-      zIndex: 9999,
-      width: "300px",
-      maxHeight: "400px",
-      border: "1px solid #e0e0e0",
-      animation: "slideIn 0.2s ease-out",
-      pointerEvents: "auto",
-    }}
-    onMouseEnter={(e) => {
-      // Prevent wheel events from scrolling the page
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onMouseLeave={() => setHoverInfo(null)}
-    onWheel={(e) => {
-      // Only allow scrolling inside the tooltip, not the page
-      e.stopPropagation();
-      const tooltip = e.currentTarget;
-      const isAtTop = tooltip.scrollTop === 0;
-      const isAtBottom = tooltip.scrollHeight - tooltip.scrollTop === tooltip.clientHeight;
-      
-      if (e.deltaY < 0 && isAtTop) {
-        // At top and scrolling up - prevent
-        e.preventDefault();
-      } else if (e.deltaY > 0 && isAtBottom) {
-        // At bottom and scrolling down - prevent
-        e.preventDefault();
-      }
-    }}
-    onTouchStart={(e) => {
-      // Prevent touch events from scrolling the page
-      e.stopPropagation();
-    }}
-    onTouchMove={(e) => {
-      // Only allow touch scrolling inside the tooltip
-      e.stopPropagation();
-    }}
-  >
-    {/* Rest of the tooltip content remains the same */}
-    {/* Arrow pointing to calendar date */}
-    <div style={{
-      position: "absolute",
-      top: "10px",
-      right: "-8px",
-      width: "0",
-      height: "0",
-      borderTop: "8px solid transparent",
-      borderBottom: "8px solid transparent",
-      borderLeft: "8px solid #ffffff",
-      filter: "drop-shadow(1px 0px 1px rgba(0,0,0,0.1))",
-      zIndex: 1
-    }} />
+        {hoverInfo && (
+          <>
+            {hoverInfo.isModal && (
+                <div
+                  className="calendar-backdrop"
+                  onClick={() => setHoverInfo(null)}
+                  style={{ 
+                    position: 'fixed', 
+                    top: 0, 
+                    left: 0, 
+                    right: 0, 
+                    bottom: 0, 
+                    zIndex: 99998,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)'
+                  }}
+                />
+              )}
+              <div
+                className="calendar-tooltip"
+                ref={tooltipRef}
+                style={{
+                  position: "fixed",
+                  top: `${hoverInfo.y}px`,
+                  left: `${hoverInfo.x - 280}px`,
+                  background: "#ffffff",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08)",
+                  zIndex: 99999,
+                  width: "300px",
+                  maxHeight: "60vh",
+                  border: "1px solid #e0e0e0",
+                  animation: "slideIn 0.2s ease-out",
+                  pointerEvents: "auto",
+                }}
+                onMouseEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onMouseLeave={() => {
+                  if (!hoverInfo.isModal) {
+                    setHoverInfo(null);
+                  }
+                }}
+                onWheel={(e) => {
+                  e.stopPropagation();
+                  const tooltip = e.currentTarget;
+                  const isAtTop = tooltip.scrollTop === 0;
+                  const isAtBottom = tooltip.scrollHeight - tooltip.scrollTop === tooltip.clientHeight;
+                  
+                  // Only prevent default when at boundaries
+                  if ((e.deltaY < 0 && isAtTop) || (e.deltaY > 0 && isAtBottom)) {
+                    e.preventDefault();
+                  }
+                }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              >
+              <div style={{
+                position: "absolute",
+                top: "10px",
+                right: "-8px",
+                width: "0",
+                height: "0",
+                borderTop: "8px solid transparent",
+                borderBottom: "8px solid transparent",
+                borderLeft: "8px solid #ffffff",
+                filter: "drop-shadow(1px 0px 1px rgba(0,0,0,0.1))",
+                zIndex: 1
+              }} className="calendar-tooltip-arrow" />
 
-    {/* Date Header - Clean and Professional */}
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      paddingBottom: "12px",
-      borderBottom: "1px solid #f0f0f0"
-    }}>
-      <div style={{
-        width: "40px",
-        height: "40px",
-        background: "#f8f9fa",
-        borderRadius: "8px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: "12px",
-        color: "#333333",
-        fontWeight: "600",
-        fontSize: "16px",
-        border: "1px solid #e9ecef"
-      }}>
-        {new Date(hoverInfo.date).getDate()}
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{
-          fontSize: "12px",
-          color: "#666666",
-          fontWeight: "500",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-          marginBottom: "2px"
-        }}>
-          {new Date(hoverInfo.date).toLocaleDateString('en-US', { weekday: 'short' })}
-        </div>
-        <div style={{
-          fontSize: "15px",
-          fontWeight: "600",
-          color: "#212529",
-          lineHeight: "1.2"
-        }}>
-          {new Date(hoverInfo.date).toLocaleDateString('en-US', { 
-            month: 'long', 
-            year: 'numeric'
-          })}
-        </div>
-      </div>
-    </div>
-
-    {/* Holiday Section - Professional */}
-    {hoverInfo.holiday && (
-      <div style={{
-        background: "#f8f9fa",
-        padding: "12px",
-        borderRadius: "6px",
-        marginBottom: "12px",
-        border: "1px solid #e9ecef"
-      }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          marginBottom: "6px"
-        }}>
-          <div style={{
-            width: "24px",
-            height: "24px",
-            background: "#f8f9fa",
-            borderRadius: "4px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginRight: "10px",
-            color: "#dc3545",
-            fontSize: "14px",
-            border: "1px solid #e9ecef"
-          }}>
-            <FontAwesomeIcon icon={faStar} />
-          </div>
-          <div style={{
-            fontSize: "14px",
-            fontWeight: "600",
-            color: "#212529"
-          }}>
-            Public Holiday
-          </div>
-        </div>
-        <div style={{
-          fontSize: "13px",
-          color: "#495057",
-          paddingLeft: "34px",
-          lineHeight: "1.4",
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "8px"
-        }}>
-          <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: "12px", marginTop: "2px", color: "#6c757d" }} />
-          <span style={{ flex: 1 }}>{hoverInfo.holiday.name}</span>
-        </div>
-      </div>
-    )}
-
-    {/* Leaves Section - Enhanced with status beside name */}
-    {hoverInfo.leaves.length > 0 && (
-      <div>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          paddingBottom: "10px",
-          borderBottom: "1px solid #f0f0f0"
-        }}>
-          <div style={{
-            width: "24px",
-            height: "24px",
-            background: "#f8f9fa",
-            borderRadius: "4px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginRight: "10px",
-            color: "#495057",
-            fontSize: "14px",
-            border: "1px solid #e9ecef"
-          }}>
-            <FontAwesomeIcon icon={faClipboardList} />
-          </div>
-          <div style={{
-            fontSize: "14px",
-            fontWeight: "600",
-            color: "#212529"
-          }}>
-            Leave Requests ({hoverInfo.leaves.length})
-          </div>
-        </div>
-        
-        <div style={{
-          maxHeight: "220px",
-          overflowY: "auto",
-          paddingRight: "4px"
-        }}>
-          {hoverInfo.leaves.map((leave, i) => (
-            <div 
-              key={i} 
-              style={{
-                background: "#ffffff",
-                padding: "12px",
-                borderRadius: "6px",
-                marginBottom: "10px",
-                border: "1px solid #e9ecef",
-                transition: "all 0.2s ease",
-                cursor: "default",
-                position: "relative"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "#dee2e6";
-                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.05)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "#e9ecef";
-                e.currentTarget.style.boxShadow = "none";
-              }}
-            >
-              {/* Header row with name and status */}
               <div style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "8px"
+                paddingBottom: "12px",
+                borderBottom: "1px solid #f0f0f0"
               }}>
-                {/* Left side: Employee info */}
                 <div style={{
+                  width: "40px",
+                  height: "40px",
+                  background: "#f8f9fa",
+                  borderRadius: "8px",
                   display: "flex",
                   alignItems: "center",
-                  flex: 1,
-                  minWidth: 0,
-                  gap: "10px"
+                  justifyContent: "center",
+                  marginRight: "12px",
+                  color: "#333333",
+                  fontWeight: "600",
+                  fontSize: "16px",
+                  border: "1px solid #e9ecef"
                 }}>
-                  {/* Status dot */}
+                  {new Date(hoverInfo.date).getDate()}
+                </div>
+                <div style={{ flex: 1 }}>
                   <div style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    background: leave.status === "Approved" ? "#28a745" : 
-                              leave.status === "Pending" ? "#ffc107" : "#dc3545",
-                    flexShrink: 0
-                  }} />
-                  
-                  {/* Employee icon and name */}
+                    fontSize: "12px",
+                    color: "#666666",
+                    fontWeight: "500",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                    marginBottom: "2px"
+                  }}>
+                    {new Date(hoverInfo.date).toLocaleDateString('en-US', { weekday: 'short' })}
+                  </div>
+                  <div style={{
+                    fontSize: "15px",
+                    fontWeight: "600",
+                    color: "#212529",
+                    lineHeight: "1.2"
+                  }}>
+                    {new Date(hoverInfo.date).toLocaleDateString('en-US', { 
+                      month: 'long', 
+                      year: 'numeric'
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {hoverInfo.holiday && (
+                <div style={{
+                  background: "#f8f9fa",
+                  padding: "12px",
+                  borderRadius: "6px",
+                  marginBottom: "12px",
+                  border: "1px solid #e9ecef"
+                }}>
                   <div style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "8px",
-                    flex: 1,
-                    minWidth: 0
+                    marginBottom: "6px"
                   }}>
-                    <FontAwesomeIcon 
-                      icon={faUser} 
-                      style={{ 
-                        fontSize: "12px", 
-                        color: "#6c757d",
-                        flexShrink: 0
-                      }} 
-                    />
-                    <span style={{
-                      fontSize: "13px",
-                      fontWeight: "600",
-                      color: "#212529",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis"
+                    <div style={{
+                      width: "24px",
+                      height: "24px",
+                      background: "#f8f9fa",
+                      borderRadius: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: "10px",
+                      color: hoverInfo.holiday.type === 'local' ? "#ff8c00" : "#dc3545",
+                      fontSize: "14px",
+                      border: "1px solid #e9ecef"
                     }}>
-                      {leave.first_name} {leave.last_name}
-                    </span>
+                      <FontAwesomeIcon icon={faStar} />
+                    </div>
+                    <div style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: "#212529"
+                    }}>
+                      {hoverInfo.holiday.type === 'local' ? 'Local Holiday' : 'Public Holiday'}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: "13px",
+                    color: "#495057",
+                    paddingLeft: "34px",
+                    lineHeight: "1.4",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "8px"
+                  }}>
+                    <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: "12px", marginTop: "2px", color: "#6c757d" }} />
+                    <span style={{ flex: 1 }}>{hoverInfo.holiday.name}</span>
                   </div>
                 </div>
-                
-                {/* Right side: Status badge */}
-                <div style={{
-                  marginLeft: "8px",
-                  flexShrink: 0
-                }}>
-                  <span style={{
-                    padding: "3px 8px",
-                    background: leave.status === "Approved" ? "#f1f8f1" : 
-                              leave.status === "Pending" ? "#fff8e6" : "#fdf2f2",
-                    color: leave.status === "Approved" ? "#2b8a3e" : 
-                          leave.status === "Pending" ? "#856404" : "#c92a2a",
-                    borderRadius: "4px",
-                    fontWeight: "500",
-                    fontSize: "11px",
-                    display: "inline-flex",
+              )}
+
+              {hoverInfo.leaves.length > 0 && (
+                <div>
+                  <div style={{
+                    display: "flex",
                     alignItems: "center",
-                    gap: "4px",
-                    border: "1px solid",
-                    borderColor: leave.status === "Approved" ? "#d4edda" : 
-                               leave.status === "Pending" ? "#ffeaa7" : "#f8d7da",
-                    whiteSpace: "nowrap"
+                    paddingBottom: "10px",
+                    borderBottom: "1px solid #f0f0f0"
                   }}>
-                    {leave.status === "Approved" && <FontAwesomeIcon icon={faCheckCircle} style={{ fontSize: "9px" }} />}
-                    {leave.status === "Pending" && <FontAwesomeIcon icon={faClock} style={{ fontSize: "9px" }} />}
-                    {leave.status === "Rejected" && <FontAwesomeIcon icon={faTimes} style={{ fontSize: "9px" }} />}
-                    {leave.status}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Leave type */}
-              <div style={{
-                fontSize: "12px",
-                color: "#495057",
-                marginBottom: "10px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px"
-              }}>
-                <FontAwesomeIcon 
-                  icon={faCalendarDay} 
-                  style={{ 
-                    fontSize: "11px", 
-                    color: "#868e96",
-                    flexShrink: 0
-                  }} 
-                />
-                <span style={{
-                  fontWeight: "500",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis"
-                }}>
-                  {leave.leave_type}
-                </span>
-              </div>
-              
-              {/* Department row */}
-              {leave.department && (
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  paddingTop: "8px",
-                  borderTop: "1px solid #f8f9fa"
-                }}>
-                  <FontAwesomeIcon 
-                    icon={faBuilding} 
-                    style={{ 
-                      fontSize: "11px", 
-                      color: "#868e96",
-                      flexShrink: 0
-                    }} 
-                  />
-                  <span style={{
-                    fontSize: "11px",
-                    color: "#6c757d",
-                    fontWeight: "500",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis"
+                    <div style={{
+                      width: "24px",
+                      height: "24px",
+                      background: "#f8f9fa",
+                      borderRadius: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: "10px",
+                      color: "#495057",
+                      fontSize: "14px",
+                      border: "1px solid #e9ecef"
+                    }}>
+                      <FontAwesomeIcon icon={faClipboardList} />
+                    </div>
+                    <div style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: "#212529"
+                    }}>
+                      Leave Requests ({hoverInfo.leaves.length})
+                    </div>
+                  </div>
+                  
+                  <div style={{
+                    maxHeight: "220px",
+                    overflowY: "auto",
+                    paddingRight: "4px"
                   }}>
-                    {leave.department}
-                  </span>
+                    {hoverInfo.leaves.map((leave, i) => (
+                      <div 
+                        key={i} 
+                        style={{
+                          background: "#ffffff",
+                          padding: "12px",
+                          borderRadius: "6px",
+                          marginBottom: "10px",
+                          border: "1px solid #e9ecef",
+                          transition: "all 0.2s ease",
+                          cursor: "default",
+                          position: "relative"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = "#dee2e6";
+                          e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.05)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "#e9ecef";
+                          e.currentTarget.style.boxShadow = "none";
+                        }}
+                      >
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: "8px"
+                        }}>
+                          <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            flex: 1,
+                            minWidth: 0,
+                            gap: "10px"
+                          }}>
+                            <div style={{
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              background: leave.status === "Approved" ? "#28a745" : 
+                                        leave.status === "Pending" ? "#ffc107" : "#dc3545",
+                              flexShrink: 0
+                            }} />
+                            
+                            <div style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              flex: 1,
+                              minWidth: 0
+                            }}>
+                              <FontAwesomeIcon 
+                                icon={faUser} 
+                                style={{ 
+                                  fontSize: "12px", 
+                                  color: "#6c757d",
+                                  flexShrink: 0
+                                }} 
+                              />
+                              <span style={{
+                                fontSize: "13px",
+                                fontWeight: "600",
+                                color: "#212529",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis"
+                              }}>
+                                {leave.first_name} {leave.last_name}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div style={{
+                            marginLeft: "8px",
+                            flexShrink: 0
+                          }}>
+                            <span style={{
+                              padding: "3px 8px",
+                              background: leave.status === "Approved" ? "#f1f8f1" : 
+                                        leave.status === "Pending" ? "#fff8e6" : "#fdf2f2",
+                              color: leave.status === "Approved" ? "#2b8a3e" : 
+                                    leave.status === "Pending" ? "#856404" : "#c92a2a",
+                              borderRadius: "4px",
+                              fontWeight: "500",
+                              fontSize: "11px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              border: "1px solid",
+                              borderColor: leave.status === "Approved" ? "#d4edda" : 
+                                         leave.status === "Pending" ? "#ffeaa7" : "#f8d7da",
+                              whiteSpace: "nowrap"
+                            }}>
+                              {leave.status === "Approved" && <FontAwesomeIcon icon={faCheckCircle} style={{ fontSize: "9px" }} />}
+                              {leave.status === "Pending" && <FontAwesomeIcon icon={faClock} style={{ fontSize: "9px" }} />}
+                              {leave.status === "Rejected" && <FontAwesomeIcon icon={faTimes} style={{ fontSize: "9px" }} />}
+                              {leave.status}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div style={{
+                          fontSize: "12px",
+                          color: "#495057",
+                          marginBottom: "10px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px"
+                        }}>
+                          <FontAwesomeIcon 
+                            icon={faCalendarDay} 
+                            style={{ 
+                              fontSize: "11px", 
+                              color: "#868e96",
+                              flexShrink: 0
+                            }} 
+                          />
+                          <span style={{
+                            fontWeight: "500",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis"
+                          }}>
+                            {leave.leave_type}
+                          </span>
+                        </div>
+                        
+                        {leave.department && (
+                          <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            paddingTop: "8px",
+                            borderTop: "1px solid #f8f9fa"
+                          }}>
+                            <FontAwesomeIcon 
+                              icon={faBuilding} 
+                              style={{ 
+                                fontSize: "11px", 
+                                color: "#868e96",
+                                flexShrink: 0
+                              }} 
+                            />
+                            <span style={{
+                              fontSize: "11px",
+                              color: "#6c757d",
+                              fontWeight: "500",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis"
+                            }}>
+                              {leave.department}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {leave.date_filing && (
+                          <div style={{
+                            fontSize: "10px",
+                            color: "#adb5bd",
+                            marginTop: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px"
+                          }}>
+                            <FontAwesomeIcon icon={faClock} style={{ fontSize: "9px" }} />
+                            <span>Filed: {leave.date_filing}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-              
-              {/* Optional: Filing date if available */}
-              {leave.date_filing && (
+
+              {!hoverInfo.holiday && hoverInfo.leaves.length === 0 && (
                 <div style={{
-                  fontSize: "10px",
-                  color: "#adb5bd",
-                  marginTop: "6px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
+                  textAlign: "center",
+                  padding: "20px 16px",
+                  color: "#6c757d",
+                  fontSize: "13px",
+                  background: "#f8f9fa",
+                  borderRadius: "6px",
+                  border: "1px solid #e9ecef"
                 }}>
-                  <FontAwesomeIcon icon={faClock} style={{ fontSize: "9px" }} />
-                  <span>Filed: {leave.date_filing}</span>
+                  <FontAwesomeIcon 
+                    icon={faCalendarAlt} 
+                    style={{ 
+                      fontSize: "24px", 
+                      marginBottom: "8px", 
+                      color: "#adb5bd"
+                    }} 
+                  />
+                  <div style={{
+                    fontWeight: "500",
+                    marginBottom: "4px"
+                  }}>
+                    No events scheduled
+                  </div>
+                  <div style={{
+                    fontSize: "11px",
+                    color: "#868e96"
+                  }}>
+                    {new Date(hoverInfo.date).toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </div>
                 </div>
               )}
             </div>
-          ))}
-        </div>
-      </div>
-    )}
-
-    {/* No Content Message - Professional */}
-    {!hoverInfo.holiday && hoverInfo.leaves.length === 0 && (
-      <div style={{
-        textAlign: "center",
-        padding: "20px 16px",
-        color: "#6c757d",
-        fontSize: "13px",
-        background: "#f8f9fa",
-        borderRadius: "6px",
-        border: "1px solid #e9ecef"
-      }}>
-        <FontAwesomeIcon 
-          icon={faCalendarAlt} 
-          style={{ 
-            fontSize: "24px", 
-            marginBottom: "8px", 
-            color: "#adb5bd"
-          }} 
-        />
-        <div style={{
-          fontWeight: "500",
-          marginBottom: "4px"
-        }}>
-          No events scheduled
-        </div>
-        <div style={{
-          fontSize: "11px",
-          color: "#868e96"
-        }}>
-          {new Date(hoverInfo.date).toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            month: 'long', 
-            day: 'numeric', 
-            year: 'numeric' 
-          })}
-        </div>
-      </div>
-    )}
-  </div>
-)}
+          </>
+        )}
 
         <div className="cnt1" style={styles.cnt1}>
           <div className="cards" style={styles.cards}>
             {cardsData.map((card, index) => (
-              <div key={index} className="card-box" style={card.background}>
-                <p className="card-title">{card.title}</p>
-                <p className="card-desc">{card.description}</p>
-                <p className="card-value">
+              <div key={index} className="card-box" style={{
+                        ...card.background,
+                        marginBottom: index < 4 ? '20px' : 0 // Add margin to first 3 cards only
+                      }}
+              >
+                <p className="card-value" style={styles.cardValue}>
                   {card.value}
                 </p>
+                <p className="card-title" style={styles.cardTitle}>{card.title}</p>
               </div>
             ))}
           </div>
@@ -2149,6 +2427,10 @@ const deleteTermsVersion = async (id) => {
               prev2Label={null}
               tileContent={renderTileContent}
               tileClassName={tileClassName}
+              // Added these props to prevent expansion
+              view="month"
+              maxDetail="month"
+              minDetail="month"
             />
           </div>
         </div>
@@ -2373,7 +2655,7 @@ const deleteTermsVersion = async (id) => {
             </div>
           </div>
 
-          {/* FIXED: Notifications Section */}
+          {/* Notifications Section */}
           <div className="notification-section">
             <div className="section-header">
               <h3>Recent Notifications</h3>
@@ -2382,7 +2664,7 @@ const deleteTermsVersion = async (id) => {
             <div className="notification-container">
               {notifications.length > 0 ? (
                 <ul style={styles.notificationList}>
-                  {notifications.map((notification, index) => {
+                  {(isMobileView ? notifications.slice(0,3) : notifications).map((notification, index) => {
                     const { icon, color } = getNotificationStyle(notification.type || 'system_notice');
                     return (
                       <li key={notification.id || index} style={styles.notificationItem}>
@@ -2396,7 +2678,6 @@ const deleteTermsVersion = async (id) => {
                         <button 
                           style={styles.viewButton}
                           onClick={() => {
-                            // Navigate based on notification type
                             if (notification.type === 'leave_filed' || notification.type === 'leave_approved') {
                               navigate('/leaveManagement');
                             } else if (notification.type === 'attendance_alert') {
@@ -2614,7 +2895,7 @@ const deleteTermsVersion = async (id) => {
               </div>
             </div>
 
-            {/* FIXED: Desktop Notifications */}
+            {/* Desktop Notifications */}
             <div style={styles.notificationContainer}>
               <h4>Recent Notifications</h4>
               {notifications.length > 0 ? (
@@ -2669,7 +2950,6 @@ const deleteTermsVersion = async (id) => {
                 </div>
               )}
             </div>
-
           </div>
         </div>
       </div>
@@ -2748,6 +3028,8 @@ const styles = {
     alignItems: "center",
     gap: "20px",
     position: "relative",
+    marginLeft: 'auto',
+    justifyContent: 'flex-end'
   },
   profileContainer: {
     position: "relative",
@@ -2814,11 +3096,10 @@ const styles = {
     paddingTop: '70px',
     width: 'calc(100% - 280px)',
     boxSizing: 'border-box',
-    overflowY: 'auto',  // Changed from overFlowY to overflowY
-    overflowX: 'hidden', // Prevent horizontal scroll
-    // Hide scrollbar for Webkit browsers
-    scrollbarWidth: 'none', // For Firefox
-    msOverflowStyle: 'none', // For IE/Edge
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
   },
   cnt1: {
     display: 'flex',
@@ -2832,63 +3113,88 @@ const styles = {
   cards: {
     display: 'flex',
     flexWrap: 'wrap',
-    flex: '2',
+    flex: '4 1 0',
     justifyContent: 'space-between',
     gap: '5px',
-    flex: '1 1 600px',
   },
   card: {
     backgroundColor: '#fff',
     borderRadius: '20px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    padding: '20px',
+    padding: '30px',
     margin: '10px 0',
     textAlign: 'left',
-    width: 'calc(33.333% - 10px)',
+    width: 'calc(50% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   card1: {
     backgroundColor: '#07A5FA55',
     borderRadius: '20px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    padding: '20px',
+    padding: '30px',
     margin: '10px 0',
     textAlign: 'left',
-    width: 'calc(33.333% - 10px)',
+    width: 'calc(50% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
+     display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   card2: {
     backgroundColor: '#EA050555',
     borderRadius: '20px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    padding: '20px',
+    padding: '30px',
     margin: '10px 0',
     textAlign: 'left',
-    width: 'calc(33.333% - 10px)',
+    width: 'calc(50% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
+     display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   card3: {
     backgroundColor: '#FAAB0055',
     borderRadius: '20px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    padding: '20px',
+    padding: '30px',
     margin: '10px 0',
     textAlign: 'left',
-    width: 'calc(33.333% - 10px)',
+    width: 'calc(50% - 10px)',
     boxSizing: 'border-box',
     flexShrink: 0,
+     display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
+
+  cardValue: {
+    fontSize: '24px',
+    fontWeight: '700',
+  },
+
+  cardTitle: {
+    fontSize: '14px',
+    color: '#555',
+  },
+
   calendar: {
     borderRadius: '8px',
-    maxWidth: '550px',
+    maxWidth: '350px',
     minWidth: '280px',
-    padding: '10px',
     flex: '1 1 auto',
     boxSizing: 'border-box',
-    flex: '1 1 250px',
+    paddingTop: '10px',
   },
   row2: {
     display: 'flex',
@@ -2900,7 +3206,7 @@ const styles = {
     flexWrap: 'wrap',
   },
   tableContainer: {
-    flex: '1 1 60%',
+    flex: '1',
     backgroundColor: '#fff',
     borderRadius: '12px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
@@ -3208,414 +3514,554 @@ const styles = {
     marginRight: '20px',
   },
 
-  // Add these to your styles object:
+  // Settings Modal
+  settingsModalContent: {
+    backgroundColor: "white",
+    borderRadius: "12px",
+    width: "400px",
+    maxHeight: "80vh",
+    overflowY: "auto",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+    animation: "slideIn 0.3s ease",
+  },
+  settingsModalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "20px",
+    borderBottom: "1px solid #eee",
+  },
+  settingsModalTitle: {
+    margin: 0,
+    fontSize: "20px",
+    color: "#333",
+  },
+  settingsSections: {
+    padding: "20px",
+  },
+  settingsSectionButton: {
+    width: "100%",
+    padding: "15px",
+    textAlign: "left",
+    background: "#ffffffff",
+    borderRadius: "8px",
+    marginBottom: "10px",
+    cursor: "pointer",
+    fontSize: "16px",
+    transition: "all 0.2s",
+    display: "flex",
+    alignItems: "center",
+    boxShadow: "0 1px 5px rgba(0,0,0,0.1)",
+    border: "none"
+  },
 
-settingsModalContent: {
-  backgroundColor: "white",
-  borderRadius: "12px",
-  width: "400px",
-  maxHeight: "80vh",
-  overflowY: "auto",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-  animation: "slideIn 0.3s ease",
-},
+  // Terms Modal
+  termsModalContent: {
+    backgroundColor: "white",
+    borderRadius: "12px",
+    width: "800px",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+    animation: "slideIn 0.3s ease",
+  },
+  termsModalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "20px",
+    borderBottom: "1px solid #eee",
+  },
+  termsModalTitle: {
+    margin: 0,
+    fontSize: "20px",
+    color: "#333",
+  },
+  closeButton: {
+    background: "none",
+    border: "none",
+    fontSize: "20px",
+    cursor: "pointer",
+    color: "#666",
+  },
+  activeTermsCard: {
+    background: "#ffffffff",
+    padding: "15px",
+    margin: "20px",
+    borderRadius: "8px",
+    border: "1px solid #e9ecef",
+  },
+  activeBadge: {
+    background: "#ffffffff",
+    color: "black",
+    padding: "3px 10px",
+    borderRadius: "12px",
+    fontSize: "12px",
+    fontWeight: "600",
+    border: "1px solid #28a745",
+  },
+  termsContentSection: {
+    padding: "0 20px",
+    marginBottom: "20px",
+  },
+  editButton: {
+    background: "#28a745",
+    color: "white",
+    border: "none",
+    padding: "5px 15px",
+    borderRadius: "5px",
+    cursor: "pointer",
+    fontSize: "14px",
+  },
+  saveButton: {
+    background: "#28a745",
+    color: "white",
+    border: "none",
+    padding: "8px 15px",
+    borderRadius: "5px",
+    cursor: "pointer",
+    fontSize: "14px",
+  },
+  cancelButton: {
+    background: "#6c757d",
+    color: "white",
+    border: "none",
+    padding: "8px 15px",
+    borderRadius: "5px",
+    cursor: "pointer",
+    fontSize: "14px",
+  },
+  versionInput: {
+    width: "100%",
+    padding: "8px",
+    border: "1px solid #ddd",
+    borderRadius: "4px",
+    fontSize: "14px",
+  },
+  termsTextarea: {
+    width: "100%",
+    padding: "15px",
+    border: "1px solid #ddd",
+    borderRadius: "8px",
+    fontSize: "14px",
+    resize: "vertical",
+  },
+  termsViewer: {
+    background: "#ffffffff",
+    padding: "20px",
+    borderRadius: "8px",
+    border: "1px solid #eee",
+    minHeight: "200px",
+    maxHeight: "300px",
+    overflowY: "auto",
+    whiteSpace: "pre-wrap",
+    lineHeight: "1.6",
+    boxShadow: "inset 0 1px 3px rgba(0,0,0,0.1)",
+  },
+  versionHistory: {
+    padding: "0 20px 20px",
+  },
+  versionItem: {
+    background: "#fff",
+    padding: "15px",
+    marginBottom: "10px",
+    borderRadius: "8px",
+    border: "1px solid #eee",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    boxShadow: "0 1px 5px rgba(0,0,0,0.1)",
+  },
+  smallButton: {
+    background: "#007bff",
+    color: "white",
+    border: "none",
+    padding: "5px 10px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+  },
 
-settingsModalHeader: {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "20px",
-  borderBottom: "1px solid #eee",
-},
+  // Time Settings Modal
+  timeSettingsModalContent: {
+    backgroundColor: "white",
+    borderRadius: "12px",
+    width: "800px",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+    animation: "slideIn 0.3s ease",
+  },
+  timeSettingsModalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "20px",
+    borderBottom: "1px solid #eee",
+  },
+  timeSettingsModalTitle: {
+    margin: 0,
+    fontSize: "20px",
+    color: "#333",
+  },
+  timeSettingsContent: {
+    padding: "20px",
+  },
+  timeSettingsDescription: {
+    color: "#666",
+    marginBottom: "20px",
+    fontSize: "14px",
+    lineHeight: "1.5",
+  },
+  loadingContainer: {
+    textAlign: "center",
+    padding: "40px",
+    color: "#666",
+  },
+  timeSettingsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+    gap: "15px",
+    marginBottom: "30px",
+  },
+  timeSettingCard: {
+    background: "#ffffffff",
+    padding: "15px",
+    borderRadius: "8px",
+    border: "1px solid #e9ecef",
+  },
+  timeSettingHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "10px",
+  },
+  dayName: {
+    margin: 0,
+    fontSize: "14px",
+    color: "#333",
+  },
+  inactiveBadge: {
+    backgroundColor: "#6c757d",
+    color: "white",
+    padding: "2px 8px",
+    borderRadius: "12px",
+    fontSize: "10px",
+    fontWeight: "bold",
+    marginLeft: "8px",
+  },
+  editTimeButton: {
+    border: "1px solid #e9ecef",
+    padding: "5px 10px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+    backgroundColor: "white",
+  },
+  saveTimeButton: {
+    background: "#28a745",
+    color: "white",
+    border: "none",
+    padding: "5px 10px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+  },
+  timeInputs: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  timeInputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+  },
+  timeLabel: {
+    fontSize: "12px",
+    color: "#666",
+  },
+  timeInput: {
+    padding: "8px",
+    border: "1px solid #ddd",
+    borderRadius: "4px",
+    fontSize: "14px",
+  },
+  timeDisplay: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  timeSlot: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  timeIcon: {
+    fontSize: "12px",
+    color: "#666",
+  },
+  timeText: {
+    fontSize: "14px",
+    color: "#333",
+  },
+  timeSettingsActions: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "15px",
+    paddingTop: "20px",
+    borderTop: "1px solid #eee",
+  },
+  saveAllButton: {
+    background: "#009205",
+    color: "white",
+    border: "none",
+    padding: "10px 20px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  resetButton: {
+    background: "#f5f5f5ff",
+    color: "black",
+    border: "1px solid #e9ecef",
+    padding: "10px 20px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  noTimeSet: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '15px 0',
+    gap: '10px',
+    textAlign: 'center',
+  },
+  noTimeIcon: {
+    fontSize: '24px',
+    color: '#adb5bd',
+    marginBottom: '5px',
+  },
+  noTimeText: {
+    fontSize: '14px',
+    color: '#6c757d',
+    marginBottom: '5px',
+  },
+  addTimeButton: {
+    background: '#007bff',
+    color: 'white',
+    border: 'none',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+  },
 
-settingsModalTitle: {
-  margin: 0,
-  fontSize: "20px",
-  color: "#333",
-},
-
-settingsSections: {
-  padding: "20px",
-},
-
-settingsSectionButton: {
-  width: "100%",
-  padding: "15px",
-  textAlign: "left",
-  border: "none",
-  background: "#f8f9fa",
-  borderRadius: "8px",
-  marginBottom: "10px",
-  cursor: "pointer",
-  fontSize: "16px",
-  transition: "all 0.2s",
-  display: "flex",
-  alignItems: "center",
-},
-
-termsModalContent: {
-  backgroundColor: "white",
-  borderRadius: "12px",
-  width: "800px",
-  maxHeight: "90vh",
-  overflowY: "auto",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-  animation: "slideIn 0.3s ease",
-},
-
-termsModalHeader: {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "20px",
-  borderBottom: "1px solid #eee",
-},
-
-termsModalTitle: {
-  margin: 0,
-  fontSize: "20px",
-  color: "#333",
-},
-
-closeButton: {
-  background: "none",
-  border: "none",
-  fontSize: "20px",
-  cursor: "pointer",
-  color: "#666",
-},
-
-activeTermsCard: {
-  background: "#f8f9fa",
-  padding: "15px",
-  margin: "20px",
-  borderRadius: "8px",
-  border: "1px solid #e9ecef",
-},
-
-activeBadge: {
-  background: "#28a745",
-  color: "white",
-  padding: "3px 10px",
-  borderRadius: "12px",
-  fontSize: "12px",
-  fontWeight: "bold",
-},
-
-termsContentSection: {
-  padding: "0 20px",
-  marginBottom: "20px",
-},
-
-editButton: {
-  background: "#007bff",
-  color: "white",
-  border: "none",
-  padding: "8px 15px",
-  borderRadius: "5px",
-  cursor: "pointer",
-  fontSize: "14px",
-},
-
-saveButton: {
-  background: "#28a745",
-  color: "white",
-  border: "none",
-  padding: "8px 15px",
-  borderRadius: "5px",
-  cursor: "pointer",
-  fontSize: "14px",
-},
-
-cancelButton: {
-  background: "#6c757d",
-  color: "white",
-  border: "none",
-  padding: "8px 15px",
-  borderRadius: "5px",
-  cursor: "pointer",
-  fontSize: "14px",
-},
-
-versionInput: {
-  width: "100%",
-  padding: "8px",
-  border: "1px solid #ddd",
-  borderRadius: "4px",
-  fontSize: "14px",
-},
-
-termsTextarea: {
-  width: "100%",
-  padding: "15px",
-  border: "1px solid #ddd",
-  borderRadius: "8px",
-  fontSize: "14px",
-  fontFamily: "inherit",
-  resize: "vertical",
-},
-
-termsViewer: {
-  background: "#f8f9fa",
-  padding: "20px",
-  borderRadius: "8px",
-  border: "1px solid #eee",
-  minHeight: "200px",
-  maxHeight: "300px",
-  overflowY: "auto",
-  whiteSpace: "pre-wrap",
-  lineHeight: "1.6",
-},
-
-versionHistory: {
-  padding: "0 20px 20px",
-},
-
-versionItem: {
-  background: "#fff",
-  padding: "15px",
-  marginBottom: "10px",
-  borderRadius: "8px",
-  border: "1px solid #eee",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-},
-
-smallButton: {
-  background: "#007bff",
-  color: "white",
-  border: "none",
-  padding: "5px 10px",
-  borderRadius: "4px",
-  cursor: "pointer",
-  fontSize: "12px",
-},
-
-// Add these new styles to your styles object:
-timeSettingsModalContent: {
-  backgroundColor: "white",
-  borderRadius: "12px",
-  width: "800px",
-  maxHeight: "90vh",
-  overflowY: "auto",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-  animation: "slideIn 0.3s ease",
-},
-
-timeSettingsModalHeader: {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "20px",
-  borderBottom: "1px solid #eee",
-},
-
-timeSettingsModalTitle: {
-  margin: 0,
-  fontSize: "20px",
-  color: "#333",
-},
-
-timeSettingsContent: {
-  padding: "20px",
-},
-
-timeSettingsDescription: {
-  color: "#666",
-  marginBottom: "20px",
-  fontSize: "14px",
-  lineHeight: "1.5",
-},
-
-loadingContainer: {
-  textAlign: "center",
-  padding: "40px",
-  color: "#666",
-},
-
-noSettingsContainer: {
-  textAlign: "center",
-  padding: "40px",
-  color: "#666",
-  border: "2px dashed #ddd",
-  borderRadius: "8px",
-  backgroundColor: "#f9f9f9",
-},
-
-timeSettingsGrid: {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-  gap: "15px",
-  marginBottom: "30px",
-},
-
-timeSettingCard: {
-  background: "#f8f9fa",
-  padding: "15px",
-  borderRadius: "8px",
-  border: "1px solid #e9ecef",
-},
-
-timeSettingHeader: {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: "10px",
-},
-
-dayName: {
-  margin: 0,
-  fontSize: "16px",
-  color: "#333",
-},
-
-inactiveBadge: {
-  backgroundColor: "#6c757d",
-  color: "white",
-  padding: "2px 8px",
-  borderRadius: "12px",
-  fontSize: "10px",
-  fontWeight: "bold",
-  marginLeft: "8px",
-},
-
-editTimeButton: {
-  background: "#6c757d",
-  color: "white",
-  border: "none",
-  padding: "5px 10px",
-  borderRadius: "4px",
-  cursor: "pointer",
-  fontSize: "12px",
-},
-
-saveTimeButton: {
-  background: "#28a745",
-  color: "white",
-  border: "none",
-  padding: "5px 10px",
-  borderRadius: "4px",
-  cursor: "pointer",
-  fontSize: "12px",
-},
-
-timeInputs: {
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px",
-},
-
-timeInputGroup: {
-  display: "flex",
-  flexDirection: "column",
-  gap: "5px",
-},
-
-timeLabel: {
-  fontSize: "12px",
-  color: "#666",
-},
-
-timeInput: {
-  padding: "8px",
-  border: "1px solid #ddd",
-  borderRadius: "4px",
-  fontSize: "14px",
-},
-
-timeDisplay: {
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-},
-
-timeSlot: {
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-},
-
-timeIcon: {
-  fontSize: "12px",
-  color: "#666",
-},
-
-timeText: {
-  fontSize: "14px",
-  color: "#333",
-},
-
-timeSettingsActions: {
-  display: "flex",
-  justifyContent: "center",
-  gap: "15px",
-  paddingTop: "20px",
-  borderTop: "1px solid #eee",
-},
-
-saveAllButton: {
-  background: "#007bff",
-  color: "white",
-  border: "none",
-  padding: "10px 20px",
-  borderRadius: "6px",
-  cursor: "pointer",
-  fontSize: "14px",
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-},
-
-resetButton: {
-  background: "#6c757d",
-  color: "white",
-  border: "none",
-  padding: "10px 20px",
-  borderRadius: "6px",
-  cursor: "pointer",
-  fontSize: "14px",
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-},
-
-// Add to your styles object:
-noTimeSet: {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '15px 0',
-  gap: '10px',
-  textAlign: 'center',
-},
-
-noTimeIcon: {
-  fontSize: '24px',
-  color: '#adb5bd',
-  marginBottom: '5px',
-},
-
-noTimeText: {
-  fontSize: '14px',
-  color: '#6c757d',
-  marginBottom: '5px',
-},
-
-addTimeButton: {
-  background: '#007bff',
-  color: 'white',
-  border: 'none',
-  padding: '6px 12px',
-  borderRadius: '4px',
-  cursor: 'pointer',
-  fontSize: '12px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '5px',
-},
-
+  // Local Holiday Modal Styles
+  localHolidayModalContent: {
+    backgroundColor: "white",
+    borderRadius: "12px",
+    width: "800px",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+    animation: "slideIn 0.3s ease",
+  },
+  localHolidayModalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "20px",
+    borderBottom: "1px solid #eee",
+  },
+  localHolidayModalTitle: {
+    margin: 0,
+    fontSize: "20px",
+    color: "#333",
+  },
+  localHolidayContent: {
+    padding: "20px",
+  },
+  holidayFormSection: {
+    marginBottom: "30px",
+    padding: "20px",
+    backgroundColor: "#ffffffff",
+    borderRadius: "8px",
+    border: "1px solid #e9ecef",
+  },
+  sectionTitle: {
+    marginTop: 0,
+    marginBottom: "20px",
+    color: "#333",
+    fontSize: "18px",
+  },
+  holidayForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "15px",
+  },
+  formGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  formLabel: {
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "#495057",
+  },
+  dateInput: {
+    padding: "10px",
+    border: "1px solid #ddd",
+    borderRadius: "6px",
+    fontSize: "14px",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  textInput: {
+    padding: "10px",
+    border: "1px solid #ddd",
+    borderRadius: "6px",
+    fontSize: "14px",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  textareaInput: {
+    padding: "10px",
+    border: "1px solid #ddd",
+    borderRadius: "10px",
+    fontSize: "14px",
+    width: "100%",
+    boxSizing: "border-box",
+    resize: "vertical",
+  },
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    fontSize: "14px",
+    color: "#495057",
+    cursor: "pointer",
+  },
+  checkboxInput: {
+    width: "18px",
+    height: "18px",
+    cursor: "pointer",
+  },
+  formButtons: {
+    display: "flex",
+    gap: "10px",
+    marginTop: "10px",
+  },
+  holidayListSection: {
+    marginTop: "20px",
+  },
+  holidayList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    maxHeight: "400px",
+    overflowY: "auto",
+  },
+  holidayItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "15px",
+    backgroundColor: "#fff",
+    borderRadius: "8px",
+    border: "1px solid #e9ecef",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  },
+  holidayInfo: {
+    flex: 1,
+  },
+  holidayDate: {
+    fontSize: "14px",
+    color: "#666",
+    marginBottom: "5px",
+    display: "flex",
+    alignItems: "center",
+  },
+  recurringBadge: {
+    backgroundColor: "#e7f5ff",
+    color: "#228be6",
+    padding: "3px 8px",
+    borderRadius: "12px",
+    fontSize: "11px",
+    marginLeft: "10px",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  holidayName: {
+    fontSize: "16px",
+    fontWeight: "500",
+    color: "#333",
+    marginBottom: "5px",
+  },
+  holidayDescription: {
+    fontSize: "14px",
+    color: "#666",
+    fontStyle: "italic",
+  },
+  holidayActions: {
+    display: "flex",
+    gap: "10px",
+  },
+  editHolidayButton: {
+    backgroundColor: "#ffc107",
+    color: "#212529",
+    border: "none",
+    padding: "8px 12px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteHolidayButton: {
+    backgroundColor: "#dc3545",
+    color: "white",
+    border: "none",
+    padding: "8px 12px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noHolidays: {
+    textAlign: "center",
+    padding: "40px 20px",
+    color: "#6c757d",
+    backgroundColor: "#f8f9fa",
+    borderRadius: "8px",
+    border: "2px dashed #dee2e6",
+  },
+  noHolidaysIcon: {
+    fontSize: "48px",
+    color: "#adb5bd",
+    marginBottom: "15px",
+  },
+  noHolidaysSubtext: {
+    fontSize: "14px",
+    color: "#868e96",
+    marginTop: "5px",
+  },
 };
 
 export default Dashboard;

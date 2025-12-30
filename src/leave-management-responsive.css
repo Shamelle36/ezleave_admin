@@ -1,0 +1,661 @@
+/* leave-management-responsive.css */
+
+/* Leave Management Responsive Design */
+
+/* Global Mobile Reset */
+@media (max-width: 768px) {
+  * {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+  
+  /* Mobile Header */
+  .mobile-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: #009205;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    height: 60px;
+    z-index: 1001;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  }
+
+  .hamburger {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-logo {
+    display: none !important;
+  }
+
+  .mobile-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .mobile-icon-bell {
+    color: #fff;
+    font-size: 20px;
+    padding: 8px;
+  }
+
+  .mobile-profile {
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  .mobile-profile-image {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.3);
+  }
+
+  .mobile-profile-dropdown {
+    position: fixed;
+    top: 65px;
+    right: 16px;
+    background-color: #fff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    padding: 8px 0;
+    width: 160px;
+    z-index: 1002;
+    border: 1px solid #e0e0e0;
+  }
+
+  .mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 998;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Hide Desktop Header on Mobile */
+  .desktop-header {
+    display: none !important;
+  }
+  
+  /* Hide Desktop Sidebar on Mobile */
+  .sidebar {
+    transform: translateX(-100%);
+    width: 280px !important;
+    z-index: 1004;
+    box-shadow: 2px 0 15px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    background: #009205 !important;
+    transition: transform 0.3s ease;
+    padding: 0 !important;
+  }
+
+  /* Mobile Sidebar Header */
+  .sidebar-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 12px 16px !important;
+    background: #009205 !important;
+    height: 60px;
+    box-sizing: border-box;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .sidebar-close-btn {
+    background: none !important;
+    border: none !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    color: #ffffff !important;
+    padding: 8px !important;
+    width: 40px !important;
+    height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+  }
+
+  .logo-desktop {
+    display: none !important;
+  }
+
+  .logo-sidebar {
+    width: 40px !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  .sidebar-open {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar-closed {
+    transform: translateX(-100%) !important;
+  }
+
+  /* Content Area Mobile */
+  .content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 80px 10px 20px 10px !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Tab Container - Mobile Optimization */
+  .tabContainer {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 10px 0 !important;
+    margin-bottom: 15px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .tabContainer::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .tabContainer button {
+    flex: 0 0 auto !important;
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+    height: auto !important;
+    min-height: 36px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Leave Summary Section - Mobile */
+  .header1 {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    margin-bottom: 15px !important;
+  }
+
+  .line {
+    display: none !important;
+  }
+
+  .summaryCards {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    margin-top: 10px !important;
+    justify-content: space-between !important;
+  }
+
+  .summaryCards > div {
+    flex: 0 0 calc(50% - 5px) !important;
+    width: calc(50% - 5px) !important;
+    min-width: auto !important;
+    max-width: calc(50% - 5px) !important;
+    padding: 15px !important;
+  }
+
+  .card-title {
+    font-size: 14px !important;
+  }
+
+  .card-value {
+    font-size: 24px !important;
+  }
+
+  .inputs {
+    flex-direction: column !important;
+    gap: 15px !important;
+  }
+
+  .row1, .row2 {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .firstRow {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .input1, .filter {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .btn1, .btn2, .btn3 {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 10px !important;
+  }
+
+  /* Table Responsiveness */
+  .tableCon {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin: 0 -10px !important;
+    width: calc(100% + 20px) !important;
+  }
+
+  .table {
+    min-width: 1200px !important;
+  }
+
+  th, td {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* Leave Requests Section - Mobile */
+  .leaveRequests {
+    padding: 0 !important;
+  }
+
+  .requestsHeader {
+    flex-direction: column !important;
+    gap: 15px !important;
+    padding: 15px !important;
+  }
+
+  .headerControls {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .searchInput, .statusFilter, .clearFilterBtn {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .requestsContent {
+    flex-direction: column !important;
+    height: auto !important;
+    gap: 15px !important;
+  }
+
+  .leftSection, .rightSection {
+    width: 100% !important;
+    margin-right: 0 !important;
+  }
+
+  /* Mobile Table Improvements */
+  .tableContainer {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .leaveRequestsTable {
+    min-width: 800px !important;
+  }
+
+  .leaveRequestsColumn, .leaveRequestsRows {
+    padding: 12px 15px !important;
+    font-size: 13px !important;
+  }
+
+  /* Right Panel Mobile Optimization */
+  .employeeHeader {
+    padding: 15px !important;
+  }
+
+  .employeeCard {
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 10px !important;
+  }
+
+  .detailsGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .approvalSteps {
+    gap: 12px !important;
+  }
+
+  .actionButtons {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .approveBtn, .rejectBtn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Leave Balances Table - Mobile */
+  .table2 {
+    min-width: 800px !important;
+  }
+
+  .leaveBalance {
+    padding: 15px !important;
+  }
+
+  /* Modals - Mobile Optimization */
+  .modalContent, .csFormModal, .overlapWarningModal, .signatureChoiceModal, 
+  .eSignModal, .uploadSignatureModal, .actualFormModal {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 10px !important;
+    padding: 20px !important;
+    max-height: 90vh !important;
+  }
+
+  .formModalLayout {
+    flex-direction: column !important;
+    gap: 15px !important;
+  }
+
+  .leftControlPanel, .rightFormPreview {
+    min-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .rejectionButtonGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Calendar View Mobile */
+  .leaveCalendar {
+    flex-direction: column !important;
+    gap: 15px !important;
+  }
+
+  .calendarHeader {
+    flex-direction: column !important;
+    gap: 15px !important;
+    padding: 15px !important;
+  }
+
+  .calendarNavigation, .calendarControls {
+    width: 100% !important;
+  }
+
+  .calendarSearch {
+    width: 100% !important;
+  }
+
+  .calendarGrid {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .calendarDays {
+    min-width: 700px !important;
+  }
+
+  .calendarDay {
+    min-height: 80px !important;
+  }
+
+  /* Mobile Touch Improvements */
+  .mobile-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button, .leaveRequestsRow, .tabContainer button {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+
+  /* Single column layout for very small screens */
+  @media (max-width: 380px) {
+    .summaryCards > div {
+      flex: 0 0 100% !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+
+    .card-value {
+      font-size: 22px !important;
+    }
+
+    .tabContainer button {
+      font-size: 12px !important;
+      padding: 8px 10px !important;
+    }
+  }
+}
+
+/* Desktop styles */
+@media (min-width: 769px) {
+  /* Hide mobile elements on desktop */
+  .mobile-header,
+  .mobile-profile-dropdown,
+  .mobile-overlay,
+  .hamburger,
+  .mobile-header-right,
+  .mobile-icon-bell,
+  .mobile-profile,
+  .mobile-profile-image,
+  .sidebar-header,
+  .sidebar-close-btn,
+  .logo-sidebar {
+    display: none !important;
+  }
+
+  /* Show desktop elements */
+  .desktop-header,
+  .sidebar {
+    display: block !important;
+  }
+
+  /* Restore original desktop layout */
+  .content {
+    margin-left: 280px !important;
+    width: calc(100% - 280px) !important;
+    padding: 20px !important;
+    margin-top: 60px !important;
+  }
+
+  .summaryCards {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 30px !important;
+  }
+
+  .summaryCards > div {
+    width: 300px !important;
+  }
+
+  .inputs {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+  }
+
+  .row1, .row2 {
+    flex-direction: row !important;
+  }
+
+  .firstRow {
+    flex-direction: row !important;
+  }
+
+  .requestsContent {
+    display: flex !important;
+    flex-direction: row !important;
+    height: calc(100vh - 200px) !important;
+  }
+
+  .leftSection {
+    flex: 4 !important;
+    margin-right: 24px !important;
+  }
+
+  .rightSection {
+    width: 400px !important;
+  }
+
+  .leaveCalendar {
+    display: flex !important;
+    gap: 24px !important;
+  }
+
+  .calendarContent {
+    flex: 2 !important;
+  }
+
+  .calendarBox {
+    flex: 1 !important;
+    display: flex !important;
+    flexDirection: column !important;
+    gap: 16px !important;
+    marginTop: 50px !important;
+  }
+}
+
+/* Additional utility classes for better mobile experience */
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+}
+
+/* Ensure touch-friendly elements */
+.touch-friendly {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Loading states for mobile */
+.loading-skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Print styles */
+@media print {
+  .mobile-header,
+  .sidebar,
+  .tabContainer,
+  .inputs,
+  .actionButtons,
+  .modalOverlay,
+  .modalContent {
+    display: none !important;
+  }
+  
+  .content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+}
+
+/* Accessibility improvements for mobile */
+@media (max-width: 768px) {
+  /* Increase touch target sizes */
+  button, 
+  .btn1, 
+  .btn2, 
+  .btn3,
+  .tabContainer button,
+  .approveBtn,
+  .rejectBtn,
+  .leaveRequestsRow,
+  .statusFilter,
+  .searchInput {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+
+  /* Improve readability */
+  .txtData,
+  .card-value {
+    font-size: 22px !important;
+    font-weight: bold !important;
+  }
+
+  .txtlabel,
+  .card-title {
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Better spacing for mobile */
+  .summaryCards > div {
+    margin-bottom: 10px !important;
+  }
+
+  /* Optimize modal scrolling on mobile */
+  .modalContent,
+  .csFormModal,
+  .overlapWarningModal,
+  .signatureChoiceModal {
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Improve table readability on mobile */
+  .table td,
+  .table th {
+    padding: 10px 8px !important;
+    font-size: 12px !important;
+  }
+
+  /* Calendar mobile optimization */
+  .calendarDay {
+    font-size: 12px !important;
+  }
+
+  .calendarDayNumber {
+    font-size: 14px !important;
+  }
+}
+
+/* Landscape orientation optimization */
+@media (max-width: 768px) and (orientation: landscape) {
+  .content {
+    padding-top: 60px !important;
+  }
+
+  .summaryCards > div {
+    flex: 0 0 calc(33.33% - 10px) !important;
+    width: calc(33.33% - 10px) !important;
+  }
+
+  .requestsContent {
+    height: calc(100vh - 150px) !important;
+  }
+
+  .rightSection {
+    max-height: 400px !important;
+  }
+}
