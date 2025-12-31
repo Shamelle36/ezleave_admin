@@ -509,7 +509,7 @@ const fetchApiHolidays = async (year) => {
     setIsOpen(false);
   };
 
-  const API_URL = "https://ezleave-admin.onrender.com";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
 const fetchLocalHolidays = async () => {
   setIsLoadingHolidays(true);
