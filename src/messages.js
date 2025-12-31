@@ -81,10 +81,7 @@ function Messages() {
     return false;
   });
 
-   const API_URL =
-    window.location.hostname === "localhost"
-      ? "http://localhost:5000"
-      : "https://ezleave-admin.onrender.com";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
   useEffect(() => {
     if (isMobile && selectedUser) {

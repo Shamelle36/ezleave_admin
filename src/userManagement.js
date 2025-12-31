@@ -67,10 +67,7 @@ function UserManagement() {
     "Municipal Treasurer's Office",
   ];
 
-  const API_URL =
-    window.location.hostname === "localhost"
-      ? "http://localhost:5000"
-      : "https://ezleave-admin.onrender.com"; // replace with your laptop's local IP
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
 
   // Fetch all user accounts

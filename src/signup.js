@@ -14,6 +14,9 @@ function Signup() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+ 
+  const API_URL = "https://ezleave-admin-api.onrender.com";
+
 
   useEffect(() => {
     if (message || error) {
@@ -36,7 +39,7 @@ function Signup() {
     }
 
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/signup", {
+      const res = await axios.post(`${API_URL}/api/auth/signup`, {
         email,
         fullName,
         password,

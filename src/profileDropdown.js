@@ -8,9 +8,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import './ProfileDropdown.css'; // Optional CSS file
 
-const API_URL = window.location.hostname === "localhost"
-  ? "http://localhost:5000"
-  : "http://10.115.128.197:5000";
+const API_URL = "https://ezleave-admin-api.onrender.com";
 
 const ProfileDropdown = ({ 
   showSettingsModal, 

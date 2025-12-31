@@ -32,11 +32,7 @@ function AuditLogs() {
   const recordsPerPage = 10;
   const [summary, setSummary] = useState({ totalLogs: 0, suspiciousAlerts: 0 });
 
-
-  const API_URL =
-    window.location.hostname === "localhost"
-      ? "http://localhost:5000"
-      : "https://ezleave-admin.onrender.com";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
   useEffect(() => {
     // Fetch audit logs

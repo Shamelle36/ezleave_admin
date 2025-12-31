@@ -7,12 +7,15 @@ export default function SetupPassword() {
   const query = new URLSearchParams(window.location.search);
   const token = query.get("token");
 
+  const API_URL = "https://ezleave-admin-api.onrender.com";
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!password) return alert("Enter a password");
 
     try {
-      const res = await fetch(`http://localhost:5000/api/authAdmin/setup-password/${token}`, {
+      const res = await fetch(`${API_URL}/api/authAdmin/setup-password/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),

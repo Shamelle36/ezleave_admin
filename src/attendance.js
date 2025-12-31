@@ -57,10 +57,7 @@ function Attendance() {
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
   
-  const API_URL =
-    window.location.hostname === "localhost"
-      ? "http://localhost:5000"
-      : "https://ezleave-admin.onrender.com";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
   const allowedMenus = menuItems.filter((item) => {
     if (role === "admin") return true;
