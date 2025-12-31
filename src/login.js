@@ -11,13 +11,10 @@ function Login() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
-    const API_URL =
-    window.location.hostname === "localhost"
-      ? "http://localhost:5000"
-      : "https://ezleave-admin.onrender.com"; // replace with your laptop's local IP
-
-    useEffect(() => {
+  useEffect(() => {
     document.body.classList.add("login-no-scroll");
 
     return () => {
