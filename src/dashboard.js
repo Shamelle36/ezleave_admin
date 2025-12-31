@@ -1099,6 +1099,8 @@ const fetchLocalHolidays = async () => {
             showLogoutModal={showLogoutModal}
             setShowLogoutModal={setShowLogoutModal}
             isMobile={true}
+            profileData={profileData}
+            admin={admin}
           />
         </div>
       </div>
@@ -1771,6 +1773,7 @@ const fetchLocalHolidays = async () => {
             setShowProfileModal={setShowProfileModal}
             showLogoutModal={showLogoutModal}
             setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
             profileData={profileData} 
             admin={admin} 
           />
