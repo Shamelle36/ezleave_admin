@@ -171,8 +171,6 @@ function Dashboard() {
 
   const holidays = [...apiHolidays, ...localHolidays];
 
-  
-
   useEffect(() => {
   // Check if any modal is open
   const isAnyModalOpen = 
@@ -511,10 +509,7 @@ const fetchApiHolidays = async (year) => {
     setIsOpen(false);
   };
 
-  const API_URL =
-  window.location.hostname === "localhost"
-    ? "http://localhost:5000"
-    : "https://ezleave-admin.onrender.com";
+  const API_URL = "https://ezleave-admin.onrender.com";
 
 const fetchLocalHolidays = async () => {
   setIsLoadingHolidays(true);
