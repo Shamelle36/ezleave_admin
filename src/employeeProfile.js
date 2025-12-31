@@ -219,7 +219,7 @@ function EmployeeProfile() {
         "VAWC Leave": "VAWC",
         "Rehabilitation Leave": "RL",
         "Special Leave Benefits for Women": "SLBW",
-        "Special Emergency (Calamity) Leave": "CALAMITY",
+        "Special Emergency Leave": "CALAMITY",
         "Monetization of Leave Credits": "MOL",
         "Terminal Leave": "TL",
         "Adoption Leave": "AL"
@@ -701,27 +701,11 @@ function EmployeeProfile() {
       ? Math.min(100, (leave.used_days / leave.total_days) * 100) 
       : 0;
     
-    const getLeaveColor = (type) => {
-      const lowerType = type.toLowerCase();
-      if (lowerType.includes('sick')) return '#dc2626';
-      if (lowerType.includes('vacation')) return '#059669';
-      if (lowerType.includes('maternity')) return '#7c3aed';
-      if (lowerType.includes('paternity')) return '#3b82f6';
-      if (lowerType.includes('mandatory')) return '#f59e0b';
-      return '#6b7280';
-    };
-    
-    const color = getLeaveColor(leave.leave_type);
-    
     return (
-      <div style={{
-        ...styles.leaveBalanceCard,
-        borderLeft: `4px solid ${color}`,
-        borderTop: `1px solid ${color}20`
-      }}>
+      <div style={styles.leaveBalanceCard}>
         <div style={styles.leaveBalanceHeader}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h4 style={{...styles.leaveBalanceTitle, color}}>
+            <h4 style={styles.leaveBalanceTitle}>
               {leave.leave_type}
             </h4>
             <div style={styles.leaveYearBadge}>
@@ -745,7 +729,6 @@ function EmployeeProfile() {
               style={{
                 ...styles.progressBar,
                 width: `${percentage}%`,
-                backgroundColor: color
               }}
             />
           </div>
@@ -761,7 +744,7 @@ function EmployeeProfile() {
         
         <div style={styles.leaveBalanceNumbers}>
           <div style={styles.balanceItem}>
-            <FontAwesomeIcon icon={faCalendarPlus} style={{...styles.balanceIcon, color}} />
+            <FontAwesomeIcon icon={faCalendarPlus} style={styles.balanceIcon} />
             <div>
               <div style={styles.balanceLabel}>Total</div>
               <div style={styles.balanceValue}>{leave.total_days || 0}</div>
@@ -769,7 +752,7 @@ function EmployeeProfile() {
           </div>
           <div style={styles.balanceDivider} />
           <div style={styles.balanceItem}>
-            <FontAwesomeIcon icon={faCalendarMinus} style={{...styles.balanceIcon, color}} />
+            <FontAwesomeIcon icon={faCalendarMinus} style={styles.balanceIcon} />
             <div>
               <div style={styles.balanceLabel}>Used</div>
               <div style={styles.balanceValue}>{leave.used_days || 0}</div>
@@ -777,7 +760,7 @@ function EmployeeProfile() {
           </div>
           <div style={styles.balanceDivider} />
           <div style={styles.balanceItem}>
-            <FontAwesomeIcon icon={faBalanceScale} style={{...styles.balanceIcon, color}} />
+            <FontAwesomeIcon icon={faBalanceScale} style={styles.balanceIcon} />
             <div>
               <div style={styles.balanceLabel}>Remaining</div>
               <div style={styles.balanceValue}>{leave.remaining || 0}</div>
@@ -807,7 +790,7 @@ function EmployeeProfile() {
           
           <div style={styles.editModalBody}>
             <div style={styles.leaveInfoHeader}>
-              <div style={{...styles.leaveTypeBadge, backgroundColor: getLeaveColor(modalLeave.leave_type) + '20', color: getLeaveColor(modalLeave.leave_type) }}>
+              <div style={styles.leaveTypeBadge}>
                 {modalLeave.leave_type}
               </div>
               <div style={styles.yearBadge}>{modalLeave.year}</div>
@@ -896,16 +879,6 @@ function EmployeeProfile() {
     );
   };
 
-  // Helper function for leave color
-  const getLeaveColor = (type) => {
-    const lowerType = type.toLowerCase();
-    if (lowerType.includes('sick')) return '#dc2626';
-    if (lowerType.includes('vacation')) return '#059669';
-    if (lowerType.includes('maternity')) return '#7c3aed';
-    if (lowerType.includes('paternity')) return '#3b82f6';
-    if (lowerType.includes('mandatory')) return '#f59e0b';
-    return '#6b7280';
-  };
 
   return (
     <div style={styles.dashboardContainer}>
@@ -1051,48 +1024,6 @@ function EmployeeProfile() {
                   </div>
                 </div>
 
-                {/* Quick Leave Balances Summary (in Overview tab) */}
-                {leaveEntitlements.length > 0 && (
-                  <div className="leaveSummaryCard" style={styles.leaveSummaryCard}>
-                    <div style={styles.leaveSummaryHeader}>
-                      <FontAwesomeIcon icon={faBalanceScale} style={styles.summaryIcon} />
-                      <h3 style={styles.leaveSummaryTitle}>Leave Balances Summary</h3>
-                    </div>
-                    <div style={styles.leaveSummaryStats}>
-                      <div style={styles.summaryStat}>
-                        <div style={styles.summaryStatValue}>{leaveSummary?.totalRemaining || 0}</div>
-                        <div style={styles.summaryStatLabel}>Days Remaining</div>
-                      </div>
-                      <div style={styles.summaryDivider} />
-                      <div style={styles.summaryStat}>
-                        <div style={styles.summaryStatValue}>{leaveSummary?.totalUsed || 0}</div>
-                        <div style={styles.summaryStatLabel}>Days Used</div>
-                      </div>
-                      <div style={styles.summaryDivider} />
-                      <div style={styles.summaryStat}>
-                        <div style={styles.summaryStatValue}>{leaveSummary?.totalEntitlements || 0}</div>
-                        <div style={styles.summaryStatLabel}>Total Entitlement</div>
-                      </div>
-                    </div>
-                    <div style={styles.leaveSummaryCategories}>
-                      <div style={{...styles.categoryBadge, backgroundColor: '#fef2f2', color: '#dc2626'}}>
-                        Sick: {leaveSummary?.byCategory?.sick || 0} days
-                      </div>
-                      <div style={{...styles.categoryBadge, backgroundColor: '#f0fdf4', color: '#059669'}}>
-                        Vacation: {leaveSummary?.byCategory?.vacation || 0} days
-                      </div>
-                      <div style={{...styles.categoryBadge, backgroundColor: '#f8fafc', color: '#475569'}}>
-                        Special: {leaveSummary?.byCategory?.special || 0} days
-                      </div>
-                    </div>
-                    <button 
-                      style={styles.viewAllBalancesBtn}
-                      onClick={() => setActiveTab("leave-balances")}
-                    >
-                      View All Balances <FontAwesomeIcon icon={faChevronRight} />
-                    </button>
-                  </div>
-                )}
 
                 {/* Leave Card */}
                 <div className="leaveCardWrapper" style={styles.leaveCardWrapper}>
@@ -1403,16 +1334,6 @@ function EmployeeProfile() {
             {/* Leave Balances Tab */}
             {activeTab === "leave-balances" && (
               <div className="leaveBalancesContainer" style={styles.leaveBalancesContainer}>
-                <div style={styles.leaveBalancesHeader}>
-                  <FontAwesomeIcon icon={faBalanceScale} style={styles.balancesHeaderIcon} />
-                  <div>
-                    <h2 style={styles.balancesTitle}>Leave Balances</h2>
-                    <p style={styles.balancesSubtitle}>
-                      Current leave entitlements and usage for {employee.first_name} {employee.last_name}
-                      {role === "admin" && " - Click edit icon to adjust balances"}
-                    </p>
-                  </div>
-                </div>
 
                 {loadingLeaveBalances ? (
                   <div style={styles.loadingMessage}>
@@ -1433,32 +1354,6 @@ function EmployeeProfile() {
                         ))}
                     </div>
 
-                    {/* Leave Type Legend */}
-                    <div style={styles.leaveLegend}>
-                      <h4 style={styles.legendTitle}>Leave Type Colors:</h4>
-                      <div style={styles.legendItems}>
-                        <div style={styles.legendItem}>
-                          <div style={{...styles.legendColor, backgroundColor: '#dc2626'}}></div>
-                          <span style={styles.legendText}>Sick Leave</span>
-                        </div>
-                        <div style={styles.legendItem}>
-                          <div style={{...styles.legendColor, backgroundColor: '#059669'}}></div>
-                          <span style={styles.legendText}>Vacation Leave</span>
-                        </div>
-                        <div style={styles.legendItem}>
-                          <div style={{...styles.legendColor, backgroundColor: '#7c3aed'}}></div>
-                          <span style={styles.legendText}>Maternity Leave</span>
-                        </div>
-                        <div style={styles.legendItem}>
-                          <div style={{...styles.legendColor, backgroundColor: '#3b82f6'}}></div>
-                          <span style={styles.legendText}>Paternity Leave</span>
-                        </div>
-                        <div style={styles.legendItem}>
-                          <div style={{...styles.legendColor, backgroundColor: '#f59e0b'}}></div>
-                          <span style={styles.legendText}>Special Leaves</span>
-                        </div>
-                      </div>
-                    </div>
                   </>
                 ) : (
                   <div style={styles.noLeaveBalances}>

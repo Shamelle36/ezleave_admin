@@ -1,4 +1,4 @@
-// Attendance.jsx - Updated with class names
+// Attendance.jsx - Updated with simplified summary cards
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -281,6 +281,11 @@ function Attendance() {
     setOpenExport(false);
   };
 
+  // Calculate summary counts
+  const presentCount = employees.filter(e => e.status === 'Present').length;
+  const absentCount = employees.filter(e => e.status === 'Absent').length;
+  const onLeaveCount = employees.filter(e => e.status === 'On-Leave').length;
+
   return (
     <div style={styles.dashboardContainer}>
       {/* Mobile Header */}
@@ -422,7 +427,7 @@ function Attendance() {
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards - Simplified */}
         <div className="attendance-summary-cards" style={styles.summaryCards}>
           <div className="attendance-card" style={styles.card}>
             <p className="attendance-txtSum" style={styles.txtSum}>Present Summary</p>
@@ -430,22 +435,7 @@ function Attendance() {
               <div className="attendance-card-data" style={styles.cardData}>
                 <div className="attendance-data1" style={styles.data1}>
                   <p className="attendance-txtlabel" style={styles.txtlabel}>Total Present</p>
-                  <p className="attendance-txtData" style={styles.txtData}>{employees.filter(e => e.status === 'Present').length}</p>
-                </div>
-                <div className="divider" style={styles.divider}></div>
-                <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>On-Time</p>
-                  <p className="attendance-txtData" style={styles.txtData}>—</p>
-                </div>
-                <div className="divider" style={styles.divider}></div>
-                <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>Early clock-in</p>
-                  <p className="attendance-txtData" style={styles.txtData}>—</p>
-                </div>
-                <div className="divider" style={styles.divider}></div>
-                <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>Late clock-in</p>
-                  <p className="attendance-txtData" style={styles.txtData}>—</p>
+                  <p className="attendance-txtData" style={styles.txtData}>{presentCount}</p>
                 </div>
               </div>
             </div>
@@ -457,17 +447,7 @@ function Attendance() {
               <div className="attendance-card-data" style={styles.cardData}>
                 <div className="attendance-data1" style={styles.data1}>
                   <p className="attendance-txtlabel" style={styles.txtlabel}>Total Absent</p>
-                  <p className="attendance-txtData" style={styles.txtData}>{employees.filter(e => e.status === 'Absent').length}</p>
-                </div>
-                <div className="divider" style={styles.divider}></div>
-                <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>No clock-in</p>
-                  <p className="attendance-txtData" style={styles.txtData}>—</p>
-                </div>
-                <div className="divider" style={styles.divider}></div>
-                <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>No clock-out</p>
-                  <p className="attendance-txtData" style={styles.txtData}>—</p>
+                  <p className="attendance-txtData" style={styles.txtData}>{absentCount}</p>
                 </div>
               </div>
             </div>
@@ -479,12 +459,7 @@ function Attendance() {
               <div className="attendance-card-data" style={styles.cardData}>
                 <div className="attendance-data1" style={styles.data1}>
                   <p className="attendance-txtlabel" style={styles.txtlabel}>Total on-leave</p>
-                  <p className="attendance-txtData" style={styles.txtData}>{employees.filter(e => e.status === 'On-Leave').length}</p>
-                </div>
-                <div className="divider" style={styles.divider}></div>
-                <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>Day Off</p>
-                  <p className="attendance-txtData" style={styles.txtData}>{employees.filter(e => e.status === 'Day-off').length}</p>
+                  <p className="attendance-txtData" style={styles.txtData}>{onLeaveCount}</p>
                 </div>
               </div>
             </div>
