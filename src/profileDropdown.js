@@ -13,10 +13,13 @@ const ProfileDropdown = ({
   showLogoutModal,
   setShowLogoutModal,
   isMobile = false,
+  profileData,
+  admin
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [profile, setProfile] = useState(null);
   const [notifications, setNotifications] = useState([]);
+
+  const profile = profileData || admin;
 
   // Fetch profile
   useEffect(() => {
@@ -37,7 +40,7 @@ const ProfileDropdown = ({
         const res = await fetch(endpoint);
         if (!res.ok) throw new Error("Failed to fetch profile");
         const data = await res.json();
-        setProfile(data);
+        profile(data);
       } catch (err) {
         console.error("Error fetching profile:", err);
         localStorage.removeItem("userId");

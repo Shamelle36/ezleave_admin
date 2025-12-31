@@ -1758,20 +1758,6 @@ const fetchLocalHolidays = async () => {
               </li>
             );
           })}
-
-          <li>
-            <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-                setIsSidebarOpen(false);
-              }}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </Link>
-          </li>
         </ul>
       </div>
 
@@ -1786,6 +1772,8 @@ const fetchLocalHolidays = async () => {
             showLogoutModal={showLogoutModal}
             setShowLogoutModal={setShowLogoutModal}
             isMobile={false}
+            profileData={profileData} 
+            admin={admin} 
           />
         </div>
       </div>
