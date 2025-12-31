@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserCog, faCog, faSignOutAlt, faBell } from "@fortawesome/free-solid-svg-icons";
+import "./ProfileDropdown.css";
 
 const API_URL = "https://ezleave-admin-api.onrender.com";
 
