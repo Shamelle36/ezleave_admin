@@ -32,9 +32,15 @@ function AuditLogs() {
   const recordsPerPage = 10;
   const [summary, setSummary] = useState({ totalLogs: 0, suspiciousAlerts: 0 });
 
+
+  const API_URL =
+    window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "https://ezleave-admin.onrender.com";
+
   useEffect(() => {
     // Fetch audit logs
-    fetch("http://localhost:5000/api/audit-logs")
+    fetch(`${API_URL}/api/audit-logs`)
       .then((res) => res.json())
       .then((data) => {
         // If using the first approach (combined response)
@@ -46,7 +52,7 @@ function AuditLogs() {
           setAuditLogs(data);
           
           // Fetch summary separately
-          fetch("http://localhost:5000/api/audit-logs/summary")
+          fetch(`${API_URL}/api/audit-logs/summary`)
             .then(res => res.json())
             .then(summaryData => setSummary({
               totalLogs: summaryData.total_logs,

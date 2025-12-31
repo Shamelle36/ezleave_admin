@@ -181,7 +181,7 @@ function Employees() {
   const API_URL =
     window.location.hostname === "localhost"
       ? "http://localhost:5000"
-      : "http://10.115.128.197:5000";
+      : "https://ezleave-admin.onrender.com";
 
   const loadEmployees = async () => {
     try {

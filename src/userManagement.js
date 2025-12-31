@@ -67,10 +67,16 @@ function UserManagement() {
     "Municipal Treasurer's Office",
   ];
 
+  const API_URL =
+    window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "https://ezleave-admin.onrender.com"; // replace with your laptop's local IP
+
+
   // Fetch all user accounts
   const fetchAccounts = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/authAdmin/accounts");
+      const res = await fetch(`${API_URL}/api/authAdmin/accounts`);
       const data = await res.json();
       setAccounts(data.accounts || []);
     } catch (err) {
@@ -108,7 +114,7 @@ function UserManagement() {
     }
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/authAdmin/createAccount", {
+      const res = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newAccount),
@@ -143,7 +149,7 @@ function UserManagement() {
     if (!selectedAccount) return;
     
     try {
-      const res = await fetch(`http://localhost:5000/api/authAdmin/accounts/${selectedAccount.id}`, {
+      const res = await fetch(`${API_URL}/api/authAdmin/accounts/${selectedAccount.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(selectedAccount),
@@ -168,7 +174,7 @@ function UserManagement() {
   const handleResetPassword = async (accountId) => {
     if (window.confirm("Confirm password reset? The user will receive email instructions to create a new password.")) {
       try {
-        const res = await fetch(`http://localhost:5000/api/authAdmin/reset-password/${accountId}`, {
+        const res = await fetch(`${API_URL}/api/authAdmin/reset-password/${accountId}`, {
           method: "POST",
         });
         

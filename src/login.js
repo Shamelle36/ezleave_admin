@@ -15,7 +15,7 @@ function Login() {
     const API_URL =
     window.location.hostname === "localhost"
       ? "http://localhost:5000"
-      : "http://10.115.128.197:5000"; // replace with your laptop's local IP
+      : "https://ezleave-admin.onrender.com"; // replace with your laptop's local IP
 
     useEffect(() => {
     document.body.classList.add("login-no-scroll");
