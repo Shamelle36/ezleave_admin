@@ -28,10 +28,22 @@ const ProfileDropdown = ({
   });
   const [notifications, setNotifications] = useState([]);
 
+  const getStoredAdmin = () => {
+    try {
+      const raw = localStorage.getItem("admin");
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error("Invalid admin in localStorage, clearing it.", err);
+      localStorage.removeItem("admin");
+      return null;
+    }
+  };
+
   // Fetch admin data
-  useEffect(() => {
+ useEffect(() => {
     const fetchAdmin = async () => {
-      const storedAdmin = JSON.parse(localStorage.getItem("admin"));
+      const storedAdmin = getStoredAdmin();
       if (!storedAdmin?.id) return;
 
       try {
@@ -40,6 +52,10 @@ const ProfileDropdown = ({
           : `${API_URL}/api/auth/useradmin/${storedAdmin.id}`;
 
         const res = await fetch(endpoint);
+        if (!res.ok) {
+          console.error("Failed to fetch admin data:", res.status);
+          return;
+        }
         const data = await res.json();
         setAdmin(data);
         setProfileData({
