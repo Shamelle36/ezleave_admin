@@ -26,6 +26,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useState, useEffect, useRef } from 'react';
 import './message-responsive.css';
+import { io } from "socket.io-client";
+
 
 function Messages() {
   const [users, setUsers] = useState([]);
@@ -41,9 +43,9 @@ function Messages() {
   const [onlineStatus, setOnlineStatus] = useState({});
   const [typingStatus, setTypingStatus] = useState({});
   const [isTyping, setIsTyping] = useState(false);
-  const [socket, setSocket] = useState(null);
   const typingTimeoutRef = useRef(null);
-    const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const socketRef = useRef(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
@@ -155,7 +157,7 @@ useEffect(() => {
       
       // Initialize WebSocket connection
       setTimeout(() => {
-        initializeWebSocket();
+        initializeSocket();
       }, 500);
     } else {
       console.log('❌ No admin data found in localStorage');
@@ -168,9 +170,8 @@ useEffect(() => {
   
   // Cleanup function
   return () => {
-    if (socket) {
-      console.log('🧹 Cleaning up WebSocket connection');
-      socket.close();
+    if (socketRef.current) {
+      socketRef.current.disconnect();
     }
   };
 }, []);
@@ -196,205 +197,75 @@ useEffect(() => {
 };
 useEffect(() => {
   if (adminData && adminType) {
-    initializeWebSocket();
+    initializeSocket();
   }
 
   return () => {
-    if (socket) {
-      socket.close();
+    if (socketRef.current) {
+      socketRef.current.disconnect();
     }
   };
 }, [adminData, adminType]);
 
-const initializeWebSocket = () => {
-  // Clear any existing socket first
-  if (socket) {
-    socket.close();
+const initializeSocket = () => {
+  if (!adminData || !adminType) return;
+
+  // Disconnect existing socket
+  if (socketRef.current) {
+    socketRef.current.disconnect();
   }
 
-  if (!adminData || !adminData.id || !adminType) {
-    console.error('❌ Cannot initialize WebSocket: Missing admin data');
-    setConnectionStatus('Missing admin data');
-    return;
-  }
-
-  // Debug: Check what data we have
-  console.log('🔍 WebSocket connection data:', {
-    adminId: adminData.id,
-    adminType: adminType,
-    name: adminData.full_name || adminData.name || 'Admin',
-    email: adminData.email,
-    role: adminData.role
+  const socket = io(API_URL, {
+    transports: ["websocket"],
+    query: {
+      userId: adminData.id,
+      userType: adminType,
+    },
   });
 
-  // ✅ CRITICAL FIX: Use the correct parameter names based on your server code
-  // Looking at your sendToUser function in backend, it expects userId and userType
-  const connectUrl = `${API_URL.replace('https', 'wss')}/?userId=${adminData.id}&userType=${adminType}`;
-  
-  console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
-  setConnectionStatus('Connecting...');
+  socketRef.current = socket;
 
-  const ws = new WebSocket(connectUrl);
-  
-  // Add connection timeout
-  const connectionTimeout = setTimeout(() => {
-    if (ws.readyState === WebSocket.CONNECTING) {
-      console.error('❌ WebSocket connection timeout');
-      ws.close();
-      setConnectionStatus('Connection Timeout');
+  setConnectionStatus("Connecting...");
+
+  socket.on("connect", () => {
+    console.log("✅ Socket.IO connected:", socket.id);
+    setConnectionStatus("Connected");
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log("❌ Socket disconnected:", reason);
+    setConnectionStatus("Disconnected");
+  });
+
+  // 🔥 REALTIME MESSAGE
+  socket.on("new_message", (data) => {
+    console.log("📨 New message:", data);
+    handleIncomingMessage(data);
+  });
+
+  // ⌨️ TYPING
+  socket.on("typing", (data) => {
+    if (
+      selectedUser &&
+      data.senderId === selectedUser.id &&
+      data.senderType === selectedUser.account_type
+    ) {
+      setIsTyping(data.isTyping);
     }
-  }, 5000);
+  });
 
-  ws.onopen = () => {
-    clearTimeout(connectionTimeout);
-    console.log('✅ WebSocket connected successfully');
-    setSocket(ws);
-    setConnectionStatus('Connected');
-    
-    // Send a welcome/identification message after connection
-    setTimeout(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        const welcomeMessage = {
-          type: 'identification',
-          userId: adminData.id,
-          userType: adminType,
-          userName: adminData.full_name || adminData.name || 'Admin',
-          timestamp: new Date().toISOString()
-        };
-        
-        console.log('👋 Sending identification:', welcomeMessage);
-        ws.send(JSON.stringify(welcomeMessage));
-      }
-    }, 500);
-  };
+  // 🟢 ONLINE STATUS
+  socket.on("online_status", (data) => {
+    setOnlineStatus((prev) => ({
+      ...prev,
+      [`${data.userType}:${data.userId}`]: data.isOnline,
+    }));
+  });
 
- ws.onmessage = (event) => {
-  try {
-    const data = JSON.parse(event.data);
-    console.log('📩 WebSocket message received:', data);
-
-    switch(data.type) {
-      case 'welcome':
-      case 'identification_accepted':
-        console.log('✅ Server accepted our identification');
-        break;
-        
-      case 'new_message':
-        console.log('💌 New message via WebSocket:', data);
-        // Process incoming message for BOTH sidebar AND chat area
-        if (data.message) {
-          handleIncomingMessage(data);
-        }
-        break;
-        
-      case 'message_sent':
-        console.log('✓ Message sent confirmation:', data);
-        if (data.message && data.message.messageId) {
-          // Update message delivery status
-          setMessages(prev => prev.map(msg => 
-            msg.id === data.message.messageId ? { ...msg, delivered: true } : msg
-          ));
-        }
-        break;
-        
-      case 'message_received':
-        console.log('✓ Message delivery confirmation:', data);
-        if (data.messageId) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === data.messageId ? { ...msg, delivered: true } : msg
-          ));
-        }
-        break;
-        
-      case 'typing':
-        console.log('⌨️ Typing indicator:', data);
-        if (data.isTyping && selectedUser && 
-            data.senderId == selectedUser.id && 
-            data.senderType === selectedUser.account_type) {
-          setIsTyping(true);
-          
-          // Clear typing indicator after 2 seconds
-          setTimeout(() => {
-            setIsTyping(false);
-          }, 2000);
-        } else if (!data.isTyping) {
-          setIsTyping(false);
-        }
-        break;
-        
-      case 'user_online':
-        console.log('🟢 User online:', data);
-        if (data.userId && data.userType) {
-          setOnlineStatus(prev => ({
-            ...prev,
-            [`${data.userType}:${data.userId}`]: true
-          }));
-        }
-        break;
-        
-      case 'user_offline':
-        console.log('🔴 User offline:', data);
-        if (data.userId && data.userType) {
-          setOnlineStatus(prev => ({
-            ...prev,
-            [`${data.userType}:${data.userId}`]: false
-          }));
-        }
-        break;
-        
-      case 'error':
-        console.error('❌ WebSocket error:', data.message);
-        break;
-        
-      case 'pong':
-        // Heartbeat response - ignore
-        break;
-        
-      default:
-        console.log('📨 Unknown message type:', data.type, data);
-    }
-  } catch (error) {
-    console.error('❌ Error parsing WebSocket message:', error);
-    console.log('📨 Raw message:', event.data);
-  }
-};
-
-  ws.onerror = (error) => {
-    clearTimeout(connectionTimeout);
-    console.error('❌ WebSocket error:', error);
-    setConnectionStatus('Connection Error');
-  };
-
-  ws.onclose = (event) => {
-    clearTimeout(connectionTimeout);
-    console.log('🔌 WebSocket disconnected:', {
-      code: event.code,
-      reason: event.reason,
-      wasClean: event.wasClean
-    });
-    setConnectionStatus(`Disconnected: ${event.reason || 'Unknown reason'}`);
-    setSocket(null);
-    
-    // Auto-reconnect after 3 seconds
-    setTimeout(() => {
-      if (adminData && adminType) {
-        console.log('🔄 Attempting to reconnect WebSocket...');
-        initializeWebSocket();
-      }
-    }, 3000);
-  };
-
-  // Set up heartbeat to keep connection alive
-  const heartbeatInterval = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'ping' }));
-    }
-  }, 30000); // Every 30 seconds
-
-  // Store the interval ID for cleanup
-  ws.heartbeatInterval = heartbeatInterval;
-  
-  setSocket(ws);
+  socket.on("connect_error", (err) => {
+    console.error("❌ Socket error:", err.message);
+    setConnectionStatus("Connection Error");
+  });
 };
 
 const processIncomingMessage = (messageData) => {
@@ -462,15 +333,6 @@ const processIncomingMessage = (messageData) => {
   if (isFromSelectedUser && !messageData.read_status) {
     markMessagesAsRead(selectedUser.id, selectedUser.account_type);
     
-    // Send read receipt via WebSocket
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'message_read',
-        messageId: messageData.id,
-        senderId: selectedUser.id,
-        senderType: selectedUser.account_type
-      }));
-    }
   }
   
   // Show notification if not viewing conversation
@@ -657,45 +519,34 @@ const handleIncomingMessage = (data) => {
   };
 
   // Handle typing indicator
- const handleInputChange = (e) => {
+const handleInputChange = (e) => {
   const value = e.target.value;
   setInput(value);
-  
-  if (!socket || socket.readyState !== WebSocket.OPEN || !selectedUser) return;
-  
-  // Clear previous timeout
+
+  if (!socketRef.current || !selectedUser) return;
+
+  // clear previous timeout
   if (typingTimeoutRef.current) {
     clearTimeout(typingTimeoutRef.current);
   }
-  
-  // Send typing started
+
   if (value.length > 0) {
-    const typingMessage = {
-      type: 'typing',
-      isTyping: true,
+    socketRef.current.emit("typing", {
       receiverId: selectedUser.id,
-      receiverType: selectedUser.account_type
-    };
-    
-    console.log('⌨️ Sending typing started:', typingMessage);
-    socket.send(JSON.stringify(typingMessage));
+      receiverType: selectedUser.account_type,
+      isTyping: true,
+    });
   }
-  
-  // Set timeout to send typing stopped
+
   typingTimeoutRef.current = setTimeout(() => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const typingStopped = {
-        type: 'typing',
-        isTyping: false,
-        receiverId: selectedUser.id,
-        receiverType: selectedUser.account_type
-      };
-      
-      console.log('⌨️ Sending typing stopped:', typingStopped);
-      socket.send(JSON.stringify(typingStopped));
-    }
-  }, 1500); // Send typing stopped after 1.5 seconds of no typing
+    socketRef.current.emit("typing", {
+      receiverId: selectedUser.id,
+      receiverType: selectedUser.account_type,
+      isTyping: false,
+    });
+  }, 1500);
 };
+
 
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin"));
@@ -708,8 +559,8 @@ const handleIncomingMessage = (data) => {
       });
     }
 
-    if (socket) {
-      socket.close();
+    if (socketRef.current) {
+      socketRef.current.disconnect();
     }
 
     localStorage.removeItem("admin");
@@ -818,117 +669,60 @@ const handleIncomingMessage = (data) => {
   };
 
 const sendMessage = async (receiverId, receiverType, messageText) => {
-  // Declare tempId at the beginning of the function so it's available in all blocks
   const tempId = Date.now();
-  
-  try {
-    const token = localStorage.getItem("token");
-    
-    // Create temp message for immediate UI update
-    const tempMessage = {
+
+  const token = localStorage.getItem("token");
+
+  // optimistic UI
+  setMessages(prev => [
+    ...prev,
+    {
       id: tempId,
-      sender: 'me',
+      sender: "me",
       text: messageText,
-      time: new Date().toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      }),
-      pinned: false,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       delivered: false,
-      read_status: false
-    };
-    
-    // Add to UI immediately
-    setMessages(prev => [...prev, tempMessage]);
-    
-    // Scroll to bottom
-    setTimeout(() => {
-      const messagesArea = document.getElementById('messagesArea');
-      if (messagesArea) {
-        messagesArea.scrollTop = messagesArea.scrollHeight;
-      }
-    }, 100);
-    
-    // ✅ Send via WebSocket for real-time delivery
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const wsMessage = {
-        type: 'send_message',
-        receiverId: receiverId,
-        receiverType: receiverType,
-        message: messageText,
-        tempId: tempId,
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log('📤 Sending via WebSocket:', wsMessage);
-      socket.send(JSON.stringify(wsMessage));
-    } else {
-      console.warn('⚠️ WebSocket not connected, message will only be saved to DB');
+      read_status: false,
     }
-    
-    // Also send via REST API to save to database
-    const requestBody = {
+  ]);
+
+  // 🔥 REALTIME SEND
+  if (socketRef.current) {
+    socketRef.current.emit("send_message", {
+      receiverId,
+      receiverType,
+      message: messageText,
+      tempId,
+    });
+  }
+
+  // 💾 SAVE TO DB
+  const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
       sender_id: adminData.id,
       sender_type: adminType,
       receiver_id: receiverId,
       receiver_type: receiverType,
-      message: messageText
-    };
-    
-    console.log('💾 Saving to database:', requestBody);
-    
-    const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-    
-    let data;
-    try {
-      data = await response.json();
-      console.log('📨 Server response:', data);
-    } catch (e) {
-      console.error('❌ Failed to parse response:', e);
-      // Still mark as delivered since we sent via WebSocket
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempId ? { ...msg, delivered: true } : msg
-      ));
-      return true;
-    }
-    
-    if (response.ok && data.success) {
-      // Update with real database ID
-      if (data.data?.id) {
-        setMessages(prev => prev.map(msg => 
-          msg.id === tempId ? { ...msg, id: data.data.id, delivered: true } : msg
-        ));
-      } else {
-        setMessages(prev => prev.map(msg => 
-          msg.id === tempId ? { ...msg, delivered: true } : msg
-        ));
-      }
-      
-      return true;
-    } else {
-      console.error('❌ Server error response:', data);
-      // Mark as failed
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
-      ));
-      return false;
-    }
-  } catch (error) {
-    console.error('❌ Network error sending message:', error);
-    // Mark as failed
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
-    ));
-    return false;
+      message: messageText,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (data.success && data.data?.id) {
+    setMessages(prev =>
+      prev.map(m =>
+        m.id === tempId ? { ...m, id: data.data.id, delivered: true } : m
+      )
+    );
   }
 };
+
 
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
@@ -948,13 +742,11 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
         })
       });
       
-      // Send read status via WebSocket
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-          type: 'messages_read',
+      if (socketRef.current) {
+        socketRef.current.emit("messages_read", {
           senderId: contactId,
-          senderType: contactType
-        }));
+          senderType: contactType,
+        });
       }
       
     } catch (error) {
