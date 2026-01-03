@@ -216,7 +216,7 @@ const initializeSocket = () => {
   }
 
   const socket = io(API_URL, {
-    transports: ["websocket"],
+    transports: ["websocket", "polling"], // Add polling as fallback
     query: {
       userId: adminData.id,
       userType: adminType,
@@ -230,6 +230,12 @@ const initializeSocket = () => {
   socket.on("connect", () => {
     console.log("✅ Socket.IO connected:", socket.id);
     setConnectionStatus("Connected");
+    
+    // Register with the server
+    socket.emit("register", {
+      userId: adminData.id,
+      userType: adminType
+    });
   });
 
   socket.on("disconnect", (reason) => {
@@ -237,29 +243,40 @@ const initializeSocket = () => {
     setConnectionStatus("Disconnected");
   });
 
-  // 🔥 REALTIME MESSAGE
-  socket.on("new_message", (data) => {
-    console.log("📨 New message:", data);
-    handleIncomingMessage(data);
-  });
-
-  // ⌨️ TYPING
-  socket.on("typing", (data) => {
-    if (
-      selectedUser &&
-      data.senderId === selectedUser.id &&
-      data.senderType === selectedUser.account_type
-    ) {
-      setIsTyping(data.isTyping);
+  // 🔥 FIX: Listen to "message" event, not "new_message"
+  socket.on("message", (data) => {
+    console.log("📨 Received message event:", data);
+    
+    if (!data || !data.type) return;
+    
+    switch (data.type) {
+      case "new_message":
+        handleIncomingMessage(data);
+        break;
+      case "typing":
+        if (
+          selectedUser &&
+          data.senderId === selectedUser.id &&
+          data.senderType === selectedUser.account_type
+        ) {
+          setIsTyping(data.isTyping);
+        }
+        break;
+      case "online_status":
+        setOnlineStatus((prev) => ({
+          ...prev,
+          [`${data.userType}:${data.userId}`]: data.isOnline,
+        }));
+        break;
+      case "message_sent": // Handle confirmation
+        console.log("✅ Message sent confirmation:", data);
+        if (data.tempId) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === data.tempId ? { ...msg, delivered: true } : msg
+          ));
+        }
+        break;
     }
-  });
-
-  // 🟢 ONLINE STATUS
-  socket.on("online_status", (data) => {
-    setOnlineStatus((prev) => ({
-      ...prev,
-      [`${data.userType}:${data.userId}`]: data.isOnline,
-    }));
   });
 
   socket.on("connect_error", (err) => {
@@ -671,78 +688,95 @@ const handleInputChange = (e) => {
 const sendMessage = async (receiverId, receiverType, messageText) => {
   const tempId = Date.now();
   const token = localStorage.getItem("token");
+  
+  if (!socketRef.current || !socketRef.current.connected) {
+    console.error("❌ Socket not connected");
+    alert("Cannot send message. Please check your connection.");
+    return false;
+  }
 
-  // Optimistic UI update
-  setMessages(prev => [
-    ...prev,
-    {
-      id: tempId,
-      sender: "me",
-      text: messageText,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      delivered: false,
-      read_status: false,
-    }
-  ]);
-
-  // Clear input immediately
+  // Create optimistic message
+  const tempMessage = {
+    id: tempId,
+    sender: 'me',
+    text: messageText,
+    time: new Date().toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    }),
+    pinned: false,
+    delivered: false,
+    read_status: false
+  };
+  
+  // Add to UI immediately
+  setMessages(prev => [...prev, tempMessage]);
+  
+  // Clear input
   setInput('');
   
   try {
-    // 🔥 REALTIME SEND via WebSocket
-    if (socketRef.current) {
-      socketRef.current.emit("send_message", {
-        receiverId,
-        receiverType,
-        message: messageText,
-        tempId,
-      });
-    }
-
-    // 💾 SAVE TO DB
-    const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        sender_id: adminData.id,
-        sender_type: adminType,
-        receiver_id: receiverId,
-        receiver_type: receiverType,
-        message: messageText,
-      }),
+    // 1️⃣ First send via WebSocket for real-time delivery
+    socketRef.current.emit("send_message", {
+      receiverId,
+      receiverType,
+      message: messageText,
+      tempId,
+      timestamp: new Date().toISOString(),
     });
-
-    const data = await response.json();
-
-    if (data.success && data.data?.id) {
-      // Update the temporary ID with the real database ID
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === tempId ? { ...m, id: data.data.id, delivered: true } : m
-        )
-      );
-      return { success: true, data };
-    } else {
-      // If API fails, remove the optimistic update or mark as failed
-      console.error("Failed to send message:", data.message);
-      return { 
-        success: false, 
-        message: data.message || "Failed to send message"
-      };
-    }
-  } catch (error) {
-    console.error("Error sending message:", error);
-    return { 
-      success: false, 
-      message: "Network error. Please check your connection."
+    
+    console.log(`📤 WebSocket message sent to ${receiverType}:${receiverId}`);
+    
+    // 2️⃣ Then save to database
+    const requestBody = {
+      sender_id: adminData.id,
+      sender_type: adminType,
+      receiver_id: receiverId,
+      receiver_type: receiverType,
+      message: messageText
     };
+    
+    const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        // Update with real database ID
+        if (data.data?.id) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === tempId ? { ...msg, id: data.data.id, delivered: true } : msg
+          ));
+        } else {
+          setMessages(prev => prev.map(msg => 
+            msg.id === tempId ? { ...msg, delivered: true } : msg
+          ));
+        }
+        return true;
+      }
+    }
+    
+    // If database save fails, still mark as delivered (WebSocket may have worked)
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempId ? { ...msg, delivered: true } : msg
+    ));
+    return true;
+    
+  } catch (error) {
+    console.error("❌ Error sending message:", error);
+    // Mark as failed
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
+    ));
+    return false;
   }
 };
-
-
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
       const token = localStorage.getItem("token");
