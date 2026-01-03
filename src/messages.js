@@ -29,7 +29,21 @@ import './message-responsive.css';
 import ProfileDropdown from './profileDropdown';
 
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, push, onValue, off, query, orderByChild, equalTo, update, onDisconnect, serverTimestamp } from 'firebase/database';
+import { 
+  getDatabase, 
+  ref, 
+  set, 
+  push, 
+  onValue, 
+  off, 
+  query, 
+  orderByChild, 
+  update, 
+  onDisconnect, 
+  serverTimestamp,
+  get,
+  child 
+} from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCo4mCzk0ciAlOYvgrpKpkazjcRsE4wZ4I",
@@ -45,7 +59,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-
 function Messages() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -58,11 +71,9 @@ function Messages() {
   const [adminData, setAdminData] = useState(null);
   const [adminType, setAdminType] = useState('');
   const [onlineStatus, setOnlineStatus] = useState({});
-  const [typingStatus, setTypingStatus] = useState({});
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
-  const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -72,22 +83,21 @@ function Messages() {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("role") || "admin");
-  const getFullId = (type, id) => `${type}:${id}`;
 
-  const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null); // Get from localStorage
-    const [showProfileModal, setShowProfileModal] = useState(false);
-    const [profileData, setProfileData] = useState({
-      full_name: "",
-      email: "",
-      role: "",
-      profile_picture: "",
-    });
+  const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({
+    full_name: "",
+    email: "",
+    role: "",
+    profile_picture: "",
+  });
 
-  const myFullId = adminData && adminType ? `${adminType}:${adminData.id}` : null;
   const messagesRef = useRef(null);
   const onlineRef = useRef(null);
   const typingRef = useRef(null);
   const userStatusRef = useRef(null);
+  const typingCleanupRef = useRef(null);
   
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -117,7 +127,7 @@ function Messages() {
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
 
-useEffect(() => {
+  useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("admin"));
     if (storedUser) {
       setAdmin(storedUser);
@@ -131,70 +141,69 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-          const fetchInitialProfile = async () => {
-            try {
-              const storedUser = JSON.parse(localStorage.getItem("admin"));
-              if (!storedUser) return;
-      
-              const url =
-                storedUser.role === "office_head"
-                  ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
-                  : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
-      
-              const res = await fetch(url);
-              const data = await res.json();
-      
-              if (res.ok) {
-                setAdmin(data);
-                setProfileData(data);
-              } else {
-                console.error("Error loading initial profile:", data.message);
-              }
-            } catch (err) {
-              console.error("Error loading initial profile:", err);
-            }
-          };
-      
-          fetchInitialProfile();
-        }, []);
+    const fetchInitialProfile = async () => {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("admin"));
+        if (!storedUser) return;
 
-useEffect(() => {
-        if (!showProfileModal) return;
-    
-        const fetchProfileData = async () => {
-          try {
-            const storedUser = JSON.parse(localStorage.getItem("admin"));
-            if (!storedUser) return;
-    
-            const url =
-              storedUser.role === "office_head"
-                ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
-                : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
-    
-            const res = await fetch(url);
-            const data = await res.json();
-    
-            if (res.ok) {
-              setProfileData(data);
-            } else {
-              console.error("Error loading profile:", data.message);
-            }
-          } catch (err) {
-            console.error("Error loading profile:", err);
-          }
-        };
-    
-        fetchProfileData();
-      }, [showProfileModal]);
+        const url =
+          storedUser.role === "office_head"
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
 
+        const res = await fetch(url);
+        const data = await res.json();
 
-useEffect(() => {
-  scrollToBottom();
-}, [messages]);
+        if (res.ok) {
+          setAdmin(data);
+          setProfileData(data);
+        } else {
+          console.error("Error loading initial profile:", data.message);
+        }
+      } catch (err) {
+        console.error("Error loading initial profile:", err);
+      }
+    };
 
-const scrollToBottom = () => {
-  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-};
+    fetchInitialProfile();
+  }, []);
+
+  useEffect(() => {
+    if (!showProfileModal) return;
+
+    const fetchProfileData = async () => {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("admin"));
+        if (!storedUser) return;
+
+        const url =
+          storedUser.role === "office_head"
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (res.ok) {
+          setProfileData(data);
+        } else {
+          console.error("Error loading profile:", data.message);
+        }
+      } catch (err) {
+        console.error("Error loading profile:", err);
+      }
+    };
+
+    fetchProfileData();
+  }, [showProfileModal]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
     if (isMobile && selectedUser) {
@@ -204,7 +213,7 @@ const scrollToBottom = () => {
     }
   }, [selectedUser, isMobile]);
 
- useEffect(() => {
+  useEffect(() => {
     const checkAndConnect = async () => {
       const admin = JSON.parse(localStorage.getItem("admin"));
       if (admin) {
@@ -275,21 +284,23 @@ const scrollToBottom = () => {
     setConnectionStatus("Connecting...");
     
     // Set online status
-    userStatusRef.current = ref(database, `status/${myId}`);
+    userStatusRef.current = ref(database, `users/${myId}`);
     set(userStatusRef.current, {
       online: true,
       lastSeen: serverTimestamp(),
-      name: adminData.full_name || adminData.name
+      name: adminData.full_name || adminData.name,
+      email: adminData.email || '',
+      type: adminType
     });
     
     // Set onDisconnect to mark as offline
-    onDisconnect(userStatusRef.current).set({
+    onDisconnect(userStatusRef.current).update({
       online: false,
       lastSeen: serverTimestamp()
     });
     
     // Listen for online status of other users
-    onlineRef.current = ref(database, 'status');
+    onlineRef.current = ref(database, 'users');
     onValue(onlineRef.current, (snapshot) => {
       const statusData = snapshot.val();
       const newOnlineStatus = {};
@@ -303,28 +314,99 @@ const scrollToBottom = () => {
         
         setOnlineStatus(newOnlineStatus);
         setConnectionStatus("Connected");
+        console.log('✅ Firebase connected and listening for users');
       }
+    });
+  };
+
+  // Listen for messages when a user is selected
+  useEffect(() => {
+    if (!selectedUser || !adminData || !adminType) return;
+    
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
+    
+    // Create conversation ID
+    const conversationId = [myId, otherId].sort().join('_');
+    console.log('📡 Listening to conversation:', conversationId);
+    
+    // Setup typing listener for this conversation
+    setupTypingListener(myId, otherId);
+    
+    // Listen for messages in this conversation
+    messagesRef.current = ref(database, `conversations/${conversationId}/messages`);
+    
+    // Use query to order by timestamp
+    const messagesQuery = query(messagesRef.current, orderByChild('timestamp'));
+    
+    const unsubscribe = onValue(messagesQuery, (snapshot) => {
+      const messagesData = snapshot.val();
+      console.log('📨 Received messages data:', messagesData);
+      
+      if (messagesData) {
+        // Convert object to array and sort by timestamp
+        const messagesArray = Object.keys(messagesData).map(key => ({
+          id: key,
+          ...messagesData[key]
+        })).sort((a, b) => a.timestamp - b.timestamp);
+        
+        const formattedMessages = messagesArray.map(msg => ({
+          id: msg.id,
+          sender: msg.senderId === myId ? 'me' : 'other',
+          text: msg.message,
+          time: new Date(msg.timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          delivered: true,
+          read_status: msg.read || false,
+          timestamp: msg.timestamp
+        }));
+        
+        console.log('📊 Formatted messages:', formattedMessages.length);
+        setMessages(formattedMessages);
+        
+        // Mark messages as read
+        markMessagesAsReadInFirebase(conversationId, myId);
+      } else {
+        console.log('📭 No messages in this conversation');
+        setMessages([]);
+      }
+      setMessageLoading(false);
     });
     
-    // Listen for typing indicators
-    typingRef.current = ref(database, `typing/${myId}`);
-    onValue(typingRef.current, (snapshot) => {
-      const typingData = snapshot.val();
-      
-      if (typingData && selectedUser) {
-        const senderFullId = `${selectedUser.account_type}:${selectedUser.id}`;
-        const myTypingRef = ref(database, `typing/${senderFullId}/${myId}`);
-        
-        if (typingData[senderFullId]) {
-          setIsTyping(true);
-          
-          // Clear typing indicator after 2 seconds
-          setTimeout(() => {
-            set(myTypingRef, false);
-          }, 2000);
-        }
+    // Cleanup previous listener
+    return () => {
+      if (messagesRef.current) {
+        off(messagesRef.current);
       }
+      // Cleanup typing listener
+      if (typingCleanupRef.current) {
+        typingCleanupRef.current();
+      }
+    };
+  }, [selectedUser, adminData, adminType]);
+
+  // Setup typing indicator listener
+  const setupTypingListener = (myId, otherId) => {
+    // Cleanup previous typing listener
+    if (typingCleanupRef.current) {
+      typingCleanupRef.current();
+    }
+    
+    // Listen for typing indicators from the other user
+    const typingRefPath = ref(database, `typing/${otherId}/${myId}`);
+    
+    const unsubscribe = onValue(typingRefPath, (snapshot) => {
+      const isTyping = snapshot.val();
+      console.log('⌨️ Typing status:', isTyping);
+      setIsTyping(isTyping === true);
     });
+    
+    // Store cleanup function
+    typingCleanupRef.current = () => {
+      off(typingRefPath);
+    };
   };
 
   // Cleanup Firebase listeners
@@ -339,9 +421,16 @@ const scrollToBottom = () => {
       off(typingRef.current);
     }
     
+    // Cleanup typing listener
+    if (typingCleanupRef.current) {
+      typingCleanupRef.current();
+    }
+    
     // Set offline status on cleanup
-    if (userStatusRef.current) {
-      set(userStatusRef.current, {
+    if (userStatusRef.current && adminData && adminType) {
+      const myId = `${adminType}:${adminData.id}`;
+      const userRef = ref(database, `users/${myId}`);
+      update(userRef, {
         online: false,
         lastSeen: serverTimestamp()
       });
@@ -349,328 +438,23 @@ const scrollToBottom = () => {
   };
 
   useEffect(() => {
-    if (!selectedUser || !adminData || !adminType) return;
-    
-    const myId = `${adminType}:${adminData.id}`;
-    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
-    
-    // Create conversation ID (sorted to ensure consistency)
-    const conversationId = [myId, otherId].sort().join('_');
-    
-    console.log('📡 Listening to conversation:', conversationId);
-    
-    // Listen for messages in this conversation
-    messagesRef.current = ref(database, `conversations/${conversationId}/messages`);
-    const messagesQuery = query(messagesRef.current, orderByChild('timestamp'));
-    
-    onValue(messagesQuery, (snapshot) => {
-      const messagesData = snapshot.val();
-      if (messagesData) {
-        const formattedMessages = Object.values(messagesData)
-          .sort((a, b) => a.timestamp - b.timestamp)
-          .map(msg => ({
-            id: msg.id || msg.timestamp,
-            sender: msg.senderId === myId ? 'me' : 'other',
-            text: msg.message,
-            time: new Date(msg.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            }),
-            delivered: true,
-            read_status: msg.read || false,
-            timestamp: msg.timestamp
-          }));
-        
-        setMessages(formattedMessages);
-        
-        // Mark messages as read
-        markMessagesAsReadInFirebase(conversationId, myId);
-      } else {
-        setMessages([]);
-      }
-      setMessageLoading(false);
-    });
-    
-    // Cleanup previous listener
-    return () => {
-      if (messagesRef.current) {
-        off(messagesRef.current);
-      }
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
     };
-  }, [selectedUser, adminData, adminType]);
-
-
-
-
-  useEffect(() => {
-  const checkMobile = () => {
-    setIsMobile(window.innerWidth <= 768);
-  };
-  checkMobile();
-  window.addEventListener('resize', checkMobile);
-  return () => window.removeEventListener('resize', checkMobile);
-}, []);
-
- 
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const closeMobileMenus = () => {
-  if (isMobile) {
-    setIsSidebarOpen(false);
-    setIsUserListOpen(false);
-  }
-};
-
-
-
-const processIncomingMessage = (messageData) => {
-  if (!messageData || !adminData || !adminType) return;
-  
-  const myFullId = `${adminType}:${adminData.id}`;
-  const senderFullId = messageData.sender_id;
-  const receiverFullId = messageData.receiver_id;
-  
-  // Check if this message is for me
-  if (receiverFullId !== myFullId) return;
-  
-  // Check if this is from the currently selected user
-  const isFromSelectedUser = selectedUser && 
-    senderFullId === `${selectedUser.account_type}:${selectedUser.id}`;
-  
-  // Add to messages if viewing this conversation
-  if (isFromSelectedUser) {
-    const newMessage = {
-      id: messageData.id || Date.now(),
-      sender: 'other',
-      text: messageData.message,
-      time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      pinned: messageData.pinned || false,
-      read_status: messageData.read_status || false,
-      delivered: true
-    };
-    
-    // Avoid duplicates
-    setMessages(prev => {
-      if (prev.some(m => m.id === newMessage.id)) return prev;
-      return [...prev, newMessage];
-    });
-    
-    // Auto-scroll to bottom
-    setTimeout(() => {
-      const el = document.getElementById('messagesArea');
-      if (el) el.scrollTop = el.scrollHeight;
-    }, 100);
-  }
-  
-  // Update user list with latest message
-  setUsers(prev => prev.map(user => {
-    const userFullId = `${user.account_type}:${user.id}`;
-    
-    if (senderFullId === userFullId) {
-      return {
-        ...user,
-        message: messageData.message,
-        time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-        // Increment unread if not viewing this conversation
-        unread: !isFromSelectedUser ? (user.unread || 0) + 1 : user.unread
-      };
+    if (isMobile) {
+      setIsSidebarOpen(false);
+      setIsUserListOpen(false);
     }
-    return user;
-  }));
-  
-  // Mark as read if viewing this conversation
-  if (isFromSelectedUser && !messageData.read_status) {
-    markMessagesAsRead(selectedUser.id, selectedUser.account_type);
-    
-  }
-  
-  // Show notification if not viewing conversation
-  if (!isFromSelectedUser) {
-    console.log('📱 New message from:', messageData.sender_name);
-    // You could add a toast notification here
-  }
-};
-
-const handleIncomingMessage = (data) => {
-  console.log('📥 handleIncomingMessage called with:', data);
-  
-  if (!data.message || !adminData || !adminType) {
-    console.log('❌ Missing data, returning');
-    return;
-  }
-  
-  const messageData = data.message;
-  const myFullId = `${adminType}:${adminData.id}`;
-  
-  console.log('🔍 Message details:', {
-    messageId: messageData.id,
-    sender_id: messageData.sender_id,
-    receiver_id: messageData.receiver_id,
-    myFullId: myFullId,
-    isForMe: messageData.receiver_id === myFullId,
-    isFromMe: messageData.sender_id === myFullId
-  });
-  
-  // Check if message is for me
-  if (messageData.receiver_id !== myFullId) {
-    console.log('📨 Message not for me, ignoring');
-    return;
-  }
-  
-  const isForMe = messageData.receiver_id === myFullId;
-  const isFromMe = messageData.sender_id === myFullId;
-  
-  // If message is from me, don't process it as incoming (it's outgoing)
-  if (isFromMe) {
-    console.log('📤 This is my own outgoing message, skipping');
-    return;
-  }
-  
-  // Extract sender ID from the sender_id format "type:id"
-  let senderId, senderType;
-  if (messageData.sender_id && messageData.sender_id.includes(':')) {
-    const parts = messageData.sender_id.split(':');
-    senderType = parts[0];
-    senderId = parts[1];
-  } else {
-    console.log('❌ Invalid sender_id format:', messageData.sender_id);
-    return;
-  }
-  
-  console.log('👤 Extracted sender info:', { senderId, senderType });
-  
-  // Check if this message is from the currently selected user
-  const isFromSelectedUser = selectedUser && 
-    selectedUser.id.toString() === senderId && 
-    selectedUser.account_type === senderType;
-  
-  console.log('🤔 Is from selected user?', {
-    isFromSelectedUser,
-    selectedUserId: selectedUser?.id,
-    selectedUserType: selectedUser?.account_type,
-    senderId,
-    senderType
-  });
-  
-  // **CRITICAL FIX**: Always update the user list FIRST
-  setUsers(prev => {
-    const updatedUsers = prev.map(user => {
-      const userFullId = `${user.account_type}:${user.id}`;
-      
-      // Check if this user is the sender of this message
-      if (messageData.sender_id === userFullId) {
-        console.log(`📱 Updating user ${user.name} with new message`);
-        
-        const updatedUser = {
-          ...user,
-          message: messageData.message,
-          time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-        };
-        
-        // If this message is for me and not read, increment unread count
-        // But only if I'm NOT viewing this conversation
-        if (isForMe && !messageData.read_status && !isFromSelectedUser) {
-          updatedUser.unread = (user.unread || 0) + 1;
-          console.log(`📱 Incremented unread count for ${user.name}: ${updatedUser.unread}`);
-        }
-        
-        return updatedUser;
-      }
-      return user;
-    });
-    
-    console.log('👥 Updated user list');
-    return updatedUsers;
-  });
-  
-  // **NEW**: If it's a new message for me AND from the selected user, add to chat
-  if (isForMe && isFromSelectedUser) {
-    console.log('💬 Adding message to chat area:', messageData);
-    
-    const newMessage = {
-      id: messageData.id || Date.now(),
-      sender: 'other',
-      text: messageData.message,
-      time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      pinned: messageData.pinned || false,
-      read_status: messageData.read_status || false,
-      delivered: true,
-      timestamp: messageData.time || new Date().toISOString()
-    };
-    
-    console.log('📝 New message object:', newMessage);
-    
-    // Add to messages, avoiding duplicates
-    setMessages(prev => {
-      const isDuplicate = prev.some(m => m.id === newMessage.id);
-      console.log('🔍 Checking for duplicates:', { isDuplicate, prevLength: prev.length, newId: newMessage.id });
-      
-      if (isDuplicate) {
-        console.log('⚠️ Duplicate message detected, skipping');
-        return prev;
-      }
-      
-      console.log('✅ Adding new message to state');
-      const newMessages = [...prev, newMessage];
-      console.log('📊 New messages length:', newMessages.length);
-      return newMessages;
-    });
-    
-    // Mark as read immediately
-    if (!messageData.read_status) {
-      console.log('📖 Marking message as read');
-      markMessagesAsRead(selectedUser.id, selectedUser.account_type);
-    }
-  } else if (isForMe) {
-    // Message is for me but not from selected user
-    console.log(`📱 New message from ${senderType}:${senderId}, but not viewing this conversation`);
-    
-    // You could add a toast notification here
-    // Example: showNotification(`New message from ${senderName}`);
-  }
-};
-
-
-  const handleMessageRead = (messageId, senderId, senderType) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, read_status: true } : msg
-    ));
-  };
-
-  const handleTypingStatus = (senderId, senderType, isTyping) => {
-    if (selectedUser && 
-        selectedUser.id.toString() === senderId.split(':')[1] && 
-        selectedUser.account_type === senderType) {
-      setIsTyping(isTyping);
-    }
-  };
-
-  const handleOnlineStatus = (userId, userType, isOnline) => {
-    setOnlineStatus(prev => ({
-      ...prev,
-      [`${userType}:${userId}`]: isOnline
-    }));
-  };
-
-  const handleMessageDelivered = (messageId) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, delivered: true } : msg
-    ));
   };
 
   // Handle typing indicator
-const handleInputChange = (e) => {
+  const handleInputChange = (e) => {
     const value = e.target.value;
     setInput(value);
 
@@ -678,7 +462,7 @@ const handleInputChange = (e) => {
 
     const myId = `${adminType}:${adminData.id}`;
     const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
-    const typingRefPath = ref(database, `typing/${otherId}/${myId}`);
+    const typingRefPath = ref(database, `typing/${myId}/${otherId}`);
 
     // Clear previous timeout
     if (typingTimeoutRef.current) {
@@ -688,15 +472,16 @@ const handleInputChange = (e) => {
     if (value.length > 0) {
       // Set typing indicator
       set(typingRefPath, true);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      // Clear typing indicator
+      
+      // Clear typing indicator after 2 seconds
+      typingTimeoutRef.current = setTimeout(() => {
+        set(typingRefPath, false);
+      }, 2000);
+    } else {
+      // Clear typing indicator immediately if input is empty
       set(typingRefPath, false);
-    }, 1500);
+    }
   };
-
-
 
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin"));
@@ -709,11 +494,11 @@ const handleInputChange = (e) => {
       });
     }
 
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
+    // Cleanup Firebase listeners
+    cleanupFirebaseListeners();
 
     localStorage.removeItem("admin");
+    localStorage.removeItem("admin_type");
     navigate("/");
   };
 
@@ -723,15 +508,6 @@ const handleInputChange = (e) => {
       fetchAllAccounts();
     }
   }, [adminData, adminType]);
-
-  // Fetch conversation when a user is selected
-  useEffect(() => {
-    if (selectedUser && adminData && adminType) {
-      fetchConversation(selectedUser.id, selectedUser.account_type);
-      // Mark messages as read when conversation is opened
-      markMessagesAsRead(selectedUser.id, selectedUser.account_type);
-    }
-  }, [selectedUser, adminData, adminType]);
 
   const fetchAllAccounts = async () => {
     try {
@@ -751,7 +527,6 @@ const handleInputChange = (e) => {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          // Transform API response to match component format
           const transformedUsers = data.data.map(account => ({
             id: account.id,
             name: account.full_name || `${account.first_name} ${account.last_name}`,
@@ -765,6 +540,7 @@ const handleInputChange = (e) => {
           }));
           
           setUsers(transformedUsers);
+          console.log('👥 Loaded users:', transformedUsers.length);
         }
       }
     } catch (error) {
@@ -774,7 +550,14 @@ const handleInputChange = (e) => {
     }
   };
 
-  const fetchConversation = async (contactId, contactType) => {
+  // Fetch conversation from your database when a user is selected (for initial load)
+  useEffect(() => {
+    if (selectedUser && adminData && adminType) {
+      fetchConversationFromDatabase(selectedUser.id, selectedUser.account_type);
+    }
+  }, [selectedUser, adminData, adminType]);
+
+  const fetchConversationFromDatabase = async (contactId, contactType) => {
     try {
       setMessageLoading(true);
       const token = localStorage.getItem("token");
@@ -805,23 +588,64 @@ const handleInputChange = (e) => {
               }),
               pinned: msg.pinned,
               read_status: msg.read_status,
-              delivered: true // Assuming fetched messages are delivered
+              delivered: true
             };
           });
           setMessages(formattedMessages);
+          console.log('📚 Loaded initial messages from database:', formattedMessages.length);
+          
+          // Sync messages to Firebase
+          syncMessagesToFirebase(formattedMessages, contactId, contactType);
         }
       }
     } catch (error) {
-      console.error('Error fetching conversation:', error);
+      console.error('Error fetching conversation from database:', error);
     } finally {
       setMessageLoading(false);
+    }
+  };
+
+  // Sync existing messages to Firebase
+  const syncMessagesToFirebase = async (messages, contactId, contactType) => {
+    if (!adminData || !adminType) return;
+    
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${contactType}:${contactId}`;
+    const conversationId = [myId, otherId].sort().join('_');
+    
+    try {
+      // Get existing messages from Firebase
+      const firebaseMessagesRef = ref(database, `conversations/${conversationId}/messages`);
+      const snapshot = await get(firebaseMessagesRef);
+      
+      if (!snapshot.exists()) {
+        // If no messages in Firebase, sync all from database
+        console.log('🔄 Syncing messages to Firebase');
+        
+        messages.forEach(async (msg) => {
+          const messageRef = push(firebaseMessagesRef);
+          await set(messageRef, {
+            id: messageRef.key,
+            senderId: msg.sender === 'me' ? myId : otherId,
+            receiverId: msg.sender === 'me' ? otherId : myId,
+            message: msg.text,
+            timestamp: Date.now(),
+            read: msg.read_status || false,
+            senderName: adminData.full_name || adminData.name
+          });
+        });
+      }
+    } catch (error) {
+      console.error('Error syncing messages to Firebase:', error);
     }
   };
 
   const markMessagesAsReadInFirebase = async (conversationId, myId) => {
     try {
       const messagesRef = ref(database, `conversations/${conversationId}/messages`);
-      const snapshot = await onValue(messagesRef, (snapshot) => {
+      const snapshot = await get(messagesRef);
+      
+      if (snapshot.exists()) {
         const updates = {};
         
         snapshot.forEach((childSnapshot) => {
@@ -832,16 +656,17 @@ const handleInputChange = (e) => {
         });
         
         if (Object.keys(updates).length > 0) {
-          update(messagesRef, updates);
+          await update(messagesRef, updates);
+          console.log('📖 Marked messages as read in Firebase');
         }
-      }, { onlyOnce: true });
-      
+      }
     } catch (error) {
-      console.error('Error marking messages as read:', error);
+      console.error('Error marking messages as read in Firebase:', error);
     }
   };
 
-const sendMessage = async () => {
+  // Send message function
+  const sendMessage = async () => {
     if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
       return false;
     }
@@ -852,7 +677,9 @@ const sendMessage = async () => {
     
     const messageText = input.trim();
     const timestamp = Date.now();
-    const tempId = timestamp;
+    const tempId = `temp_${timestamp}`;
+    
+    console.log('📤 Sending message:', { myId, otherId, conversationId, messageText });
     
     // Create optimistic message
     const tempMessage = {
@@ -885,6 +712,8 @@ const sendMessage = async () => {
         senderName: adminData.full_name || adminData.name
       };
       
+      console.log('🔥 Saving to Firebase:', messageData);
+      
       await set(messageRef, messageData);
       
       // 2. Update last message in conversation metadata
@@ -892,37 +721,53 @@ const sendMessage = async () => {
       await update(conversationRef, {
         lastMessage: messageText,
         lastMessageTime: timestamp,
-        participants: [myId, otherId]
+        lastMessageSender: myId,
+        participants: {
+          [myId]: true,
+          [otherId]: true
+        }
       });
       
-      // 3. Save to your database for persistence
+      // 3. Save to your database for persistence (optional)
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          sender_id: adminData.id,
-          sender_type: adminType,
-          receiver_id: selectedUser.id,
-          receiver_type: selectedUser.account_type,
-          message: messageText,
-          firebaseId: messageRef.key
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('💾 Database save response:', data);
+      if (token) {
+        try {
+          const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              sender_id: adminData.id,
+              sender_type: adminType,
+              receiver_id: selectedUser.id,
+              receiver_type: selectedUser.account_type,
+              message: messageText,
+              firebaseId: messageRef.key
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('💾 Database save response:', data);
+          }
+        } catch (dbError) {
+          console.error('Error saving to database:', dbError);
+          // Don't fail the whole operation if database save fails
+        }
       }
       
-      // Update optimistic message
+      // Update optimistic message with real Firebase ID
       setMessages(prev => prev.map(msg => 
-        msg.id === tempId ? { ...msg, delivered: true, id: messageRef.key } : msg
+        msg.id === tempId ? { 
+          ...msg, 
+          id: messageRef.key, 
+          delivered: true 
+        } : msg
       ));
       
+      console.log('✅ Message sent successfully');
       return true;
     } catch (error) {
       console.error("❌ Error sending message:", error);
@@ -930,6 +775,8 @@ const sendMessage = async () => {
       setMessages(prev => prev.map(msg => 
         msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
       ));
+      // Show error to user
+      alert('Failed to send message. Please check your connection.');
       return false;
     }
   };
@@ -952,13 +799,9 @@ const sendMessage = async () => {
         })
       });
       
-      if (socketRef.current) {
-        socketRef.current.emit("messages_read", {
-          senderId: contactId,
-          senderType: contactType,
-        });
+      if (response.ok) {
+        console.log('✅ Messages marked as read in database');
       }
-      
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
@@ -995,7 +838,7 @@ const sendMessage = async () => {
     }
   };
 
- const handleSend = async () => {
+  const handleSend = async () => {
     await sendMessage();
   };
 
@@ -1044,7 +887,7 @@ const sendMessage = async () => {
     if (!isMobile) return '';
     
     if (selectedUser) {
-      return 'hidden'; // Hide sidebar when user is selected
+      return 'hidden';
     }
     
     return isUserListOpen ? 'open' : 'closed';
@@ -1057,91 +900,90 @@ const sendMessage = async () => {
 
   // Check if user is online
   const isUserOnline = (userId, userType) => {
-    return onlineStatus[`${userType}:${userId}`] || false;
+    const userKey = `${userType}:${userId}`;
+    return onlineStatus[userKey] || false;
   };
 
   return (
     <div style={styles.dashboardContainer}>
-
-    <div className="mobile-header">
-      <button 
-        className="hamburger"
-        onClick={() => setIsSidebarOpen(true)}
-      >
-        <FontAwesomeIcon icon={faBars} />
-      </button>
-      <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
-      
-    </div>
-
-    {/* Mobile Sidebar Overlay */}
-    {isSidebarOpen && (
-      <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
-    )}
-
-    {/* Sidebar - Updated with mobile classes */}
-    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
-      <div className="sidebar-header">
+      <div className="mobile-header">
         <button 
-          className="sidebar-close-btn"
-          onClick={() => setIsSidebarOpen(false)}
+          className="hamburger"
+          onClick={() => setIsSidebarOpen(true)}
         >
-          <FontAwesomeIcon icon={faTimes} />
+          <FontAwesomeIcon icon={faBars} />
         </button>
-        <img 
-          className='logo-sidebar' 
-          src={require('./images/logo_ez.png')} 
-          alt="logo" 
-        />
+        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
       </div>
 
-      {/* Desktop Logo */}
-      <img 
-        src={require('./images/logo_ez.png')} 
-        alt="logo" 
-        style={styles.logo} 
-        className='logo-desktop'
-      />
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
 
-      {/* Sidebar Menu - Updated with onClick to close on mobile */}
-      <ul className='sidebar-menu-link' style={styles.sidebarList}>
-        {allowedMenus.map((item) => {
-          const isActive = location.pathname === item.to;
-          return (
-            <li
-              key={item.name}
-              style={{
-                ...(isActive ? styles.btnActive : {}),
-              }}
-            >
-              <Link
+      {/* Sidebar */}
+      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+        <div className="sidebar-header">
+          <button 
+            className="sidebar-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+          <img 
+            className='logo-sidebar' 
+            src={require('./images/logo_ez.png')} 
+            alt="logo" 
+          />
+        </div>
+
+        {/* Desktop Logo */}
+        <img 
+          src={require('./images/logo_ez.png')} 
+          alt="logo" 
+          style={styles.logo} 
+          className='logo-desktop'
+        />
+
+        {/* Sidebar Menu */}
+        <ul className='sidebar-menu-link' style={styles.sidebarList}>
+          {allowedMenus.map((item) => {
+            const isActive = location.pathname === item.to;
+            return (
+              <li
+                key={item.name}
                 style={{
-                  ...styles.sb,
                   ...(isActive ? styles.btnActive : {}),
                 }}
-                to={item.to}
-                onClick={closeMobileMenus}
               >
-                <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-              </Link>
-            </li>
-          );
-        })}
-        <li>
-          <Link
-            style={styles.sb}
-            to="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setShowLogoutModal(true);
-              closeMobileMenus();
-            }}
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-          </Link>
-        </li>
-      </ul>
-    </div>
+                <Link
+                  style={{
+                    ...styles.sb,
+                    ...(isActive ? styles.btnActive : {}),
+                  }}
+                  to={item.to}
+                  onClick={closeMobileMenus}
+                >
+                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+                </Link>
+              </li>
+            );
+          })}
+          <li>
+            <Link
+              style={styles.sb}
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowLogoutModal(true);
+                closeMobileMenus();
+              }}
+            >
+              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+            </Link>
+          </li>
+        </ul>
+      </div>
 
       <div className="desktop-header" style={styles.header}>
         <div style={styles.headerRight}>
@@ -1308,11 +1150,11 @@ const sendMessage = async () => {
           )}
         </div>
 
-        {/* Chat Area - Only show when a user is selected */}
-        {selectedUser && (
+        {/* Chat Area */}
+        {selectedUser ? (
           <div className={`chatArea ${getChatAreaClass()}`} style={styles.chatArea}>
             <>
-            {isMobile && (
+              {isMobile && (
                 <button 
                   style={{
                     position: 'absolute',
@@ -1336,12 +1178,16 @@ const sendMessage = async () => {
 
               <div className='chatHeader' style={styles.chatHeader}>
                 <div className='selectedUserInfo' style={styles.selectedUserInfo}>
-                  <FontAwesomeIcon icon={faArrowLeft} style={styles.backIcon} 
-                    onClick={() => {
-                      setSelectedUser(null);
-                      setIsUserListOpen(true);
-                    }} 
-                  />
+                  {isMobile && (
+                    <FontAwesomeIcon 
+                      icon={faArrowLeft} 
+                      style={styles.backIcon} 
+                      onClick={() => {
+                        setSelectedUser(null);
+                        setIsUserListOpen(true);
+                      }} 
+                    />
+                  )}
                   <div className='avatarContainer' style={styles.avatarContainer}>
                     <div 
                       className='userAvatarLarge'
@@ -1360,11 +1206,11 @@ const sendMessage = async () => {
                     <div className='headerName' style={styles.headerName}>
                       {selectedUser.name}
                       <span 
-                      className='accountTypeBadgeHeader'
-                      style={{
-                        ...styles.accountTypeBadgeHeader,
-                        backgroundColor: getAccountTypeBadge(selectedUser.account_type).color
-                      }}>
+                        className='accountTypeBadgeHeader'
+                        style={{
+                          ...styles.accountTypeBadgeHeader,
+                          backgroundColor: getAccountTypeBadge(selectedUser.account_type).color
+                        }}>
                         {getAccountTypeBadge(selectedUser.account_type).text}
                       </span>
                       {isUserOnline(selectedUser.id, selectedUser.account_type) && (
@@ -1446,15 +1292,6 @@ const sendMessage = async () => {
                 )}
               </div>
 
-              {isMobile && !isUserListOpen && !selectedUser && (
-                <button 
-                  className="toggleUserListBtn"
-                  onClick={() => setIsUserListOpen(true)}
-                >
-                  <FontAwesomeIcon icon={faUsers} />
-                </button>
-              )}
-
               <div className='inputArea' style={styles.inputArea}>
                 <button style={styles.emojiButton}>
                   <FontAwesomeIcon icon={faSmile} />
@@ -1485,10 +1322,7 @@ const sendMessage = async () => {
               </div>
             </>
           </div>
-        )}
-
-        {/* Show welcome screen when no user is selected on desktop */}
-        {!selectedUser && !isMobile && (
+        ) : !isMobile ? (
           <div className='chatArea' style={styles.chatArea}>
             <div style={styles.noChatSelected}>
               <div style={styles.welcomeIcon}>
@@ -1496,9 +1330,12 @@ const sendMessage = async () => {
               </div>
               <h3>Welcome to Messages</h3>
               <p>Select a contact to start messaging</p>
+              <p style={{ fontSize: '12px', color: '#888', marginTop: '10px' }}>
+                Connection: {connectionStatus}
+              </p>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -1751,6 +1588,7 @@ const styles = {
     backgroundColor: '#fff',
     borderRadius: '0 10px 10px 0',
     borderLeft: '1px solid #eee',
+    position: 'relative',
   },
   chatHeader: {
     padding: '15px 20px',
@@ -1815,12 +1653,6 @@ const styles = {
     backgroundColor: '#666',
     borderRadius: '50%',
     animation: 'typing 1.4s infinite',
-    '&:nth-child(2)': {
-      animationDelay: '0.2s',
-    },
-    '&:nth-child(3)': {
-      animationDelay: '0.4s',
-    },
   },
   typingText: {
     fontSize: '12px',
