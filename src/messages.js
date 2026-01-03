@@ -182,6 +182,33 @@ function Messages() {
     };
   }, [adminData, adminType]);
 
+  useEffect(() => {
+  if (socket) {
+    console.log('🔌 Socket connection status:', {
+      readyState: socket.readyState,
+      CONNECTING: WebSocket.CONNECTING,
+      OPEN: WebSocket.OPEN,
+      CLOSING: WebSocket.CLOSING,
+      CLOSED: WebSocket.CLOSED
+    });
+    
+    switch(socket.readyState) {
+      case WebSocket.CONNECTING:
+        setConnectionStatus('Connecting...');
+        break;
+      case WebSocket.OPEN:
+        setConnectionStatus('Connected');
+        break;
+      case WebSocket.CLOSING:
+        setConnectionStatus('Disconnecting...');
+        break;
+      case WebSocket.CLOSED:
+        setConnectionStatus('Disconnected');
+        break;
+    }
+  }
+}, [socket]);
+
   const initializeWebSocket = () => {
     if (socket) {
       socket.close();
@@ -193,7 +220,10 @@ function Messages() {
       return;
     }
 
-    const connectUrl = `${API_URL.replace('https', 'wss')}/?userId=${adminData.id}&userType=${adminType}`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsBase = API_URL.replace(/^https?:\/\//, '');
+    const connectUrl = `${wsProtocol}//${wsBase}/ws/?userId=${adminData.id}&userType=${adminType}`;
+    
     console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
     setConnectionStatus('Connecting...');
 
@@ -353,56 +383,44 @@ function Messages() {
   };
 
   const handleIncomingMessage = (data) => {
-    console.log('📥 handleIncomingMessage called with:', data);
+  console.log('📥 handleIncomingMessage called with:', data);
+  
+  if (!data.message || !adminData || !adminType) {
+    console.log('❌ Missing data, returning');
+    return;
+  }
+  
+  const messageData = data.message;
+  const myFullId = `${adminType}:${adminData.id}`;
+  
+  console.log('🔍 Checking message destination:', {
+    myFullId,
+    receiverId: messageData.receiver_id,
+    senderId: messageData.sender_id
+  });
+  
+  // Check if message is for me
+  if (messageData.receiver_id === myFullId) {
+    console.log('✅ Message is for me');
     
-    if (!data.message || !adminData || !adminType) {
-      console.log('❌ Missing data, returning');
-      return;
-    }
-    
-    const messageData = data.message;
-    const myFullId = `${adminType}:${adminData.id}`;
-    
-    console.log('🔍 Message details:', {
-      messageId: messageData.id,
-      sender_id: messageData.sender_id,
-      receiver_id: messageData.receiver_id,
-      myFullId: myFullId,
-      isForMe: messageData.receiver_id === myFullId
-    });
-    
-    if (messageData.receiver_id !== myFullId) {
-      console.log('📨 Message not for me, ignoring');
-      return;
-    }
-    
+    // Parse sender info
     let senderId, senderType;
     if (messageData.sender_id && messageData.sender_id.includes(':')) {
       const parts = messageData.sender_id.split(':');
       senderType = parts[0];
       senderId = parts[1];
     } else {
-      console.log('❌ Invalid sender_id format:', messageData.sender_id);
+      console.log('❌ Invalid sender_id format');
       return;
     }
     
-    console.log('👤 Extracted sender info:', { senderId, senderType });
-    
+    // Check if from selected user
     const isFromSelectedUser = selectedUser && 
       selectedUser.id.toString() === senderId && 
       selectedUser.account_type === senderType;
     
-    console.log('🤔 Is from selected user?', {
-      isFromSelectedUser,
-      selectedUserId: selectedUser?.id,
-      selectedUserType: selectedUser?.account_type,
-      senderId,
-      senderType
-    });
-    
     if (isFromSelectedUser) {
-      console.log('💬 Adding message to chat area:', messageData);
-      
+      // Add to current chat
       const newMessage = {
         id: messageData.id || `ws-${Date.now()}`,
         sender: 'other',
@@ -417,69 +435,50 @@ function Messages() {
         timestamp: messageData.time || new Date().toISOString()
       };
       
-      console.log('📝 New message object:', newMessage);
-      
       setMessages(prev => {
-        const isDuplicate = prev.some(m => m.id === newMessage.id);
-        console.log('🔍 Checking for duplicates:', { isDuplicate, prevLength: prev.length, newId: newMessage.id });
+        // Prevent duplicates
+        const isDuplicate = prev.some(m => 
+          m.id === newMessage.id || 
+          (m.text === newMessage.text && Math.abs(new Date(m.timestamp) - new Date(newMessage.timestamp)) < 1000)
+        );
         
         if (isDuplicate) {
           console.log('⚠️ Duplicate message detected, skipping');
           return prev;
         }
         
-        console.log('✅ Adding new message to state');
-        const newMessages = [...prev, newMessage];
-        console.log('📊 New messages length:', newMessages.length);
-        return newMessages;
+        return [...prev, newMessage];
       });
       
-      setLastMessageTime(new Date().toISOString());
-      
-      setTimeout(() => {
-        const el = document.getElementById('messagesArea');
-        if (el) {
-          console.log('⬇️ Auto-scrolling to bottom');
-          el.scrollTop = el.scrollHeight;
-        }
-      }, 100);
-      
-      if (!messageData.read_status) {
-        console.log('📖 Marking message as read');
-        markMessagesAsRead(selectedUser.id, selectedUser.account_type);
-      }
+      // Mark as read immediately if viewing chat
+      markMessagesAsRead(senderId, senderType);
     }
     
-    setUsers(prev => {
-      const updatedUsers = prev.map(user => {
-        const userFullId = `${user.account_type}:${user.id}`;
-        
-        if (messageData.sender_id === userFullId) {
-          console.log(`📱 Updating user ${user.name} with new message`);
-          
-          const updatedUser = {
-            ...user,
-            message: messageData.message,
-            time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            }),
-          };
-          
-          if (!isFromSelectedUser) {
-            updatedUser.unread = (user.unread || 0) + 1;
-            console.log(`📱 Incremented unread count for ${user.name}: ${updatedUser.unread}`);
-          }
-          
-          return updatedUser;
-        }
-        return user;
-      });
+    // Update user list with latest message
+    setUsers(prev => prev.map(user => {
+      const userFullId = `${user.account_type}:${user.id}`;
       
-      console.log('👥 Updated user list');
-      return updatedUsers;
-    });
-  };
+      if (messageData.sender_id === userFullId) {
+        const updatedUser = {
+          ...user,
+          message: messageData.message,
+          time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+        };
+        
+        // Only increment unread if not from selected user
+        if (!isFromSelectedUser) {
+          updatedUser.unread = (user.unread || 0) + 1;
+        }
+        
+        return updatedUser;
+      }
+      return user;
+    }));
+  }
+};
 
   useEffect(() => {
     console.log('🔄 Messages state updated:', {
