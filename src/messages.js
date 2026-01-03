@@ -206,165 +206,211 @@ useEffect(() => {
 }, [adminData, adminType]);
 
  const initializeWebSocket = () => {
-    // Check if we have the required data
-    if (!adminData || !adminData.id || !adminType) {
-      console.error('❌ Cannot initialize WebSocket: Missing admin data');
-      setConnectionStatus('Missing admin data');
-      return;
-    }
-    
-    // ✅ Connect with proper parameters
-    let connectUrl;
-    
-    if (adminType === 'useradmin') {
-      connectUrl = `${API_URL.replace('http', 'ws')}/?adminId=${adminData.id}&adminType=useradmin`;
-    } else if (adminType === 'admin_account') {
-      connectUrl = `${API_URL.replace('http', 'ws')}/?adminId=${adminData.id}&adminType=admin_account`;
-    } else {
-      // For regular users
-      connectUrl = `${API_URL.replace('http', 'ws')}/?userId=${adminData.id}&userType=user`;
-    }
-    
-    console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
-    setConnectionStatus('Connecting...');
-    
-    const ws = new WebSocket(connectUrl);
-    
-    ws.onopen = () => {
-      console.log('✅ WebSocket connected successfully');
-      setSocket(ws);
-      setConnectionStatus('Connected');
-      
-      // Send connection message
-      ws.send(JSON.stringify({
-        type: 'connection',
-        adminId: adminData.id,
-        adminType: adminType,
-        timestamp: new Date().toISOString()
-      }));
-    };
+  // Clear any existing socket first
+  if (socket) {
+    socket.close();
+  }
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('📩 WebSocket message received type:', data.type, 'data:', data);
+  if (!adminData || !adminData.id || !adminType) {
+    console.error('❌ Cannot initialize WebSocket: Missing admin data');
+    setConnectionStatus('Missing admin data');
+    return;
+  }
 
-        switch(data.type) {
-          case 'connection_established':
-            console.log('✅ WebSocket connection confirmed:', data.clientId);
-            setConnectionStatus(`Connected as ${data.clientId}`);
-            break;
-          case 'new_message':
-            console.log('💌 New message via WebSocket:', data);
-            if (data.message) {
-              handleNewMessage(data.message);
-            }
-            break;
-          case 'typing':
-            console.log('⌨️ Typing indicator:', data);
-            if (data.senderId && data.senderType) {
-              handleTypingStatus(`${data.senderType}:${data.senderId}`, data.isTyping);
-            }
-            break;
-          case 'online_status':
-            console.log('🟢 Online status:', data);
-            handleOnlineStatus(data.userId, data.userType, data.isOnline);
-            break;
-          case 'message_sent':
-            console.log('✈️ Message sent confirmation:', data);
-            // You can update UI to show message was sent successfully
-            break;
-          case 'pong':
-            // Heartbeat response, ignore
-            break;
-          default:
-            console.log('📨 Unknown message type:', data.type);
-        }
-      } catch (error) {
-        console.error('❌ Error parsing WebSocket message:', error, event.data);
-      }
-    };
+  let connectUrl;
+  
+  // ✅ FIXED: Use the correct parameter names your server expects
+  if (adminType === 'useradmin') {
+    connectUrl = `${API_URL.replace('https', 'wss')}/?id=${adminData.id}&type=useradmin`;
+  } else if (adminType === 'admin_account') {
+    connectUrl = `${API_URL.replace('https', 'wss')}/?id=${adminData.id}&type=admin_account`;
+  } else {
+    connectUrl = `${API_URL.replace('https', 'wss')}/?id=${adminData.id}&type=user`;
+  }
 
-    ws.onerror = (error) => {
-      console.error('❌ WebSocket error:', error);
-      setConnectionStatus('Connection Error');
-    };
+  console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
+  setConnectionStatus('Connecting...');
 
-    ws.onclose = (event) => {
-      console.log('🔌 WebSocket disconnected:', event.code, event.reason);
-      setConnectionStatus('Disconnected');
-      setSocket(null);
-      
-      // Try to reconnect after 3 seconds
-      setTimeout(() => {
-        if (adminData && adminType) {
-          console.log('🔄 Attempting to reconnect WebSocket...');
-          initializeWebSocket();
-        }
-      }, 3000);
-    };
+  const ws = new WebSocket(connectUrl);
+  
+  ws.onopen = () => {
+    console.log('✅ WebSocket connected successfully');
+    setSocket(ws);
+    setConnectionStatus('Connected');
+    
+    // Send authentication message
+    ws.send(JSON.stringify({
+      type: 'auth',
+      adminId: adminData.id,
+      adminType: adminType,
+      name: adminData.full_name || adminData.name
+    }));
   };
 
-const handleNewMessage = (messageData) => {
-  if (!selectedUser || !adminData || !adminType) return;
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('📩 WebSocket message received:', data);
 
-  const myFullId = getFullId(adminType, adminData.id);
-  const selectedFullId = getFullId(
-    selectedUser.account_type,
-    selectedUser.id
-  );
+      switch(data.type) {
+        case 'auth_success':
+          console.log('✅ WebSocket authentication confirmed');
+          break;
+          
+        case 'new_message':
+          console.log('💌 New message via WebSocket:', data);
+          handleIncomingMessage(data);
+          break;
+          
+        case 'typing':
+          if (data.senderId && data.senderType) {
+            // Only show typing if it's from the selected user
+            if (selectedUser && 
+                selectedUser.id == data.senderId && 
+                selectedUser.account_type === data.senderType) {
+              setIsTyping(data.isTyping);
+            }
+          }
+          break;
+          
+        case 'message_sent':
+          // Update message status in UI
+          if (data.messageId) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === data.messageId ? { ...msg, delivered: true, id: data.realId || msg.id } : msg
+            ));
+          }
+          break;
+          
+        case 'online_status':
+          if (data.userId && data.userType && data.status !== undefined) {
+            setOnlineStatus(prev => ({
+              ...prev,
+              [`${data.userType}:${data.userId}`]: data.status === 'online'
+            }));
+          }
+          break;
+          
+        case 'error':
+          console.error('❌ WebSocket error:', data.message);
+          break;
+          
+        default:
+          console.log('📨 Received unknown message type:', data.type);
+      }
+    } catch (error) {
+      console.error('❌ Error parsing WebSocket message:', error);
+    }
+  };
 
-  const { sender_id, receiver_id } = messageData;
+  ws.onerror = (error) => {
+    console.error('❌ WebSocket error:', error);
+    setConnectionStatus('Connection Error');
+  };
 
-  const isRelevant =
-    (sender_id === selectedFullId && receiver_id === myFullId) ||
-    (sender_id === myFullId && receiver_id === selectedFullId);
+  ws.onclose = (event) => {
+    console.log('🔌 WebSocket disconnected:', event.code, event.reason);
+    setConnectionStatus('Disconnected');
+    setSocket(null);
+    
+    // Auto-reconnect after 5 seconds
+    setTimeout(() => {
+      if (adminData && adminType) {
+        console.log('🔄 Attempting to reconnect WebSocket...');
+        initializeWebSocket();
+      }
+    }, 5000);
+  };
 
-  if (!isRelevant) return;
+  // Set up heartbeat to keep connection alive
+  const heartbeatInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'ping' }));
+    }
+  }, 30000);
 
-  setMessages(prev => {
-    if (prev.some(m => m.id === messageData.id)) return prev;
+  // Store the interval ID for cleanup
+  ws.heartbeatInterval = heartbeatInterval;
+  
+  setSocket(ws);
+};
 
-    return [
-      ...prev,
-      {
-        id: messageData.id,
-        sender: sender_id === myFullId ? 'me' : 'other',
-        text: messageData.message,
-        time: new Date(messageData.time).toLocaleTimeString([], {
+const handleIncomingMessage = (data) => {
+  if (!data.message || !adminData || !adminType) return;
+  
+  const messageData = data.message;
+  const myFullId = `${adminType}:${adminData.id}`;
+  
+  // Determine if this message is for the current conversation
+  const isFromSelectedUser = selectedUser && 
+    `${messageData.sender_type}:${messageData.sender_id.split(':')[1]}` === 
+    `${selectedUser.account_type}:${selectedUser.id}`;
+  
+  const isToMe = messageData.receiver_id === myFullId;
+  const isFromMe = messageData.sender_id === myFullId;
+  
+  // If it's not related to me at all, ignore it
+  if (!isToMe && !isFromMe) return;
+  
+  // Add to messages if in the right conversation
+  if ((isFromSelectedUser || isFromMe) && selectedUser) {
+    const newMessage = {
+      id: messageData.id || Date.now(),
+      sender: isFromMe ? 'me' : 'other',
+      text: messageData.message,
+      time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      pinned: messageData.pinned || false,
+      read_status: messageData.read_status || false,
+      delivered: true
+    };
+    
+    // Avoid duplicates
+    setMessages(prev => {
+      if (prev.some(m => m.id === newMessage.id)) return prev;
+      return [...prev, newMessage];
+    });
+    
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      const el = document.getElementById('messagesArea');
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 100);
+  }
+  
+  // Update sidebar user list with latest message
+  setUsers(prev => prev.map(user => {
+    const userFullId = `${user.account_type}:${user.id}`;
+    
+    // If this message is to/from this user, update their preview
+    if (userFullId === messageData.sender_id.split(':')[0] || 
+        userFullId === messageData.receiver_id.split(':')[0]) {
+      return {
+        ...user,
+        message: messageData.message,
+        time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        pinned: messageData.pinned || false,
-        read_status: messageData.read_status || false,
-        delivered: true
-      }
-    ];
-  });
-
-  requestAnimationFrame(() => {
-    const el = document.getElementById('messagesArea');
-    if (el) el.scrollTop = el.scrollHeight;
-  });
-
-  // Sidebar update stays
-  setUsers(prev =>
-    prev.map(user => {
-      const userFullId = getFullId(user.account_type, user.id);
-
-      if (userFullId === sender_id || userFullId === receiver_id) {
-        return {
-          ...user,
-          message: messageData.message,
-          time: new Date(messageData.time).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        };
-      }
-      return user;
-    })
-  );
+        // Increment unread count if message is for me and not read
+        unread: isToMe && !messageData.read_status ? (user.unread || 0) + 1 : user.unread
+      };
+    }
+    return user;
+  }));
+  
+  // If message is for me and I'm not viewing it, update unread count
+  if (isToMe && !isFromSelectedUser && !messageData.read_status) {
+    // You could trigger a notification here
+    console.log('📱 New message received while in another conversation');
+  }
+  
+  // Mark as read if I'm viewing this conversation
+  if (isToMe && isFromSelectedUser && !messageData.read_status) {
+    markMessagesAsRead(selectedUser.id, selectedUser.account_type);
+  }
 };
 
 
