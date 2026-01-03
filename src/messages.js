@@ -22,7 +22,9 @@ import {
   faCheck,
   faTimes,
   faBars,
-  faArrowLeft
+  faArrowLeft,
+  faSync,
+  faWifi
 } from '@fortawesome/free-solid-svg-icons';
 import { useState, useEffect, useRef } from 'react';
 import './message-responsive.css';
@@ -42,7 +44,7 @@ import {
   onDisconnect, 
   serverTimestamp,
   get,
-  child 
+  connectDatabaseEmulator
 } from 'firebase/database';
 
 const firebaseConfig = {
@@ -56,8 +58,13 @@ const firebaseConfig = {
   measurementId: "G-1WMJBQBJFD"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
+
+// For debugging - disable persistence to prevent caching issues
+// import { enableLogging } from "firebase/database";
+// enableLogging(true); // Uncomment for detailed Firebase logs
 
 function Messages() {
   const [users, setUsers] = useState([]);
@@ -74,7 +81,9 @@ function Messages() {
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [connectionDetails, setConnectionDetails] = useState('');
   const messagesEndRef = useRef(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
@@ -98,6 +107,8 @@ function Messages() {
   const typingRef = useRef(null);
   const userStatusRef = useRef(null);
   const typingCleanupRef = useRef(null);
+  const conversationListenerRef = useRef(null);
+  const connectionListenerRef = useRef(null);
   
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -126,6 +137,32 @@ function Messages() {
   });
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
+
+  // Initialize Firebase connection monitor
+  useEffect(() => {
+    const monitorConnection = () => {
+      const connectedRef = ref(database, ".info/connected");
+      connectionListenerRef.current = onValue(connectedRef, (snap) => {
+        if (snap.val() === true) {
+          console.log('✅ Firebase Realtime Database CONNECTED');
+          setConnectionStatus("Connected");
+          setConnectionDetails("Real-time connection established");
+        } else {
+          console.log('🔴 Firebase Realtime Database DISCONNECTED');
+          setConnectionStatus("Disconnected");
+          setConnectionDetails("Trying to reconnect...");
+        }
+      });
+    };
+
+    monitorConnection();
+
+    return () => {
+      if (connectionListenerRef.current) {
+        off(connectionListenerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("admin"));
@@ -213,10 +250,17 @@ function Messages() {
     }
   }, [selectedUser, isMobile]);
 
+  // Main initialization effect
   useEffect(() => {
     const checkAndConnect = async () => {
-      const admin = JSON.parse(localStorage.getItem("admin"));
-      if (admin) {
+      try {
+        const admin = JSON.parse(localStorage.getItem("admin"));
+        if (!admin) {
+          console.log('❌ No admin data found in localStorage');
+          navigate("/");
+          return;
+        }
+
         console.log("👤 Found admin data:", admin);
         setAdminData(admin);
         
@@ -260,10 +304,12 @@ function Messages() {
         localStorage.setItem('admin_type', adminType);
         
         // Initialize Firebase listeners
-        initializeFirebaseListeners();
-      } else {
-        console.log('❌ No admin data found in localStorage');
-        navigate("/");
+        initializeFirebaseListeners(admin, adminType);
+        
+      } catch (error) {
+        console.error('❌ Error in checkAndConnect:', error);
+        setConnectionStatus("Error");
+        setConnectionDetails(`Initialization failed: ${error.message}`);
       }
     };
     
@@ -275,73 +321,122 @@ function Messages() {
     };
   }, []);
 
-  const initializeFirebaseListeners = () => {
-    if (!adminData || !adminType) return;
+  const initializeFirebaseListeners = (admin, adminType) => {
+    if (!admin || !adminType) return;
     
-    const myId = `${adminType}:${adminData.id}`;
+    const myId = `${adminType}:${admin.id}`;
     console.log('🔥 Initializing Firebase listeners for:', myId);
     
     setConnectionStatus("Connecting...");
+    setConnectionDetails(`Setting up connection for ${myId}`);
     
-    // Set online status
-    userStatusRef.current = ref(database, `users/${myId}`);
-    set(userStatusRef.current, {
-      online: true,
-      lastSeen: serverTimestamp(),
-      name: adminData.full_name || adminData.name,
-      email: adminData.email || '',
-      type: adminType
-    });
-    
-    // Set onDisconnect to mark as offline
-    onDisconnect(userStatusRef.current).update({
-      online: false,
-      lastSeen: serverTimestamp()
-    });
-    
-    // Listen for online status of other users
-    onlineRef.current = ref(database, 'users');
-    onValue(onlineRef.current, (snapshot) => {
-      const statusData = snapshot.val();
-      const newOnlineStatus = {};
+    try {
+      // Set online status
+      userStatusRef.current = ref(database, `users/${myId}`);
       
-      if (statusData) {
-        Object.keys(statusData).forEach(userKey => {
-          if (userKey !== myId) {
-            newOnlineStatus[userKey] = statusData[userKey].online === true;
-          }
+      const userStatusData = {
+        online: true,
+        lastSeen: serverTimestamp(),
+        name: admin.full_name || admin.name || 'Unknown',
+        email: admin.email || '',
+        type: adminType,
+        id: admin.id,
+        lastActive: Date.now()
+      };
+      
+      console.log('🟢 Setting online status:', userStatusData);
+      
+      set(userStatusRef.current, userStatusData)
+        .then(() => {
+          console.log('✅ Online status set successfully');
+          
+          // Set onDisconnect to mark as offline
+          onDisconnect(userStatusRef.current).update({
+            online: false,
+            lastSeen: serverTimestamp(),
+            lastActive: serverTimestamp()
+          }).then(() => {
+            console.log('✅ OnDisconnect handler set');
+          }).catch(disconnectError => {
+            console.error('❌ Error setting onDisconnect:', disconnectError);
+          });
+          
+          // Listen for online status of other users
+          onlineRef.current = ref(database, 'users');
+          onValue(onlineRef.current, (snapshot) => {
+            const statusData = snapshot.val();
+            const newOnlineStatus = {};
+            
+            if (statusData) {
+              Object.keys(statusData).forEach(userKey => {
+                if (userKey !== myId && statusData[userKey]) {
+                  newOnlineStatus[userKey] = statusData[userKey].online === true;
+                }
+              });
+              
+              setOnlineStatus(newOnlineStatus);
+              console.log('✅ Online users loaded:', Object.keys(newOnlineStatus).filter(k => newOnlineStatus[k]).length);
+            }
+          }, (error) => {
+            console.error('❌ Error listening to online status:', error);
+          });
+          
+          setConnectionStatus("Connected");
+          setConnectionDetails(`Connected as ${myId}`);
+          
+        })
+        .catch(error => {
+          console.error('❌ Error setting online status:', error);
+          setConnectionStatus("Error");
+          setConnectionDetails(`Failed to set online status: ${error.message}`);
+          
+          // Retry after 3 seconds
+          setTimeout(() => {
+            if (retryCount < 3) {
+              console.log(`🔄 Retrying connection (attempt ${retryCount + 1})`);
+              setRetryCount(prev => prev + 1);
+              initializeFirebaseListeners(admin, adminType);
+            }
+          }, 3000);
         });
         
-        setOnlineStatus(newOnlineStatus);
-        setConnectionStatus("Connected");
-        console.log('✅ Firebase connected and listening for users');
-      }
-    });
+    } catch (error) {
+      console.error('❌ Error in initializeFirebaseListeners:', error);
+      setConnectionStatus("Error");
+      setConnectionDetails(`Initialization error: ${error.message}`);
+    }
   };
 
   // Listen for messages when a user is selected
   useEffect(() => {
-    if (!selectedUser || !adminData || !adminType) return;
+    if (!selectedUser || !adminData || !adminType) {
+      console.log('⚠️ Cannot setup message listener: Missing data');
+      return;
+    }
     
     const myId = `${adminType}:${adminData.id}`;
     const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
     
     // Create conversation ID
     const conversationId = [myId, otherId].sort().join('_');
-    console.log('📡 Listening to conversation:', conversationId);
+    console.log('📡 Setting up listener for conversation:', conversationId);
     
-    // Setup typing listener for this conversation
+    // Clear any existing messages first
+    setMessages([]);
+    
+    // Setup typing listener
     setupTypingListener(myId, otherId);
     
     // Listen for messages in this conversation
-    messagesRef.current = ref(database, `conversations/${conversationId}/messages`);
+    const messagesRefPath = ref(database, `conversations/${conversationId}/messages`);
+    conversationListenerRef.current = messagesRefPath;
     
     // Use query to order by timestamp
-    const messagesQuery = query(messagesRef.current, orderByChild('timestamp'));
+    const messagesQuery = query(messagesRefPath, orderByChild('timestamp'));
     
     const unsubscribe = onValue(messagesQuery, (snapshot) => {
       const messagesData = snapshot.val();
-      console.log('📨 Received messages data:', messagesData);
+      console.log('📨 Received messages data for conversation:', conversationId);
       
       if (messagesData) {
         // Convert object to array and sort by timestamp
@@ -350,17 +445,23 @@ function Messages() {
           ...messagesData[key]
         })).sort((a, b) => a.timestamp - b.timestamp);
         
-        const formattedMessages = messagesArray.map(msg => ({
+        // Filter out any messages with null/undefined values
+        const validMessages = messagesArray.filter(msg => 
+          msg.message && msg.senderId && msg.receiverId
+        );
+        
+        const formattedMessages = validMessages.map(msg => ({
           id: msg.id,
           sender: msg.senderId === myId ? 'me' : 'other',
           text: msg.message,
-          time: new Date(msg.timestamp).toLocaleTimeString([], {
+          time: msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit'
-          }),
+          }) : 'Just now',
           delivered: true,
           read_status: msg.read || false,
-          timestamp: msg.timestamp
+          timestamp: msg.timestamp || Date.now(),
+          senderName: msg.senderName || 'Unknown'
         }));
         
         console.log('📊 Formatted messages:', formattedMessages.length);
@@ -373,12 +474,15 @@ function Messages() {
         setMessages([]);
       }
       setMessageLoading(false);
+    }, (error) => {
+      console.error('❌ Error in message listener:', error);
+      setMessageLoading(false);
     });
     
     // Cleanup previous listener
     return () => {
-      if (messagesRef.current) {
-        off(messagesRef.current);
+      if (conversationListenerRef.current) {
+        off(conversationListenerRef.current);
       }
       // Cleanup typing listener
       if (typingCleanupRef.current) {
@@ -411,17 +515,14 @@ function Messages() {
 
   // Cleanup Firebase listeners
   const cleanupFirebaseListeners = () => {
-    if (messagesRef.current) {
-      off(messagesRef.current);
+    console.log('🧹 Cleaning up Firebase listeners');
+    
+    if (conversationListenerRef.current) {
+      off(conversationListenerRef.current);
     }
     if (onlineRef.current) {
       off(onlineRef.current);
     }
-    if (typingRef.current) {
-      off(typingRef.current);
-    }
-    
-    // Cleanup typing listener
     if (typingCleanupRef.current) {
       typingCleanupRef.current();
     }
@@ -433,6 +534,8 @@ function Messages() {
       update(userRef, {
         online: false,
         lastSeen: serverTimestamp()
+      }).catch(error => {
+        console.error('❌ Error setting offline status:', error);
       });
     }
   };
@@ -471,15 +574,21 @@ function Messages() {
 
     if (value.length > 0) {
       // Set typing indicator
-      set(typingRefPath, true);
+      set(typingRefPath, true).catch(error => {
+        console.error('❌ Error setting typing indicator:', error);
+      });
       
       // Clear typing indicator after 2 seconds
       typingTimeoutRef.current = setTimeout(() => {
-        set(typingRefPath, false);
+        set(typingRefPath, false).catch(error => {
+          console.error('❌ Error clearing typing indicator:', error);
+        });
       }, 2000);
     } else {
       // Clear typing indicator immediately if input is empty
-      set(typingRefPath, false);
+      set(typingRefPath, false).catch(error => {
+        console.error('❌ Error clearing typing indicator:', error);
+      });
     }
   };
 
@@ -550,20 +659,260 @@ function Messages() {
     }
   };
 
-  // Fetch conversation from your database when a user is selected (for initial load)
-  useEffect(() => {
-    if (selectedUser && adminData && adminType) {
-      fetchConversationFromDatabase(selectedUser.id, selectedUser.account_type);
+  // Send message function - UPDATED
+  const sendMessage = async () => {
+    if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
+      console.error('❌ Cannot send: Missing required data');
+      return false;
     }
-  }, [selectedUser, adminData, adminType]);
 
-  const fetchConversationFromDatabase = async (contactId, contactType) => {
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
+    
+    // Ensure consistent sorting for conversation ID
+    const ids = [myId, otherId].sort();
+    const conversationId = `${ids[0]}_${ids[1]}`;
+    
+    console.log('📤 Sending message:', { 
+      myId, 
+      otherId, 
+      conversationId, 
+      messageText: input.trim() 
+    });
+
+    const messageText = input.trim();
+    const timestamp = Date.now();
+    const tempId = `temp_${timestamp}`;
+    
+    // Create optimistic message
+    const tempMessage = {
+      id: tempId,
+      sender: 'me',
+      text: messageText,
+      time: new Date(timestamp).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      delivered: false,
+      read_status: false,
+      timestamp: timestamp,
+      isOptimistic: true
+    };
+    
+    // Add to UI immediately
+    setMessages(prev => [...prev, tempMessage]);
+    setInput('');
+    
+    // Clear typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
     try {
-      setMessageLoading(true);
-      const token = localStorage.getItem("token");
+      const typingRefPath = ref(database, `typing/${myId}/${otherId}`);
+      await set(typingRefPath, false);
+    } catch (error) {
+      console.warn('⚠️ Error clearing typing indicator:', error);
+    }
+    
+    try {
+      // Check Firebase connection first
+      console.log('🔍 Checking Firebase connection...');
+      const connectedRef = ref(database, ".info/connected");
+      const connectedSnapshot = await get(connectedRef);
       
+      if (!connectedSnapshot.val()) {
+        throw new Error('Firebase is not connected. Please check your internet connection.');
+      }
+      
+      console.log('✅ Firebase is connected');
+
+      // 1. Save to Firebase
+      const messagesRefPath = ref(database, `conversations/${conversationId}/messages`);
+      const messageRef = push(messagesRefPath);
+      
+      const messageKey = messageRef.key;
+      
+      const messageData = {
+        id: messageKey,
+        senderId: myId,
+        receiverId: otherId,
+        message: messageText,
+        timestamp: timestamp,
+        read: false,
+        senderName: adminData.full_name || adminData.name || 'Unknown',
+        createdAt: serverTimestamp()
+      };
+      
+      console.log('🔥 Saving to Firebase:', messageData);
+      
+      await set(messageRef, messageData);
+      
+      console.log('✅ Message saved to Firebase');
+
+      // 2. Update conversation metadata
+      const conversationRef = ref(database, `conversations/${conversationId}`);
+      await update(conversationRef, {
+        lastMessage: messageText,
+        lastMessageTime: timestamp,
+        lastMessageSender: myId,
+        participants: {
+          [myId]: true,
+          [otherId]: true
+        }
+      });
+      
+      console.log('✅ Conversation metadata updated');
+
+      // 3. Try to save to your database (optional - don't fail if this doesn't work)
+      try {
+        const token = localStorage.getItem("token");
+        if (token) {
+          const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              sender_id: adminData.id,
+              sender_type: adminType,
+              receiver_id: selectedUser.id,
+              receiver_type: selectedUser.account_type,
+              message: messageText,
+              firebaseId: messageKey,
+              timestamp: timestamp
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('💾 Database save response:', data);
+          } else {
+            console.warn('⚠️ Database save failed, but Firebase saved successfully');
+          }
+        }
+      } catch (dbError) {
+        console.warn('⚠️ Error saving to database (non-critical):', dbError.message);
+      }
+      
+      // Update optimistic message with real Firebase ID
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { 
+          ...msg, 
+          id: messageKey, 
+          delivered: true,
+          isOptimistic: false
+        } : msg
+      ));
+      
+      console.log('🎉 Message sent successfully!');
+      scrollToBottom();
+      return true;
+      
+    } catch (error) {
+      console.error("❌ ERROR sending message:", {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Mark optimistic message as failed
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { 
+          ...msg, 
+          delivered: false, 
+          error: true,
+          errorMessage: error.message,
+          isOptimistic: false
+        } : msg
+      ));
+      
+      // Determine user-friendly error message
+      let userErrorMessage = 'Failed to send message. ';
+      
+      if (error.code) {
+        switch (error.code) {
+          case 'PERMISSION_DENIED':
+            userErrorMessage += 'Permission denied by Firebase. Please check database rules.';
+            break;
+          case 'UNAVAILABLE':
+            userErrorMessage += 'Firebase service unavailable. Please check your connection.';
+            break;
+          case 'NETWORK_ERROR':
+            userErrorMessage += 'Network error. Please check your internet connection.';
+            break;
+          default:
+            userErrorMessage += `Error: ${error.code}`;
+        }
+      } else if (error.message.includes('not connected')) {
+        userErrorMessage = 'Not connected to Firebase. Please check your internet connection and refresh the page.';
+      } else {
+        userErrorMessage += error.message;
+      }
+      
+      // Show alert
+      alert(userErrorMessage);
+      
+      // Suggest reconnection
+      if (error.code === 'UNAVAILABLE' || error.message.includes('not connected')) {
+        if (window.confirm('Would you like to try reconnecting to Firebase?')) {
+          window.location.reload();
+        }
+      }
+      
+      return false;
+    }
+  };
+
+  const markMessagesAsReadInFirebase = async (conversationId, myId) => {
+    try {
+      const messagesRefPath = ref(database, `conversations/${conversationId}/messages`);
+      const snapshot = await get(messagesRefPath);
+      
+      if (snapshot.exists()) {
+        const updates = {};
+        
+        snapshot.forEach((childSnapshot) => {
+          const message = childSnapshot.val();
+          if (message.receiverId === myId && !message.read) {
+            updates[`${childSnapshot.key}/read`] = true;
+          }
+        });
+        
+        if (Object.keys(updates).length > 0) {
+          await update(messagesRefPath, updates);
+          console.log('📖 Marked messages as read in Firebase');
+        }
+      }
+    } catch (error) {
+      console.error('Error marking messages as read in Firebase:', error);
+    }
+  };
+
+  const handleSend = async () => {
+    await sendMessage();
+  };
+
+  const handleSearch = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
+  // Force refresh conversation
+  const refreshConversation = async () => {
+    if (!selectedUser || !adminData || !adminType) return;
+    
+    console.log('🔄 Manually refreshing conversation...');
+    setMessageLoading(true);
+    
+    // Clear current messages
+    setMessages([]);
+    
+    // Re-fetch from database
+    try {
+      const token = localStorage.getItem("token");
       const response = await fetch(
-        `${API_URL}/api/admin/messages/conversation/${adminData.id}/${adminType}/${contactId}/${contactType}`,
+        `${API_URL}/api/admin/messages/conversation/${adminData.id}/${adminType}/${selectedUser.id}/${selectedUser.account_type}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -592,317 +941,14 @@ function Messages() {
             };
           });
           setMessages(formattedMessages);
-          console.log('📚 Loaded initial messages from database:', formattedMessages.length);
-          
-          // Sync messages to Firebase
-          syncMessagesToFirebase(formattedMessages, contactId, contactType);
+          console.log('🔄 Refreshed messages from database:', formattedMessages.length);
         }
       }
     } catch (error) {
-      console.error('Error fetching conversation from database:', error);
+      console.error('Error refreshing conversation:', error);
     } finally {
       setMessageLoading(false);
     }
-  };
-
-  // Sync existing messages to Firebase
-  const syncMessagesToFirebase = async (messages, contactId, contactType) => {
-    if (!adminData || !adminType) return;
-    
-    const myId = `${adminType}:${adminData.id}`;
-    const otherId = `${contactType}:${contactId}`;
-    const conversationId = [myId, otherId].sort().join('_');
-    
-    try {
-      // Get existing messages from Firebase
-      const firebaseMessagesRef = ref(database, `conversations/${conversationId}/messages`);
-      const snapshot = await get(firebaseMessagesRef);
-      
-      if (!snapshot.exists()) {
-        // If no messages in Firebase, sync all from database
-        console.log('🔄 Syncing messages to Firebase');
-        
-        messages.forEach(async (msg) => {
-          const messageRef = push(firebaseMessagesRef);
-          await set(messageRef, {
-            id: messageRef.key,
-            senderId: msg.sender === 'me' ? myId : otherId,
-            receiverId: msg.sender === 'me' ? otherId : myId,
-            message: msg.text,
-            timestamp: Date.now(),
-            read: msg.read_status || false,
-            senderName: adminData.full_name || adminData.name
-          });
-        });
-      }
-    } catch (error) {
-      console.error('Error syncing messages to Firebase:', error);
-    }
-  };
-
-  const markMessagesAsReadInFirebase = async (conversationId, myId) => {
-    try {
-      const messagesRef = ref(database, `conversations/${conversationId}/messages`);
-      const snapshot = await get(messagesRef);
-      
-      if (snapshot.exists()) {
-        const updates = {};
-        
-        snapshot.forEach((childSnapshot) => {
-          const message = childSnapshot.val();
-          if (message.receiverId === myId && !message.read) {
-            updates[`${childSnapshot.key}/read`] = true;
-          }
-        });
-        
-        if (Object.keys(updates).length > 0) {
-          await update(messagesRef, updates);
-          console.log('📖 Marked messages as read in Firebase');
-        }
-      }
-    } catch (error) {
-      console.error('Error marking messages as read in Firebase:', error);
-    }
-  };
-
-  // Send message function
-  // Send message function
-const sendMessage = async () => {
-  if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
-    console.error('❌ Cannot send: Missing required data');
-    return false;
-  }
-
-  const myId = `${adminType}:${adminData.id}`;
-  const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
-  
-  // Ensure consistent sorting for conversation ID
-  const ids = [myId, otherId].sort();
-  const conversationId = `${ids[0]}_${ids[1]}`;
-  
-  console.log('📤 Sending message:', { 
-    myId, 
-    otherId, 
-    conversationId, 
-    messageText: input.trim() 
-  });
-
-  const messageText = input.trim();
-  const timestamp = Date.now();
-  const tempId = `temp_${timestamp}`;
-  
-  // Create optimistic message
-  const tempMessage = {
-    id: tempId,
-    sender: 'me',
-    text: messageText,
-    time: new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    }),
-    delivered: false,
-    read_status: false,
-    timestamp: timestamp
-  };
-  
-  // Add to UI immediately
-  setMessages(prev => [...prev, tempMessage]);
-  setInput('');
-  
-  try {
-    // Clear typing indicator
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    const typingRefPath = ref(database, `typing/${myId}/${otherId}`);
-    await set(typingRefPath, false);
-    
-    // 1. Save to Firebase
-    const messagesRef = ref(database, `conversations/${conversationId}/messages`);
-    const messageRef = push(messagesRef);
-    
-    const messageData = {
-      id: messageRef.key,
-      senderId: myId,
-      receiverId: otherId,
-      message: messageText,
-      timestamp: timestamp,
-      read: false,
-      senderName: adminData.full_name || adminData.name,
-      createdAt: serverTimestamp() // Use server timestamp for consistency
-    };
-    
-    console.log('🔥 Saving to Firebase:', messageData);
-    
-    await set(messageRef, messageData);
-    
-    // 2. Update conversation metadata
-    const conversationRef = ref(database, `conversations/${conversationId}`);
-    await update(conversationRef, {
-      lastMessage: messageText,
-      lastMessageTime: timestamp,
-      lastMessageSender: myId,
-      lastMessageTimestamp: serverTimestamp(),
-      participants: {
-        [myId]: {
-          id: myId,
-          name: adminData.full_name || adminData.name,
-          type: adminType
-        },
-        [otherId]: {
-          id: otherId,
-          name: selectedUser.name,
-          type: selectedUser.account_type
-        }
-      },
-      updatedAt: serverTimestamp()
-    });
-    
-    console.log('✅ Message saved to Firebase');
-    
-    // 3. Try to save to your database (but don't fail if this doesn't work)
-    try {
-      const token = localStorage.getItem("token");
-      if (token) {
-        const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            sender_id: adminData.id,
-            sender_type: adminType,
-            receiver_id: selectedUser.id,
-            receiver_type: selectedUser.account_type,
-            message: messageText,
-            firebaseId: messageRef.key,
-            timestamp: timestamp
-          })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('💾 Database save response:', data);
-        } else {
-          console.warn('⚠️ Database save failed, but Firebase saved successfully');
-        }
-      }
-    } catch (dbError) {
-      console.warn('⚠️ Error saving to database (non-critical):', dbError);
-    }
-    
-    // Update optimistic message with real Firebase ID
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { 
-        ...msg, 
-        id: messageRef.key, 
-        delivered: true 
-      } : msg
-    ));
-    
-    console.log('✅ Message sent successfully');
-    scrollToBottom();
-    return true;
-    
-  } catch (error) {
-    console.error("❌ Error sending message:", error);
-    console.error("Error details:", error.message, error.code);
-    
-    // Mark as failed
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { 
-        ...msg, 
-        delivered: false, 
-        error: true,
-        errorMessage: error.message 
-      } : msg
-    ));
-    
-    // Show specific error message based on error code
-    let errorMessage = 'Failed to send message. Please check your connection.';
-    
-    if (error.code) {
-      switch (error.code) {
-        case 'PERMISSION_DENIED':
-          errorMessage = 'Permission denied. Please check Firebase rules.';
-          break;
-        case 'UNAVAILABLE':
-          errorMessage = 'Network unavailable. Please check your internet connection.';
-          break;
-        default:
-          errorMessage = `Error: ${error.message}`;
-      }
-    }
-    
-    alert(errorMessage);
-    return false;
-  }
-};
-
-  const markMessagesAsRead = async (contactId, contactType) => {
-    try {
-      const token = localStorage.getItem("token");
-      
-      const response = await fetch(`${API_URL}/api/admin/messages/mark-read`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          admin_id: adminData.id,
-          admin_type: adminType,
-          contact_id: contactId,
-          contact_type: contactType
-        })
-      });
-      
-      if (response.ok) {
-        console.log('✅ Messages marked as read in database');
-      }
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-    }
-  };
-
-  const togglePinMessage = async (messageId, currentlyPinned) => {
-    try {
-      const token = localStorage.getItem("token");
-      
-      const response = await fetch(`${API_URL}/api/admin/messages/pin/${messageId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          pinned: !currentlyPinned
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId ? { ...msg, pinned: !currentlyPinned } : msg
-          ));
-          return true;
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error('Error toggling pin status:', error);
-      return false;
-    }
-  };
-
-  const handleSend = async () => {
-    await sendMessage();
-  };
-
-  const handleSearch = (e) => {
-    setSearchQuery(e.target.value);
   };
 
   const filteredUsers = users.filter(user =>
@@ -963,9 +1009,70 @@ const sendMessage = async () => {
     return onlineStatus[userKey] || false;
   };
 
+  // Reconnect to Firebase
+  const reconnectToFirebase = () => {
+    console.log('🔄 Manually reconnecting to Firebase...');
+    setConnectionStatus("Reconnecting...");
+    setConnectionDetails("Manual reconnection initiated");
+    
+    // Cleanup existing listeners
+    cleanupFirebaseListeners();
+    
+    // Reinitialize
+    if (adminData && adminType) {
+      setTimeout(() => {
+        initializeFirebaseListeners(adminData, adminType);
+      }, 1000);
+    }
+  };
+
   return (
     <div style={styles.dashboardContainer}>
-      <div className="mobile-header">
+      {/* Connection Status Bar */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '30px',
+        backgroundColor: connectionStatus === 'Connected' ? '#4CAF50' : 
+                        connectionStatus === 'Connecting' ? '#FF9800' : '#f44336',
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        zIndex: 2000,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <FontAwesomeIcon icon={connectionStatus === 'Connected'} />
+          <span>Firebase: {connectionStatus}</span>
+          {connectionStatus !== 'Connected' && (
+            <button 
+              onClick={reconnectToFirebase}
+              style={{
+                background: 'transparent',
+                border: '1px solid white',
+                color: 'white',
+                padding: '2px 8px',
+                borderRadius: '3px',
+                fontSize: '10px',
+                cursor: 'pointer',
+                marginLeft: '10px'
+              }}
+            >
+              Reconnect
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: '10px', opacity: 0.8 }}>
+          {connectionDetails}
+        </div>
+      </div>
+
+      <div className="mobile-header" style={{ marginTop: '30px' }}>
         <button 
           className="hamburger"
           onClick={() => setIsSidebarOpen(true)}
@@ -1295,6 +1402,25 @@ const sendMessage = async () => {
                       </div>
                     )}
                   </div>
+                  <button 
+                    onClick={refreshConversation}
+                    style={{
+                      marginLeft: 'auto',
+                      background: 'transparent',
+                      border: '1px solid #ddd',
+                      borderRadius: '50%',
+                      width: '36px',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#009205'
+                    }}
+                    title="Refresh conversation"
+                  >
+                    <FontAwesomeIcon icon={faSync} />
+                  </button>
                 </div>
               </div>
 
@@ -1308,6 +1434,20 @@ const sendMessage = async () => {
                   <div style={styles.noMessages}>
                     <FontAwesomeIcon icon={faEnvelope} style={styles.noMessagesIcon} />
                     <p>No messages yet. Start a conversation!</p>
+                    <button 
+                      onClick={refreshConversation}
+                      style={{
+                        marginTop: '10px',
+                        padding: '8px 16px',
+                        backgroundColor: '#009205',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Refresh
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -1318,19 +1458,27 @@ const sendMessage = async () => {
                         className={msg.sender === 'me' ? 'messageRight' : 'messageLeft'}
                       >
                         <div style={styles.messageContent}>
-                          <div className='messageBox' style={styles.messageBox(msg.sender === 'me')}>
+                          <div className='messageBox' style={{
+                            ...styles.messageBox(msg.sender === 'me'),
+                            opacity: msg.isOptimistic ? 0.7 : 1,
+                            border: msg.error ? '1px solid #f44336' : 'none'
+                          }}>
                             {msg.text}
-                            {msg.pinned && (
-                              <FontAwesomeIcon 
-                                icon={faPaperclip} 
-                                style={styles.pinIcon} 
-                                onClick={() => togglePinMessage(msg.id, msg.pinned)}
-                                title="Pinned message"
-                              />
+                            {msg.error && (
+                              <div style={{
+                                fontSize: '10px',
+                                color: '#f44336',
+                                marginTop: '4px'
+                              }}>
+                                Failed to send
+                              </div>
                             )}
                           </div>
                           <div style={styles.messageFooter}>
-                            <div className='messageTime' style={styles.messageTime}>{msg.time}</div>
+                            <div className='messageTime' style={styles.messageTime}>
+                              {msg.time}
+                              {msg.isOptimistic && ' (Sending...)'}
+                            </div>
                             {msg.sender === 'me' && (
                               <div style={styles.messageStatus}>
                                 {msg.read_status ? (
@@ -1373,8 +1521,13 @@ const sendMessage = async () => {
                 />
                 <button 
                   onClick={handleSend} 
-                  style={styles.sendButton}
-                  disabled={!input.trim()}
+                  style={{
+                    ...styles.sendButton,
+                    opacity: connectionStatus !== 'Connected' ? 0.5 : 1,
+                    cursor: connectionStatus !== 'Connected' ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={!input.trim() || connectionStatus !== 'Connected'}
+                  title={connectionStatus !== 'Connected' ? 'Not connected to Firebase' : 'Send message'}
                 >
                   <FontAwesomeIcon icon={faPaperPlane} />
                 </button>
@@ -1389,9 +1542,52 @@ const sendMessage = async () => {
               </div>
               <h3>Welcome to Messages</h3>
               <p>Select a contact to start messaging</p>
-              <p style={{ fontSize: '12px', color: '#888', marginTop: '10px' }}>
-                Connection: {connectionStatus}
-              </p>
+              <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '10px'
+                }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: connectionStatus === 'Connected' ? '#4CAF50' : '#f44336'
+                  }}></div>
+                  <span style={{
+                    fontSize: '14px',
+                    color: connectionStatus === 'Connected' ? '#4CAF50' : '#f44336'
+                  }}>
+                    {connectionStatus}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: '12px',
+                  color: '#666',
+                  maxWidth: '300px',
+                  margin: '0 auto'
+                }}>
+                  {connectionDetails}
+                </div>
+                {connectionStatus !== 'Connected' && (
+                  <button 
+                    onClick={reconnectToFirebase}
+                    style={{
+                      marginTop: '15px',
+                      padding: '8px 16px',
+                      backgroundColor: '#009205',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Reconnect to Firebase
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : null}
