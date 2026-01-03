@@ -666,120 +666,179 @@ function Messages() {
   };
 
   // Send message function
-  const sendMessage = async () => {
-    if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
-      return false;
-    }
+  // Send message function
+const sendMessage = async () => {
+  if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
+    console.error('❌ Cannot send: Missing required data');
+    return false;
+  }
 
-    const myId = `${adminType}:${adminData.id}`;
-    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
-    const conversationId = [myId, otherId].sort().join('_');
+  const myId = `${adminType}:${adminData.id}`;
+  const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
+  
+  // Ensure consistent sorting for conversation ID
+  const ids = [myId, otherId].sort();
+  const conversationId = `${ids[0]}_${ids[1]}`;
+  
+  console.log('📤 Sending message:', { 
+    myId, 
+    otherId, 
+    conversationId, 
+    messageText: input.trim() 
+  });
+
+  const messageText = input.trim();
+  const timestamp = Date.now();
+  const tempId = `temp_${timestamp}`;
+  
+  // Create optimistic message
+  const tempMessage = {
+    id: tempId,
+    sender: 'me',
+    text: messageText,
+    time: new Date(timestamp).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    }),
+    delivered: false,
+    read_status: false,
+    timestamp: timestamp
+  };
+  
+  // Add to UI immediately
+  setMessages(prev => [...prev, tempMessage]);
+  setInput('');
+  
+  try {
+    // Clear typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    const typingRefPath = ref(database, `typing/${myId}/${otherId}`);
+    await set(typingRefPath, false);
     
-    const messageText = input.trim();
-    const timestamp = Date.now();
-    const tempId = `temp_${timestamp}`;
+    // 1. Save to Firebase
+    const messagesRef = ref(database, `conversations/${conversationId}/messages`);
+    const messageRef = push(messagesRef);
     
-    console.log('📤 Sending message:', { myId, otherId, conversationId, messageText });
-    
-    // Create optimistic message
-    const tempMessage = {
-      id: tempId,
-      sender: 'me',
-      text: messageText,
-      time: new Date(timestamp).toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      }),
-      delivered: false,
-      read_status: false,
-      timestamp: timestamp
+    const messageData = {
+      id: messageRef.key,
+      senderId: myId,
+      receiverId: otherId,
+      message: messageText,
+      timestamp: timestamp,
+      read: false,
+      senderName: adminData.full_name || adminData.name,
+      createdAt: serverTimestamp() // Use server timestamp for consistency
     };
     
-    // Add to UI immediately
-    setMessages(prev => [...prev, tempMessage]);
-    setInput('');
+    console.log('🔥 Saving to Firebase:', messageData);
     
-    try {
-      // 1. Save to Firebase
-      const messageRef = push(ref(database, `conversations/${conversationId}/messages`));
-      const messageData = {
-        id: messageRef.key,
-        senderId: myId,
-        receiverId: otherId,
-        message: messageText,
-        timestamp: timestamp,
-        read: false,
-        senderName: adminData.full_name || adminData.name
-      };
-      
-      console.log('🔥 Saving to Firebase:', messageData);
-      
-      await set(messageRef, messageData);
-      
-      // 2. Update last message in conversation metadata
-      const conversationRef = ref(database, `conversations/${conversationId}`);
-      await update(conversationRef, {
-        lastMessage: messageText,
-        lastMessageTime: timestamp,
-        lastMessageSender: myId,
-        participants: {
-          [myId]: true,
-          [otherId]: true
+    await set(messageRef, messageData);
+    
+    // 2. Update conversation metadata
+    const conversationRef = ref(database, `conversations/${conversationId}`);
+    await update(conversationRef, {
+      lastMessage: messageText,
+      lastMessageTime: timestamp,
+      lastMessageSender: myId,
+      lastMessageTimestamp: serverTimestamp(),
+      participants: {
+        [myId]: {
+          id: myId,
+          name: adminData.full_name || adminData.name,
+          type: adminType
+        },
+        [otherId]: {
+          id: otherId,
+          name: selectedUser.name,
+          type: selectedUser.account_type
         }
-      });
-      
-      // 3. Save to your database for persistence (optional)
+      },
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('✅ Message saved to Firebase');
+    
+    // 3. Try to save to your database (but don't fail if this doesn't work)
+    try {
       const token = localStorage.getItem("token");
       if (token) {
-        try {
-          const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              sender_id: adminData.id,
-              sender_type: adminType,
-              receiver_id: selectedUser.id,
-              receiver_type: selectedUser.account_type,
-              message: messageText,
-              firebaseId: messageRef.key
-            })
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            console.log('💾 Database save response:', data);
-          }
-        } catch (dbError) {
-          console.error('Error saving to database:', dbError);
-          // Don't fail the whole operation if database save fails
+        const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            sender_id: adminData.id,
+            sender_type: adminType,
+            receiver_id: selectedUser.id,
+            receiver_type: selectedUser.account_type,
+            message: messageText,
+            firebaseId: messageRef.key,
+            timestamp: timestamp
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('💾 Database save response:', data);
+        } else {
+          console.warn('⚠️ Database save failed, but Firebase saved successfully');
         }
       }
-      
-      // Update optimistic message with real Firebase ID
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempId ? { 
-          ...msg, 
-          id: messageRef.key, 
-          delivered: true 
-        } : msg
-      ));
-      
-      console.log('✅ Message sent successfully');
-      return true;
-    } catch (error) {
-      console.error("❌ Error sending message:", error);
-      // Mark as failed
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
-      ));
-      // Show error to user
-      alert('Failed to send message. Please check your connection.');
-      return false;
+    } catch (dbError) {
+      console.warn('⚠️ Error saving to database (non-critical):', dbError);
     }
-  };
+    
+    // Update optimistic message with real Firebase ID
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempId ? { 
+        ...msg, 
+        id: messageRef.key, 
+        delivered: true 
+      } : msg
+    ));
+    
+    console.log('✅ Message sent successfully');
+    scrollToBottom();
+    return true;
+    
+  } catch (error) {
+    console.error("❌ Error sending message:", error);
+    console.error("Error details:", error.message, error.code);
+    
+    // Mark as failed
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempId ? { 
+        ...msg, 
+        delivered: false, 
+        error: true,
+        errorMessage: error.message 
+      } : msg
+    ));
+    
+    // Show specific error message based on error code
+    let errorMessage = 'Failed to send message. Please check your connection.';
+    
+    if (error.code) {
+      switch (error.code) {
+        case 'PERMISSION_DENIED':
+          errorMessage = 'Permission denied. Please check Firebase rules.';
+          break;
+        case 'UNAVAILABLE':
+          errorMessage = 'Network unavailable. Please check your internet connection.';
+          break;
+        default:
+          errorMessage = `Error: ${error.message}`;
+      }
+    }
+    
+    alert(errorMessage);
+    return false;
+  }
+};
 
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
