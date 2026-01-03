@@ -91,17 +91,6 @@ function Messages() {
     }
   }, [selectedUser, isMobile]);
 
-  // Add this useEffect to force chat area refresh
-useEffect(() => {
-  const refreshInterval = setInterval(() => {
-    if (selectedUser) {
-      // Refresh conversation every 5 seconds to catch missed WebSocket messages
-      fetchConversation(selectedUser.id, selectedUser.account_type);
-    }
-  }, 5000); // Refresh every 5 seconds
-  
-  return () => clearInterval(refreshInterval);
-}, [selectedUser]);
 
 // REPLACE your existing useEffect for admin data with this:
 useEffect(() => {
