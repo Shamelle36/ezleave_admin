@@ -98,6 +98,7 @@ function Messages() {
   const typingRef = useRef(null);
   const userStatusRef = useRef(null);
   const typingCleanupRef = useRef(null);
+  const conversationsRef = useRef(null);
   
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -319,6 +320,93 @@ function Messages() {
     });
   };
 
+  // Listen to all conversations to get latest messages for preview
+  useEffect(() => {
+    if (!adminData || !adminType) return;
+
+    const myId = `${adminType}:${adminData.id}`;
+    
+    // Listen to all conversations
+    conversationsRef.current = ref(database, 'conversations');
+    
+    const unsubscribe = onValue(conversationsRef.current, (snapshot) => {
+      const conversationsData = snapshot.val();
+      
+      if (conversationsData) {
+        console.log('📂 Loading conversations for previews...');
+        
+        // Process each conversation to find the latest message
+        const conversationUpdates = {};
+        
+        Object.keys(conversationsData).forEach(conversationId => {
+          const conversation = conversationsData[conversationId];
+          
+          // Check if this conversation involves the current user
+          if (conversation.participants && conversation.participants[myId]) {
+            // Find the other participant
+            const otherParticipantId = Object.keys(conversation.participants).find(id => id !== myId);
+            
+            if (otherParticipantId) {
+              const otherParticipant = conversation.participants[otherParticipantId];
+              
+              // Store the latest message for this user
+              conversationUpdates[otherParticipantId] = {
+                lastMessage: conversation.lastMessage || '',
+                lastMessageTime: conversation.lastMessageTime || 0,
+                lastMessageSender: conversation.lastMessageSender || ''
+              };
+            }
+          }
+        });
+        
+        // Update users with their latest messages
+        setUsers(prevUsers => {
+          return prevUsers.map(user => {
+            const userKey = `${user.account_type}:${user.id}`;
+            const conversationData = conversationUpdates[userKey];
+            
+            if (conversationData) {
+              return {
+                ...user,
+                message: conversationData.lastMessage,
+                time: conversationData.lastMessageTime ? 
+                  formatTime(conversationData.lastMessageTime) : '',
+                lastMessageTime: conversationData.lastMessageTime,
+                lastMessageSender: conversationData.lastMessageSender
+              };
+            }
+            return user;
+          });
+        });
+      }
+    });
+    
+    return () => {
+      if (conversationsRef.current) {
+        off(conversationsRef.current);
+      }
+    };
+  }, [adminData, adminType]);
+
+  // Format time for display
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
   // Listen for messages when a user is selected
   useEffect(() => {
     if (!selectedUser || !adminData || !adminType) return;
@@ -368,6 +456,12 @@ function Messages() {
         
         // Mark messages as read
         markMessagesAsReadInFirebase(conversationId, myId);
+        
+        // Update the user's preview with the latest message
+        if (formattedMessages.length > 0) {
+          const latestMessage = formattedMessages[formattedMessages.length - 1];
+          updateUserPreview(selectedUser.id, latestMessage.text, latestMessage.timestamp);
+        }
       } else {
         console.log('📭 No messages in this conversation');
         setMessages([]);
@@ -386,6 +480,23 @@ function Messages() {
       }
     };
   }, [selectedUser, adminData, adminType]);
+
+  // Update user preview with latest message
+  const updateUserPreview = (userId, message, timestamp) => {
+    setUsers(prevUsers => {
+      return prevUsers.map(user => {
+        if (user.id === userId) {
+          return {
+            ...user,
+            message: message,
+            time: formatTime(timestamp),
+            lastMessageTime: timestamp
+          };
+        }
+        return user;
+      });
+    });
+  };
 
   // Setup typing indicator listener
   const setupTypingListener = (myId, otherId) => {
@@ -419,6 +530,9 @@ function Messages() {
     }
     if (typingRef.current) {
       off(typingRef.current);
+    }
+    if (conversationsRef.current) {
+      off(conversationsRef.current);
     }
     
     // Cleanup typing listener
@@ -536,7 +650,9 @@ function Messages() {
             department: account.department,
             message: "",
             time: "",
-            unread: 0
+            unread: 0,
+            lastMessageTime: 0,
+            lastMessageSender: ""
           }));
           
           setUsers(transformedUsers);
@@ -634,6 +750,31 @@ function Messages() {
             senderName: adminData.full_name || adminData.name
           });
         });
+        
+        // Update conversation metadata
+        if (messages.length > 0) {
+          const latestMessage = messages[messages.length - 1];
+          const conversationRef = ref(database, `conversations/${conversationId}`);
+          
+          await update(conversationRef, {
+            lastMessage: latestMessage.text,
+            lastMessageTime: Date.now(),
+            lastMessageSender: latestMessage.sender === 'me' ? myId : otherId,
+            participants: {
+              [myId]: {
+                id: myId,
+                name: adminData.full_name || adminData.name,
+                type: adminType
+              },
+              [otherId]: {
+                id: otherId,
+                name: selectedUser?.name || selectedUser?.email || 'Unknown User',
+                type: contactType
+              }
+            },
+            updatedAt: serverTimestamp()
+          });
+        }
       }
     } catch (error) {
       console.error('Error syncing messages to Firebase:', error);
@@ -665,190 +806,196 @@ function Messages() {
     }
   };
 
-// Send message function
-const sendMessage = async () => {
-  if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
-    console.error('❌ Cannot send: Missing required data');
-    return false;
-  }
-
-  const myId = `${adminType}:${adminData.id}`;
-  const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
-  
-  // Ensure consistent sorting for conversation ID
-  const ids = [myId, otherId].sort();
-  const conversationId = `${ids[0]}_${ids[1]}`;
-  
-  console.log('📤 Sending message:', { 
-    myId, 
-    otherId, 
-    conversationId, 
-    messageText: input.trim(),
-    selectedUser // Add this to debug
-  });
-
-  const messageText = input.trim();
-  const timestamp = Date.now();
-  const tempId = `temp_${timestamp}`;
-  
-  // Create optimistic message
-  const tempMessage = {
-    id: tempId,
-    sender: 'me',
-    text: messageText,
-    time: new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    }),
-    delivered: false,
-    read_status: false,
-    timestamp: timestamp
-  };
-  
-  // Add to UI immediately
-  setMessages(prev => [...prev, tempMessage]);
-  setInput('');
-  
-  try {
-    // Clear typing indicator
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+  // Send message function
+  const sendMessage = async () => {
+    if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
+      console.error('❌ Cannot send: Missing required data');
+      return false;
     }
-    const typingRefPath = ref(database, `typing/${myId}/${otherId}`);
-    await set(typingRefPath, false);
+
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
     
-    // 1. Save to Firebase
-    const messagesRef = ref(database, `conversations/${conversationId}/messages`);
-    const messageRef = push(messagesRef);
+    // Ensure consistent sorting for conversation ID
+    const ids = [myId, otherId].sort();
+    const conversationId = `${ids[0]}_${ids[1]}`;
     
-    // Ensure we have proper sender name
-    const senderName = adminData.full_name || adminData.name || 'Unknown';
+    console.log('📤 Sending message:', { 
+      myId, 
+      otherId, 
+      conversationId, 
+      messageText: input.trim(),
+      selectedUser
+    });
+
+    const messageText = input.trim();
+    const timestamp = Date.now();
+    const tempId = `temp_${timestamp}`;
     
-    const messageData = {
-      id: messageRef.key,
-      senderId: myId,
-      receiverId: otherId,
-      message: messageText,
-      timestamp: timestamp,
-      read: false,
-      senderName: senderName,
-      createdAt: serverTimestamp()
+    // Create optimistic message
+    const tempMessage = {
+      id: tempId,
+      sender: 'me',
+      text: messageText,
+      time: new Date(timestamp).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      delivered: false,
+      read_status: false,
+      timestamp: timestamp
     };
     
-    console.log('🔥 Saving to Firebase:', messageData);
+    // Add to UI immediately
+    setMessages(prev => [...prev, tempMessage]);
+    setInput('');
     
-    await set(messageRef, messageData);
+    // Update the user's preview immediately (optimistic update)
+    updateUserPreview(selectedUser.id, messageText, timestamp);
     
-    // 2. Update conversation metadata - FIXED: Use selectedUser.name or fallback
-    const conversationRef = ref(database, `conversations/${conversationId}`);
-    
-    // Prepare conversation data
-    const conversationData = {
-      lastMessage: messageText,
-      lastMessageTime: timestamp,
-      lastMessageSender: myId,
-      lastMessageTimestamp: serverTimestamp(),
-      participants: {
-        [myId]: {
-          id: myId,
-          name: senderName,
-          type: adminType
-        },
-        [otherId]: {
-          id: otherId,
-          name: selectedUser.name || selectedUser.email || 'Unknown User',
-          type: selectedUser.account_type
-        }
-      },
-      updatedAt: serverTimestamp()
-    };
-    
-    console.log('📝 Conversation metadata:', conversationData);
-    
-    await update(conversationRef, conversationData);
-    
-    console.log('✅ Message saved to Firebase');
-    
-    // 3. Try to save to your database (but don't fail if this doesn't work)
     try {
-      const token = localStorage.getItem("token");
-      if (token) {
-        const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+      // Clear typing indicator
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      const typingRefPath = ref(database, `typing/${myId}/${otherId}`);
+      await set(typingRefPath, false);
+      
+      // 1. Save to Firebase
+      const messagesRef = ref(database, `conversations/${conversationId}/messages`);
+      const messageRef = push(messagesRef);
+      
+      // Ensure we have proper sender name
+      const senderName = adminData.full_name || adminData.name || 'Unknown';
+      
+      const messageData = {
+        id: messageRef.key,
+        senderId: myId,
+        receiverId: otherId,
+        message: messageText,
+        timestamp: timestamp,
+        read: false,
+        senderName: senderName,
+        createdAt: serverTimestamp()
+      };
+      
+      console.log('🔥 Saving to Firebase:', messageData);
+      
+      await set(messageRef, messageData);
+      
+      // 2. Update conversation metadata
+      const conversationRef = ref(database, `conversations/${conversationId}`);
+      
+      // Prepare conversation data
+      const conversationData = {
+        lastMessage: messageText,
+        lastMessageTime: timestamp,
+        lastMessageSender: myId,
+        lastMessageTimestamp: serverTimestamp(),
+        participants: {
+          [myId]: {
+            id: myId,
+            name: senderName,
+            type: adminType
           },
-          body: JSON.stringify({
-            sender_id: adminData.id,
-            sender_type: adminType,
-            receiver_id: selectedUser.id,
-            receiver_type: selectedUser.account_type,
-            message: messageText,
-            firebaseId: messageRef.key,
-            timestamp: timestamp
-          })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('💾 Database save response:', data);
-        } else {
-          console.warn('⚠️ Database save failed, but Firebase saved successfully');
+          [otherId]: {
+            id: otherId,
+            name: selectedUser.name || selectedUser.email || 'Unknown User',
+            type: selectedUser.account_type
+          }
+        },
+        updatedAt: serverTimestamp()
+      };
+      
+      console.log('📝 Conversation metadata:', conversationData);
+      
+      await update(conversationRef, conversationData);
+      
+      console.log('✅ Message saved to Firebase');
+      
+      // 3. Try to save to your database (but don't fail if this doesn't work)
+      try {
+        const token = localStorage.getItem("token");
+        if (token) {
+          const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              sender_id: adminData.id,
+              sender_type: adminType,
+              receiver_id: selectedUser.id,
+              receiver_type: selectedUser.account_type,
+              message: messageText,
+              firebaseId: messageRef.key,
+              timestamp: timestamp
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('💾 Database save response:', data);
+          } else {
+            console.warn('⚠️ Database save failed, but Firebase saved successfully');
+          }
+        }
+      } catch (dbError) {
+        console.warn('⚠️ Error saving to database (non-critical):', dbError);
+      }
+      
+      // Update optimistic message with real Firebase ID
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { 
+          ...msg, 
+          id: messageRef.key, 
+          delivered: true 
+        } : msg
+      ));
+      
+      console.log('✅ Message sent successfully');
+      scrollToBottom();
+      return true;
+      
+    } catch (error) {
+      console.error("❌ Error sending message:", error);
+      console.error("Error details:", error.message, error.code);
+      console.error("Stack trace:", error.stack);
+      
+      // Mark as failed
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { 
+          ...msg, 
+          delivered: false, 
+          error: true,
+          errorMessage: error.message 
+        } : msg
+      ));
+      
+      // Revert the optimistic preview update
+      updateUserPreview(selectedUser.id, 'Failed to send message', timestamp);
+      
+      // Show specific error message based on error code
+      let errorMessage = 'Failed to send message. Please check your connection.';
+      
+      if (error.code) {
+        switch (error.code) {
+          case 'PERMISSION_DENIED':
+            errorMessage = 'Permission denied. Please check Firebase rules.';
+            break;
+          case 'UNAVAILABLE':
+            errorMessage = 'Network unavailable. Please check your internet connection.';
+            break;
+          default:
+            errorMessage = `Error: ${error.message}`;
         }
       }
-    } catch (dbError) {
-      console.warn('⚠️ Error saving to database (non-critical):', dbError);
+      
+      alert(errorMessage);
+      return false;
     }
-    
-    // Update optimistic message with real Firebase ID
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { 
-        ...msg, 
-        id: messageRef.key, 
-        delivered: true 
-      } : msg
-    ));
-    
-    console.log('✅ Message sent successfully');
-    scrollToBottom();
-    return true;
-    
-  } catch (error) {
-    console.error("❌ Error sending message:", error);
-    console.error("Error details:", error.message, error.code);
-    console.error("Stack trace:", error.stack);
-    
-    // Mark as failed
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { 
-        ...msg, 
-        delivered: false, 
-        error: true,
-        errorMessage: error.message 
-      } : msg
-    ));
-    
-    // Show specific error message based on error code
-    let errorMessage = 'Failed to send message. Please check your connection.';
-    
-    if (error.code) {
-      switch (error.code) {
-        case 'PERMISSION_DENIED':
-          errorMessage = 'Permission denied. Please check Firebase rules.';
-          break;
-        case 'UNAVAILABLE':
-          errorMessage = 'Network unavailable. Please check your internet connection.';
-          break;
-        default:
-          errorMessage = `Error: ${error.message}`;
-      }
-    }
-    
-    alert(errorMessage);
-    return false;
-  }
-};
+  };
 
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
@@ -915,7 +1062,21 @@ const sendMessage = async () => {
     setSearchQuery(e.target.value);
   };
 
-  const filteredUsers = users.filter(user =>
+  // Sort users by last message time (most recent first)
+  const sortedUsers = [...users].sort((a, b) => {
+    if (a.lastMessageTime && b.lastMessageTime) {
+      return b.lastMessageTime - a.lastMessageTime;
+    }
+    if (a.lastMessageTime && !b.lastMessageTime) {
+      return -1;
+    }
+    if (!a.lastMessageTime && b.lastMessageTime) {
+      return 1;
+    }
+    return 0;
+  });
+
+  const filteredUsers = sortedUsers.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (user.department && user.department.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -1193,7 +1354,8 @@ const sendMessage = async () => {
                       </div>
                       <div style={{
                         ...styles.previewText,
-                        color: isSelected ? '#009205' : '#fff'
+                        color: isSelected ? '#009205' : '#fff',
+                        fontWeight: user.lastMessageTime ? '500' : 'normal'
                       }}>
                         {user.message || 'No messages yet'}
                       </div>
