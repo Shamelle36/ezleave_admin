@@ -665,8 +665,7 @@ function Messages() {
     }
   };
 
-  // Send message function
-  // Send message function
+// Send message function
 const sendMessage = async () => {
   if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
     console.error('❌ Cannot send: Missing required data');
@@ -684,7 +683,8 @@ const sendMessage = async () => {
     myId, 
     otherId, 
     conversationId, 
-    messageText: input.trim() 
+    messageText: input.trim(),
+    selectedUser // Add this to debug
   });
 
   const messageText = input.trim();
@@ -721,6 +721,9 @@ const sendMessage = async () => {
     const messagesRef = ref(database, `conversations/${conversationId}/messages`);
     const messageRef = push(messagesRef);
     
+    // Ensure we have proper sender name
+    const senderName = adminData.full_name || adminData.name || 'Unknown';
+    
     const messageData = {
       id: messageRef.key,
       senderId: myId,
@@ -728,17 +731,19 @@ const sendMessage = async () => {
       message: messageText,
       timestamp: timestamp,
       read: false,
-      senderName: adminData.full_name || adminData.name,
-      createdAt: serverTimestamp() // Use server timestamp for consistency
+      senderName: senderName,
+      createdAt: serverTimestamp()
     };
     
     console.log('🔥 Saving to Firebase:', messageData);
     
     await set(messageRef, messageData);
     
-    // 2. Update conversation metadata
+    // 2. Update conversation metadata - FIXED: Use selectedUser.name or fallback
     const conversationRef = ref(database, `conversations/${conversationId}`);
-    await update(conversationRef, {
+    
+    // Prepare conversation data
+    const conversationData = {
       lastMessage: messageText,
       lastMessageTime: timestamp,
       lastMessageSender: myId,
@@ -746,17 +751,21 @@ const sendMessage = async () => {
       participants: {
         [myId]: {
           id: myId,
-          name: adminData.full_name || adminData.name,
+          name: senderName,
           type: adminType
         },
         [otherId]: {
           id: otherId,
-          name: selectedUser.name,
+          name: selectedUser.name || selectedUser.email || 'Unknown User',
           type: selectedUser.account_type
         }
       },
       updatedAt: serverTimestamp()
-    });
+    };
+    
+    console.log('📝 Conversation metadata:', conversationData);
+    
+    await update(conversationRef, conversationData);
     
     console.log('✅ Message saved to Firebase');
     
@@ -808,6 +817,7 @@ const sendMessage = async () => {
   } catch (error) {
     console.error("❌ Error sending message:", error);
     console.error("Error details:", error.message, error.code);
+    console.error("Stack trace:", error.stack);
     
     // Mark as failed
     setMessages(prev => prev.map(msg => 
