@@ -701,7 +701,7 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     return false;
   }
 
-  // Create optimistic message
+  // Create optimistic message - THIS SHOULD APPEAR IMMEDIATELY
   const tempMessage = {
     id: tempId,
     sender: 'me',
@@ -712,13 +712,16 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     }),
     pinned: false,
     delivered: false,
-    read_status: false
+    read_status: false,
+    timestamp: new Date().toISOString()
   };
   
-  // Add to UI immediately
+  console.log('📤 Adding optimistic message:', tempMessage);
+  
+  // Add to UI immediately - This is the key fix
   setMessages(prev => [...prev, tempMessage]);
   
-  // Clear input
+  // Clear input immediately
   setInput('');
   
   try {
@@ -753,11 +756,18 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     
     if (response.ok) {
       const data = await response.json();
+      console.log('💾 Database save response:', data);
+      
       if (data.success) {
         // Update with real database ID
         if (data.data?.id) {
           setMessages(prev => prev.map(msg => 
-            msg.id === tempId ? { ...msg, id: data.data.id, delivered: true } : msg
+            msg.id === tempId ? { 
+              ...msg, 
+              id: data.data.id, 
+              delivered: true,
+              timestamp: data.data.time || new Date().toISOString()
+            } : msg
           ));
         } else {
           setMessages(prev => prev.map(msg => 
@@ -776,13 +786,14 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     
   } catch (error) {
     console.error("❌ Error sending message:", error);
-    // Mark as failed
+    // Mark as failed but keep it visible
     setMessages(prev => prev.map(msg => 
       msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
     ));
     return false;
   }
 };
+
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
       const token = localStorage.getItem("token");
