@@ -1,5 +1,4 @@
-// Attendance.jsx - Updated with simplified summary cards
-
+// Attendance.jsx - Updated with proper profile data handling
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -27,25 +26,51 @@ import {
   faUpload,
   faChevronDown,
   faBars,
-  faTimes
+  faTimes,
+  faAngleLeft,
+  faAngleRight,
+  faAnglesLeft,
+  faAnglesRight
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboard-responsive.css';
-import './attendance-responsive.css'; // Import the responsive CSS
-import {useNavigate, useLocation} from 'react-router-dom';
+import './attendance-responsive.css';
+import { useNavigate, useLocation } from 'react-router-dom';
+import ProfileDropdown from './profileDropdown.js';
 
 function Attendance() {
   const [date, setDate] = useState(new Date());
   const location = useLocation();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
+  const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [openExport, setOpenExport] = useState(false);
   const tableRef = useRef();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("role") || "admin");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-    
+  const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null); // Get from localStorage
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({
+    full_name: "",
+    email: "",
+    role: "",
+    profile_picture: "",
+  });
+  const [isUploading, setIsUploading] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showTimeSettingsModal, setShowTimeSettingsModal] = useState(false);
+  const [showLocalHolidayModal, setShowLocalHolidayModal] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
     { name: "Employees", icon: faUsers, to: "/employee" },
@@ -74,8 +99,79 @@ function Attendance() {
     return false;
   });
 
+  // Load admin data from localStorage on component mount
+  useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("admin"));
+    if (storedUser) {
+      setAdmin(storedUser);
+      setProfileData({
+        full_name: storedUser.full_name || storedUser.name || "",
+        email: storedUser.email || "",
+        role: storedUser.role || "",
+        profile_picture: storedUser.profile_picture || ""
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+          const fetchInitialProfile = async () => {
+            try {
+              const storedUser = JSON.parse(localStorage.getItem("admin"));
+              if (!storedUser) return;
+      
+              const url =
+                storedUser.role === "office_head"
+                  ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                  : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+      
+              const res = await fetch(url);
+              const data = await res.json();
+      
+              if (res.ok) {
+                setAdmin(data);
+                setProfileData(data);
+              } else {
+                console.error("Error loading initial profile:", data.message);
+              }
+            } catch (err) {
+              console.error("Error loading initial profile:", err);
+            }
+          };
+      
+          fetchInitialProfile();
+        }, []);
+
+useEffect(() => {
+        if (!showProfileModal) return;
+    
+        const fetchProfileData = async () => {
+          try {
+            const storedUser = JSON.parse(localStorage.getItem("admin"));
+            if (!storedUser) return;
+    
+            const url =
+              storedUser.role === "office_head"
+                ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+    
+            const res = await fetch(url);
+            const data = await res.json();
+    
+            if (res.ok) {
+              setProfileData(data);
+            } else {
+              console.error("Error loading profile:", data.message);
+            }
+          } catch (err) {
+            console.error("Error loading profile:", err);
+          }
+        };
+    
+        fetchProfileData();
+      }, [showProfileModal]);
+
   const handleLogout = async () => {
-    const user = JSON.parse(localStorage.getItem("admin")); // get current session
+    const user = JSON.parse(localStorage.getItem("admin"));
 
     if (user) {
       await fetch(`${API_URL}/api/auth/logout`, {
@@ -85,40 +181,67 @@ function Attendance() {
       });
     }
 
-    localStorage.removeItem("admin"); // clear session
-    navigate("/"); // redirect to login
+    localStorage.removeItem("admin");
+    navigate("/");
   };
 
   // 📌 Fetch attendance logs from backend
   useEffect(() => {
-  const fetchAttendance = async () => {
-    try {
-      const formattedDate = date.toISOString().split("T")[0];
-      const response = await fetch(`${API_URL}/api/attendance?date=${formattedDate}`);
-      const data = await response.json();
+    const fetchAttendance = async () => {
+      try {
+        const formattedDate = date.toISOString().split("T")[0];
+        const response = await fetch(`${API_URL}/api/attendance?date=${formattedDate}`);
+        const data = await response.json();
 
-      const mapped = data.map(log => ({
-        name: log.name,
-        id: log.pin,
-        amCheckin: log.am_checkin,
-        amCheckout: log.am_checkout,
-        pmCheckin: log.pm_checkin,
-        pmCheckout: log.pm_checkout,
-        status: log.am_checkin || log.pm_checkin ? "Present" : log.status || "Absent",
-        date: log.attendance_date,
-      }));
+        const mapped = data.map(log => ({
+          name: log.name,
+          id: log.pin,
+          amCheckin: log.am_checkin,
+          amCheckout: log.am_checkout,
+          pmCheckin: log.pm_checkin,
+          pmCheckout: log.pm_checkout,
+          status: log.am_checkin || log.pm_checkin ? "Present" : log.status || "Absent",
+          date: log.attendance_date,
+          department: log.department || "Not Specified"
+        }));
 
-      setEmployees(mapped);
-    } catch (err) {
-      console.error("❌ Error fetching attendance:", err);
+        setEmployees(mapped);
+        setFilteredEmployees(mapped);
+        setCurrentPage(1);
+      } catch (err) {
+        console.error("❌ Error fetching attendance:", err);
+      }
+    };
+
+    fetchAttendance();
+  }, [date]);
+
+  // Filter employees based on search and filters
+  useEffect(() => {
+    let filtered = employees;
+    
+    if (searchTerm) {
+      filtered = filtered.filter(emp => 
+        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.id.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
-  };
-
-  fetchAttendance();
-  const interval = setInterval(fetchAttendance, 5000); // ⏳ fetch every 5s
-  return () => clearInterval(interval);
-}, [date]);
-
+    
+    if (selectedStatus) {
+      filtered = filtered.filter(emp => 
+        emp.status.toLowerCase() === selectedStatus.toLowerCase()
+      );
+    }
+    
+    if (selectedDepartment) {
+      filtered = filtered.filter(emp => 
+        emp.department === selectedDepartment
+      );
+    }
+    
+    setFilteredEmployees(filtered);
+    setCurrentPage(1);
+  }, [searchTerm, selectedStatus, selectedDepartment, employees]);
 
   const formatDate = (date) =>
     date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -134,6 +257,35 @@ function Attendance() {
     next.setDate(next.getDate() + 1);
     setDate(next);
   };
+
+  // Calculate pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredEmployees.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+
+  // Pagination handlers
+  const handlePaginationClick = (pageNumber) => {
+    setCurrentPage(pageNumber);
+    // Scroll to top of table smoothly
+    if (tableRef.current) {
+      tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const paginate = (pageNumber) => handlePaginationClick(pageNumber);
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      handlePaginationClick(currentPage + 1);
+    }
+  };
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      handlePaginationClick(currentPage - 1);
+    }
+  };
+  const goToFirstPage = () => handlePaginationClick(1);
+  const goToLastPage = () => handlePaginationClick(totalPages);
 
   const getStatusBadge = (status) => {
     let style = {
@@ -157,7 +309,6 @@ function Attendance() {
         return <span style={{ ...style, backgroundColor: "gray" }} className="attendance-status-badge">N/A</span>;
     }
   };
-
 
   const handlePrint = () => {
     const printContent = tableRef.current.innerHTML;
@@ -268,8 +419,6 @@ function Attendance() {
     printWindow.print();
   };
 
-
-
   const handleRefresh = () => {
     window.location.reload();
   };
@@ -281,10 +430,13 @@ function Attendance() {
     setOpenExport(false);
   };
 
-  // Calculate summary counts
-  const presentCount = employees.filter(e => e.status === 'Present').length;
-  const absentCount = employees.filter(e => e.status === 'Absent').length;
-  const onLeaveCount = employees.filter(e => e.status === 'On-Leave').length;
+  // Calculate summary counts based on filtered employees
+  const presentCount = filteredEmployees.filter(e => e.status === 'Present').length;
+  const absentCount = filteredEmployees.filter(e => e.status === 'Absent').length;
+  const onLeaveCount = filteredEmployees.filter(e => e.status === 'On-Leave').length;
+
+  // Get unique departments for filter
+  const departments = [...new Set(employees.map(emp => emp.department))].filter(Boolean);
 
   return (
     <div style={styles.dashboardContainer}>
@@ -298,18 +450,19 @@ function Attendance() {
         </button>
         <img src={require('./images/logo_ez.png')} alt="logo" className="attendance-mobile-logo" />
         <div className="attendance-mobile-header-right">
-          <FontAwesomeIcon icon={faBell} className="attendance-mobile-icon-bell" />
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={true}
+            profileData={profileData}
+            admin={admin}
+          />
         </div>
       </div>
-
-      {/* Mobile Profile Dropdown */}
-      {showProfileMenu && (
-        <div className="attendance-mobile-profile-dropdown">
-          <button style={styles.dropdownItem} onClick={handleLogout}>
-            <FontAwesomeIcon icon={faSignOutAlt} style={styles.dropdownIcon} /> Logout
-          </button>
-        </div>
-      )}
 
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
@@ -341,13 +494,13 @@ function Attendance() {
 
         <ul className='attendance-sidebar-menu-link' style={styles.sidebarList}>
           {allowedMenus.map((item) => {
-            const isActive = location.pathname === item.to; // Check if current route matches
+            const isActive = location.pathname === item.to;
 
             return (
               <li
                 key={item.name}
                 style={{
-                  ...(isActive ? styles.btnActive : {}), // Apply active tab background
+                  ...(isActive ? styles.btnActive : {}),
                 }}
               >
                 <Link
@@ -363,27 +516,24 @@ function Attendance() {
               </li>
             );
           })}
-
-          <li>
-            <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-                setIsSidebarOpen(false);
-              }}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </Link>
-          </li>
         </ul>
       </div>
 
       {/* Desktop Header */}
       <div className="attendance-desktop-header" style={styles.header}>
-        <input type="text" placeholder="Search..." style={styles.search} />
-        <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
+            profileData={profileData}
+            admin={admin}
+          />
+        </div>
       </div>
 
       {/* Main Content */}
@@ -412,6 +562,173 @@ function Attendance() {
           </div>
         )}
 
+        {/* Profile Modal */}
+        {showProfileModal && (
+          <div style={styles.modalOverlayProfile} className="profile-modal-overlay">
+            <div style={styles.modalContentProfile} className="profile-modal-content">
+              <h2 style={styles.modalTitle}>My Profile</h2>
+
+              <div style={styles.profileSection}>
+                <div className="photo-container">
+                  <img
+                    src={
+                      profileData.profile_picture ||
+                      "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
+                    }
+                    alt="Profile"
+                    className="modal-profile-image"
+                    style={styles.modalImage}
+                  />
+                  <div className="photo-overlay">
+                    <label htmlFor="profileUpload" className="change-photo-btn">
+                      {isUploading ? "Uploading..." : "Change Photo"}
+                    </label>
+
+                    <input
+                      id="profileUpload"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+
+                        setIsUploading(true);
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        formData.append("upload_preset", "profile_picture");
+
+                        try {
+                          const res = await fetch(
+                            "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
+                            { method: "POST", body: formData }
+                          );
+                          const data = await res.json();
+
+                          if (data.secure_url) {
+                            setProfileData((prev) => ({
+                              ...prev,
+                              profile_picture: data.secure_url,
+                            }));
+                          } else {
+                            alert("Upload failed");
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          alert("Upload error");
+                        } finally {
+                          setIsUploading(false);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.formSection}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Full Name</label>
+                  <input
+                    type="text"
+                    value={profileData.full_name}
+                    onChange={(e) =>
+                      setProfileData({ ...profileData, full_name: e.target.value })
+                    }
+                    style={styles.input}
+                  />
+                </div>
+
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Email</label>
+                  <input
+                    type="text"
+                    value={profileData.email}
+                    disabled
+                    style={styles.inputDisabled}
+                  />
+                </div>
+
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Role</label>
+                  <input
+                    type="text"
+                    value={profileData.role}
+                    disabled
+                    style={styles.inputDisabled}
+                  />
+                </div>
+              </div>
+
+              <div style={styles.modalButtons}>
+                <button
+                  style={styles.saveBtn}
+                  disabled={isUploading}
+                  onClick={async () => {
+                    if (!profileData.profile_picture) {
+                      alert("Please upload a profile image first.");
+                      return;
+                    }
+
+                    const storedUser = JSON.parse(localStorage.getItem("admin"));
+                    if (!storedUser) {
+                      alert("User not found in localStorage.");
+                      return;
+                    }
+
+                    const endpoint =
+                      storedUser.role === "office_head"
+                        ? `${API_URL}/api/authAdmin/update/${storedUser.id}`
+                        : `${API_URL}/api/auth/updateProfile/${storedUser.id}`;
+
+                    const body = {};
+                    if (profileData.full_name) body.full_name = profileData.full_name;
+                    if (profileData.profile_picture) body.profile_picture = profileData.profile_picture;
+                    if (profileData.department && storedUser.role === "office_head") body.department = profileData.department;
+                    if (profileData.email && storedUser.role !== "office_head") body.email = profileData.email;
+
+                    try {
+                      const res = await fetch(endpoint, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(body),
+                      });
+
+                      const result = await res.json();
+
+                      if (res.ok) {
+                        alert("✅ Profile updated successfully!");
+                        setShowProfileModal(false);
+                        
+                        // Update localStorage with new data
+                        const updatedUser = { ...storedUser, ...result };
+                        localStorage.setItem("admin", JSON.stringify(updatedUser));
+                        setAdmin(updatedUser);
+                        setProfileData({
+                          full_name: result.full_name || result.name || "",
+                          email: result.email || "",
+                          role: result.role || "",
+                          profile_picture: result.profile_picture || ""
+                        });
+                      } else {
+                        alert(result.message || "Failed to update profile.");
+                      }
+                    } catch (err) {
+                      console.error("❌ Error updating profile:", err);
+                      alert("Error updating profile. See console.");
+                    }
+                  }}
+                >
+                  {isUploading ? "Uploading..." : "Save Changes"}
+                </button>
+
+                <button style={styles.cancelButton} onClick={() => setShowProfileModal(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="attendance-header-section" style={styles.header1}>
           <h1 className="attendance-title">Attendance</h1>
           <div className="attendance-title-line" style={styles.line}></div>
@@ -427,39 +744,36 @@ function Attendance() {
           </div>
         </div>
 
-        {/* Summary Cards - Simplified */}
+        {/* Summary Cards */}
         <div className="attendance-summary-cards" style={styles.summaryCards}>
           <div className="attendance-card" style={styles.card}>
-            <p className="attendance-txtSum" style={styles.txtSum}>Present Summary</p>
             <div className="attendance-card-content" style={styles.cardContent}>
               <div className="attendance-card-data" style={styles.cardData}>
                 <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>Total Present</p>
                   <p className="attendance-txtData" style={styles.txtData}>{presentCount}</p>
+                  <p className="attendance-txtlabel" style={styles.txtlabel}>Total Present</p>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="attendance-card" style={styles.card}>
-            <p className="attendance-txtSum" style={styles.txtSum}>Absent Summary</p>
             <div className="attendance-card-content" style={styles.cardContent}>
               <div className="attendance-card-data" style={styles.cardData}>
                 <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>Total Absent</p>
                   <p className="attendance-txtData" style={styles.txtData}>{absentCount}</p>
+                  <p className="attendance-txtlabel" style={styles.txtlabel}>Total Absent</p>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="attendance-card" style={styles.card}>
-            <p className="attendance-txtSum" style={styles.txtSum}>Leave Summary</p>
             <div className="attendance-card-content" style={styles.cardContent}>
               <div className="attendance-card-data" style={styles.cardData}>
                 <div className="attendance-data1" style={styles.data1}>
-                  <p className="attendance-txtlabel" style={styles.txtlabel}>Total on-leave</p>
                   <p className="attendance-txtData" style={styles.txtData}>{onLeaveCount}</p>
+                  <p className="attendance-txtlabel" style={styles.txtlabel}>Total on-leave</p>
                 </div>
               </div>
             </div>
@@ -471,24 +785,38 @@ function Attendance() {
           <div className="attendance-row1" style={styles.row1}>
             <div className="attendance-firstRow" style={styles.firstRow}>
               <FontAwesomeIcon icon={faSearch} style={styles.iconSearch} className="attendance-iconSearch" />
-              <input className="attendance-input1" style={styles.input1} placeholder='Search Employee' />
+              <input 
+                className="attendance-input1" 
+                style={styles.input1} 
+                placeholder='Search Employee' 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
 
             <div className="attendance-firstRow" style={styles.firstRow}>
-              <select className="attendance-filter" style={styles.filter}>
-                <option disabled selected>Status</option>
-                <option>Present</option>
-                <option>Late</option>
-                <option>Absent</option>
-                <option>On-Leave</option>
+              <select 
+                className="attendance-filter" 
+                style={styles.filter}
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+              >
+                <option value="">All Status</option>
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+                <option value="On-Leave">On-Leave</option>
               </select>
 
-              <select className="attendance-filter" style={styles.filter}>
-                <option disabled selected hidden>Department</option>
-                <option>Human Resource</option>
-                <option>Accounting</option>
-                <option>Engineering</option>
-                <option>IT</option>
+              <select 
+                className="attendance-filter" 
+                style={styles.filter}
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+              >
+                <option value="">All Departments</option>
+                {departments.map((dept, index) => (
+                  <option key={index} value={dept}>{dept}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -514,7 +842,6 @@ function Attendance() {
                 </div>
               )}
             </div>
-
 
             <button onClick={handlePrint} className="attendance-btn2" style={styles.btn2}>
               <FontAwesomeIcon icon={faPrint} style={styles.iconBtn1} />
@@ -551,7 +878,7 @@ function Attendance() {
               </thead>
 
               <tbody>
-                {employees.map((emp, index) => (
+                {currentItems.map((emp, index) => (
                   <tr key={index}>
                     <td style={styles.td}>{emp.name}<br />{emp.id}</td>
 
@@ -593,11 +920,115 @@ function Attendance() {
             </table>
           </div>
         </div>
+
+        {/* Pagination */}
+        {filteredEmployees.length > 0 && (
+          <div className="attendance-pagination" style={styles.pagination}>
+            <div className="attendance-pagination-info" style={styles.paginationInfo}>
+              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredEmployees.length)} of {filteredEmployees.length} entries
+            </div>
+            
+            <div className="attendance-pagination-controls" style={styles.paginationControls}>
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToFirstPage();
+                }}
+                disabled={currentPage === 1}
+                style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
+                className="attendance-pagination-first"
+              >
+                <FontAwesomeIcon icon={faAnglesLeft} />
+              </button>
+              
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToPrevPage();
+                }}
+                disabled={currentPage === 1}
+                style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
+                className="attendance-pagination-prev"
+              >
+                <FontAwesomeIcon icon={faAngleLeft} />
+              </button>
+              
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                if (pageNum > 0 && pageNum <= totalPages) {
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        paginate(pageNum);
+                      }}
+                      style={currentPage === pageNum ? styles.paginationButtonActive : styles.paginationButton}
+                      className="attendance-pagination-number"
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                }
+                return null;
+              })}
+              
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToNextPage();
+                }}
+                disabled={currentPage === totalPages}
+                style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
+                className="attendance-pagination-next"
+              >
+                <FontAwesomeIcon icon={faAngleRight} />
+              </button>
+              
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToLastPage();
+                }}
+                disabled={currentPage === totalPages}
+                style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
+                className="attendance-pagination-last"
+              >
+                <FontAwesomeIcon icon={faAnglesRight} />
+              </button>
+            </div>
+            
+            <div className="attendance-pagination-perpage" style={styles.paginationPerPage}>
+              <span>Items per page:</span>
+              <select 
+                value={itemsPerPage} 
+                onChange={(e) => {
+                  // You can add functionality to change items per page if needed
+                }}
+                style={styles.paginationSelect}
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
 
 const styles = {
   dashboardContainer: {
@@ -637,18 +1068,7 @@ const styles = {
   },
   icon: {
     color: '#fff',
-  },
-  search: {
-    padding: '10px',
-    width: '300px',
-    borderRadius: '5px',
-    border: '1px solid #ccc',
-    marginRight: '20px', 
-  },
-  iconBell: {
-    color: '#fff',
-    fontSize: '24px',
-    cursor: 'pointer',
+    width: "20px"
   },
   header: {
     display: 'flex',
@@ -663,6 +1083,50 @@ const styles = {
     width: 'calc(100% - 280px)', 
     zIndex: 1000, 
     boxSizing: 'border-box',
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "20px",
+    position: "relative",
+    marginLeft: 'auto',
+    justifyContent: 'flex-end'
+  },
+  profileContainer: {
+    position: "relative",
+    cursor: "pointer",
+    backgroundColor: '#ffffff',
+    padding: '5px 15px',
+    borderRadius: '5px'
+  },
+  profileInfo: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  profileImage: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "50%",
+    objectFit: "cover",
+  },
+  profileDetails: {
+    display: "flex",
+    flexDirection: "column",
+    lineHeight: "1.1",
+  },
+  profileName: {
+    fontWeight: "600",
+    fontSize: "12px",
+  },
+  profileRole: {
+    fontSize: "10px",
+    color: "#888",
+  },
+  dropdownIcon: {
+    fontSize: "12px",
+    color: "#666",
+    transition: "transform 0.3s",
   },
   content: {
     marginLeft: '300px',
@@ -688,56 +1152,83 @@ const styles = {
   dateNav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
+    backgroundColor: '#fff',
+    padding: '8px 12px',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
   },
   navButton: {
-    backgroundColor: '#C4C4C433',
-    color: 'black',
-    border: 'none',
-    padding: ' 5px 10px',
-    borderRadius: '5px',
+    backgroundColor: 'transparent',
+    color: '#6B7280',
+    border: '1px solid #E5E7EB',
+    padding: '8px 12px',
+    borderRadius: '8px',
     cursor: 'pointer',
+    transition: 'all 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '36px',
   },
   dateText: {
-    fontSize: '18px',
+    fontSize: '15px',
     fontWeight: '500',
-    color: 'black',
+    color: '#374151',
+    minWidth: '220px',
+    textAlign: 'center',
   },
   summaryCards: {
-    display: 'flex',
-    flexDirection: 'row',
-    gap: '30px',
-    marginTop: '20px',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '24px',
+    marginBottom: '32px',
   },
   card: {
     backgroundColor: '#fff',
-    padding: '20px',
-    borderRadius: '10px',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-    justifyContent: 'space-between',
-  },
-  cardContent: {
+    padding: '24px',
+    borderRadius: '16px',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    border: '1px solid #E5E7EB',
+    transition: 'transform 0.2s, boxShadow 0.2s',
     display: 'flex',
-    flexDirection: 'row',
-    gap: '10px',
-    marginTop: '10px'
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+  },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '20px',
   },
   cardData: {
     display: 'flex',
-    flexDirection: 'row',
-    gap: '20px',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   data1: {
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    gap: '8px',
   },
   txtData: {
-    fontSize: '25px',
-    fontWeight: 'bold',
-    marginTop: '3px'
+    fontSize: '32px',
+    fontWeight: '700',
+    margin: '0',
+    color: '#111827',
+    textAlign: 'center',
   },
   txtlabel: {
     fontSize: '14px',
+    textAlign: 'center',
+    margin: '0',
   },
   divider: {
     width: '1px',
@@ -755,8 +1246,8 @@ const styles = {
     marginBottom: '20px'
   },
   tableCon:{
-    overflow: 'auto',
-    maxHeight: '400px',
+    overflow: 'visible',
+    maxHeight: 'none',
   },
   th:{
     backgroundColor: '#A8FC0015',
@@ -777,25 +1268,21 @@ const styles = {
     gap: '10px',
     whiteSpace: 'nowrap',
   },
-
   time: {
     fontWeight: '500',
   },
-
   trackLine: {
     display: 'flex',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-
   dot: {
     width: '5px',
     height: '5px',
     backgroundColor: '#555',
     borderRadius: '50%',
   },
-
   duration: {
     fontSize: '12px',
     color: '#999',
@@ -814,25 +1301,26 @@ const styles = {
     justifyContent: 'space-between'
   },
   input1:{
-    padding: '5px 25px',
+    padding: '10px 25px',
     width: '250px',
     border: '1px solid #eee',
-    borderRadius: '5px',
-    fontSize: '12px'
+    borderRadius: '10px',
+    fontSize: '12px',
+    boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)',
   },
   iconSearch: {
     position: 'absolute',
-    margin: '10px 10px',
+    margin: '15px 10px',
     fontSize: '12px',
     color: '#00000050'
   },
   filter: {
-    width: '120px',
-    borderRadius: '5px',
-    padding: '5px',
+    borderRadius: '10px',
+    padding: '5px 10px',
     border: '1px solid #eee',
     fontSize: '12px',
-    maxHeight: '100px'
+    maxHeight: '100px',
+    boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)',
   },
   firstRow: {
     display: 'flex', 
@@ -850,30 +1338,33 @@ const styles = {
     flexDirection: 'row'
   },
   btn1: {
-    padding: '5px 10px',
-    borderRadius: '5px',
+    padding: '10px 10px',
+    borderRadius: '10px',
     fontWeight: '600',
     backgroundColor: 'white',
-    border: '1px solid #00000060',
-    cursor: 'pointer'
+    border: 'none',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
   },
   btn2: {
     padding: '5px 10px',
     backgroundColor: '#46810390',
     border: 'none',
-    borderRadius: '5px',
+    borderRadius: '10px',
     color: 'white',
     fontWeight: '600',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
   },
   btn3: {
     padding: '5px 10px',
     border: 'none',
-    borderRadius: '5px',
+    borderRadius: '10px',
     backgroundColor: '#00B7FF',
     color: 'white',
     fontWeight: '600',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
   },
   iconBtn: {
     fontSize: '12px',
@@ -906,6 +1397,229 @@ const styles = {
     cursor: "pointer",
     fontSize: "14px",
     transition: "background 0.2s",
+  },
+  // Pagination Styles
+  pagination: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '20px',
+    padding: '15px',
+    backgroundColor: '#fff',
+    borderRadius: '8px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    flexWrap: 'wrap',
+    gap: '15px',
+  },
+  paginationInfo: {
+    fontSize: '14px',
+    color: '#666',
+    fontWeight: '500',
+  },
+  paginationControls: {
+    display: 'flex',
+    gap: '5px',
+    alignItems: 'center',
+  },
+  paginationButton: {
+    padding: '8px 12px',
+    border: '1px solid #ddd',
+    backgroundColor: '#fff',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#333',
+    transition: 'all 0.2s',
+    minWidth: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paginationButtonActive: {
+    padding: '8px 12px',
+    border: '1px solid #009205',
+    backgroundColor: '#009205',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#fff',
+    minWidth: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paginationButtonDisabled: {
+    padding: '8px 12px',
+    border: '1px solid #e0e0e0',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
+    cursor: 'not-allowed',
+    fontSize: '14px',
+    color: '#999',
+    minWidth: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paginationPerPage: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '14px',
+    color: '#666',
+  },
+  paginationSelect: {
+    padding: '6px 10px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    backgroundColor: '#fff',
+    fontSize: '14px',
+    cursor: 'pointer',
+  },
+  // Profile Modal Styles
+  modalOverlayProfile: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    background: "rgba(0, 0, 0, 0.45)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+  },
+  modalContentProfile: {
+    background: "#fff",
+    borderRadius: "18px",
+    width: "420px",
+    padding: "32px 28px",
+    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    animation: "fadeIn 0.3s ease",
+  },
+  modalTitle: {
+    fontSize: "1.6rem",
+    fontWeight: "600",
+    color: "#2b2b2b",
+    marginBottom: "24px",
+  },
+  profileSection: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: "24px",
+  },
+  formSection: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: "15px",
+  },
+  inputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+  },
+  label: {
+    fontSize: "0.9rem",
+    color: "#555",
+    fontWeight: "500",
+  },
+  input: {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "1px solid #ccc",
+    fontSize: "0.95rem",
+    outline: "none",
+    transition: "border-color 0.2s ease",
+  },
+  inputDisabled: {
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "1px solid #e0e0e0",
+    background: "#f8f9fa",
+    fontSize: "0.95rem",
+    color: "#888",
+  },
+  modalButtons: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginTop: "26px",
+    width: "100%",
+  },
+  saveBtn: {
+    flex: 1,
+    background: "#007bff",
+    color: "#fff",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "500",
+    transition: "background 0.3s ease",
+    marginRight: "8px",
+  },
+  cancelButton: {
+    flex: 1,
+    background: "#f1f1f1",
+    color: "#333",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "500",
+    transition: "background 0.3s ease",
+  },
+  modalImage: {
+    width: '140px',
+    height: '140px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    marginRight: '20px',
+  },
+  modalOverlay: {
+    position: "fixed",
+    top: 0, left: 0,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  },
+  modalContent: {
+    backgroundColor: "white",
+    padding: "20px",
+    borderRadius: "8px",
+    width: "400px",
+    textAlign: "center",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+  },
+  modalActions: {
+    marginTop: "20px",
+    display: "flex",
+    justifyContent: "space-around",
+  },
+  cancelBtn: {
+    backgroundColor: "#ccc",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+  confirmBtn: {
+    backgroundColor: "#e74c3c",
+    color: "white",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
   },
 };
 

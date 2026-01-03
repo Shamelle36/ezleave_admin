@@ -49,6 +49,7 @@ import Papa from 'papaparse';
 import SignatureCanvas from 'react-signature-canvas';
 import './leave-management-responsive.css';
 import './dashboard-responsive.css'; 
+import ProfileDropdown from './profileDropdown.js';
 
 function LeaveManagement() {
     const navigate = useNavigate();
@@ -124,7 +125,260 @@ const [customRejectionReason, setCustomRejectionReason] = useState(""); // For c
 const [showCustomReasonInput, setShowCustomReasonInput] = useState(false);
 // Add near other state declarations
 const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+const [showDetailsModal, setShowDetailsModal] = useState(false);
+const [selectedLeaveDetails, setSelectedLeaveDetails] = useState(null);
+
 const [showProfileMenu, setShowProfileMenu] = useState(false);
+const [showProfileModal, setShowProfileModal] = useState(false);
+    const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null);
+    const [profileData, setProfileData] = useState({
+        full_name: "",
+        email: "",
+        role: "",
+        profile_picture: "",
+    });
+    const [isUploading, setIsUploading] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+// Add near your other state declarations
+const [hoveredDate, setHoveredDate] = useState(null);
+const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+const [tooltipVisible, setTooltipVisible] = useState(false);
+const [tooltipData, setTooltipData] = useState([]);
+
+// Add these near your other calendar states
+
+// NEW: Add search and filter states for calendar
+const [calendarSearchQuery, setCalendarSearchQuery] = useState("");
+const [calendarYearFilter, setCalendarYearFilter] = useState(new Date().getFullYear());
+const [calendarLeaveTypeFilter, setCalendarLeaveTypeFilter] = useState("all");
+const [availableYears, setAvailableYears] = useState([]);
+const [availableLeaveTypes, setAvailableLeaveTypes] = useState([]);
+
+// Helper function to calculate days between dates
+const calculateDaysBetween = (startDate, endDate) => {
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 for inclusive
+    return diffDays;
+  } catch (error) {
+    return 'N/A';
+  }
+};
+
+const leaveTypeMap = {
+  "Vacation Leave": "VL",
+  "Mandatory/Forced Leave": "ML",
+  "Sick Leave": "SL",
+  "Maternity Leave": "MAT",
+  "Paternity Leave": "PAT",
+  "Special Privilege Leave": "SPL",
+  "Solo Parent Leave": "SOLO",
+  "Study Leave": "STUDY",
+  "VAWC Leave": "VAWC",
+  "Rehabilitation Leave": "RL",
+  "Special Leave Benefits for Women": "SLBW",
+  "Special Emergency (Calamity) Leave": "CALAMITY",
+  "Monetization of Leave Credits": "MOL",
+  "Terminal Leave": "TL",
+  "Adoption Leave": "AL",
+};
+
+const printTable = (tableId) => {
+  const printWindow = window.open('', '_blank');
+  const table = document.getElementById(tableId);
+  
+  if (!table) {
+    alert('Table not found!');
+    return;
+  }
+  
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Leave Summary Report</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+          }
+          h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+          }
+          th {
+            background-color: #A8FC0015;
+            padding: 12px;
+            text-align: left;
+            font-weight: 500;
+            font-size: 14px;
+            border: 1px solid #eee;
+          }
+          td {
+            padding: 12px;
+            font-size: 12px;
+            border: 1px solid #eee;
+          }
+          .status-approved {
+            color: #065F46;
+            font-weight: 600;
+          }
+          .status-pending {
+            color: #92400E;
+            font-weight: 600;
+          }
+          .status-rejected {
+            color: #991B1B;
+            font-weight: 600;
+          }
+          .print-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+          }
+          .logo {
+            width: 80px;
+            height: auto;
+          }
+          .print-date {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            text-align: right;
+          }
+          @media print {
+            @page {
+              margin: 0.5cm;
+            }
+            body {
+              margin: 0;
+              padding: 10px;
+            }
+            .no-print {
+              display: none !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-header">
+          <h2>Leave Summary Report</h2>
+          <div>
+            <div>Generated: ${new Date().toLocaleDateString()}</div>
+            <div>For Date: ${date.toLocaleDateString()}</div>
+          </div>
+        </div>
+        ${table.outerHTML}
+        <div class="print-date">
+          Generated on ${new Date().toLocaleString()}
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+            window.close();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+};
+
+
+ useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("admin"));
+    if (storedUser) {
+      setAdmin(storedUser);
+      setProfileData({
+        full_name: storedUser.full_name || storedUser.name || "",
+        email: storedUser.email || "",
+        role: storedUser.role || "",
+        profile_picture: storedUser.profile_picture || ""
+      });
+    }
+  }, []);
+
+    useEffect(() => {
+        const fetchInitialProfile = async () => {
+          try {
+            const storedUser = JSON.parse(localStorage.getItem("admin"));
+            if (!storedUser) return;
+    
+            const url =
+              storedUser.role === "office_head"
+                ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+    
+            const res = await fetch(url);
+            const data = await res.json();
+    
+            if (res.ok) {
+              setAdmin(data);
+              setProfileData(data);
+            } else {
+              console.error("Error loading initial profile:", data.message);
+            }
+          } catch (err) {
+            console.error("Error loading initial profile:", err);
+          }
+        };
+    
+        fetchInitialProfile();
+      }, []);
+    
+      useEffect(() => {
+        if (!showProfileModal) return;
+    
+        const fetchProfileData = async () => {
+          try {
+            const storedUser = JSON.parse(localStorage.getItem("admin"));
+            if (!storedUser) return;
+    
+            const url =
+              storedUser.role === "office_head"
+                ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+    
+            const res = await fetch(url);
+            const data = await res.json();
+    
+            if (res.ok) {
+              setProfileData(data);
+            } else {
+              console.error("Error loading profile:", data.message);
+            }
+          } catch (err) {
+            console.error("Error loading profile:", err);
+          }
+        };
+    
+        fetchProfileData();
+      }, [showProfileModal]);
+
+// Add window.printTable function globally
+useEffect(() => {
+  window.printTable = printTable;
+  return () => {
+    delete window.printTable;
+  };
+}, []);
+
+const viewLeaveDetails = (record) => {
+  setSelectedLeaveDetails(record);
+  setShowDetailsModal(true);
+};
 
 // Pre-defined rejection reasons
 const rejectionReasons = [
@@ -137,7 +391,7 @@ const rejectionReasons = [
 ];
 
 
-const API_URL = "https://ezleave-admin-api.onrender.com";
+  const API_URL = "http://localhost:5000";
 
       // Add this useEffect near your other useEffect hooks
 useEffect(() => {
@@ -167,7 +421,8 @@ useEffect(() => {
     showUploadSignature || 
     showSavedPDFsModal ||
     showOverlapModal ||
-    isGeneratingCSForm;
+    isGeneratingCSForm ||
+    showDetailsModal;;
     
   if (isModalOpen) {
     disableScroll();
@@ -188,7 +443,8 @@ useEffect(() => {
   showUploadSignature, 
   showSavedPDFsModal,
   showOverlapModal,
-  isGeneratingCSForm
+  isGeneratingCSForm,
+  showDetailsModal
 ]);
 
 
@@ -1538,13 +1794,36 @@ const fetchLeaveCalendarData = async (date, view = 'month') => {
   try {
     setCalendarLoading(true);
     const year = date.getFullYear();
-    const month = date.getMonth() + 1; // JavaScript months are 0-indexed
+    const month = date.getMonth() + 1;
     
-    const response = await fetch(`${API_URL}/api/leave-requests/leave-calendar/month/${year}/${month}`);
+    // Build query parameters
+    const params = new URLSearchParams({
+      year: year,
+      month: month,
+      department: selectedDepartment !== 'all' ? selectedDepartment : '',
+      leave_type: calendarLeaveTypeFilter !== 'all' ? calendarLeaveTypeFilter : '',
+      search: calendarSearchQuery
+    });
+    
+    const response = await fetch(`${API_URL}/api/leave-requests/leave-calendar/month/${year}/${month}?${params}`);
     const data = await response.json();
     
     if (response.ok) {
       setLeaveCalendarData(data);
+      
+      // Extract unique years and leave types from data
+      if (data.employees) {
+        const years = [...new Set(data.employees.map(emp => 
+          new Date(emp.leave_start).getFullYear()
+        ).filter(Boolean))].sort((a, b) => b - a);
+        
+        const leaveTypes = [...new Set(data.employees.map(emp => 
+          emp.leave_type
+        ).filter(Boolean))].sort();
+        
+        setAvailableYears(years.length > 0 ? years : [new Date().getFullYear()]);
+        setAvailableLeaveTypes(leaveTypes.length > 0 ? ['all', ...leaveTypes] : ['all']);
+      }
     } else {
       console.error('Error fetching leave calendar data:', data.error);
       alert('Failed to fetch leave calendar data');
@@ -1555,6 +1834,39 @@ const fetchLeaveCalendarData = async (date, view = 'month') => {
   } finally {
     setCalendarLoading(false);
   }
+};
+
+const filterCalendarData = () => {
+  if (!leaveCalendarData.employees) return [];
+
+  let filtered = leaveCalendarData.employees;
+
+  // Apply search query
+  if (calendarSearchQuery.trim()) {
+    filtered = filtered.filter(employee =>
+      employee.employee_name?.toLowerCase().includes(calendarSearchQuery.toLowerCase()) ||
+      employee.department?.toLowerCase().includes(calendarSearchQuery.toLowerCase()) ||
+      employee.leave_type?.toLowerCase().includes(calendarSearchQuery.toLowerCase())
+    );
+  }
+
+  // Apply year filter
+  if (calendarYearFilter && calendarYearFilter !== 'all') {
+    filtered = filtered.filter(employee => {
+      const startYear = employee.leave_start ? new Date(employee.leave_start).getFullYear() : null;
+      const endYear = employee.leave_end ? new Date(employee.leave_end).getFullYear() : null;
+      return startYear === calendarYearFilter || endYear === calendarYearFilter;
+    });
+  }
+
+  // Apply leave type filter
+  if (calendarLeaveTypeFilter && calendarLeaveTypeFilter !== 'all') {
+    filtered = filtered.filter(employee =>
+      employee.leave_type === calendarLeaveTypeFilter
+    );
+  }
+
+  return filtered;
 };
 
 // Add this useEffect to fetch calendar data when date changes
@@ -1581,17 +1893,25 @@ const goToToday = () => {
   setSelectedCalendarDate(new Date());
 };
 
+const clearCalendarFilters = () => {
+  setCalendarSearchQuery("");
+  setCalendarLeaveTypeFilter("all");
+  setSelectedDepartment("all");
+};
+
 const renderCalendarDays = () => {
   const year = selectedCalendarDate.getFullYear();
   const month = selectedCalendarDate.getMonth();
   
-  // Get first day of month and total days
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const totalDays = lastDay.getDate();
-  const startingDay = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const startingDay = firstDay.getDay();
   
   const days = [];
+  
+  // Get filtered employees
+  const filteredEmployees = filterCalendarData();
   
   // Add empty cells for days before the first day of the month
   for (let i = 0; i < startingDay; i++) {
@@ -1603,15 +1923,14 @@ const renderCalendarDays = () => {
     const currentDate = new Date(year, month, day);
     const dateStr = currentDate.toISOString().split('T')[0];
     
-    // FIXED: Proper date range checking with inclusive dates
-    const employeesOnLeave = leaveCalendarData.employees?.filter(employee => {
+    const employeesOnLeave = filteredEmployees.filter(employee => {
       if (!employee.leave_start || !employee.leave_end) return false;
       
       try {
         const leaveStart = new Date(employee.leave_start);
         const leaveEnd = new Date(employee.leave_end);
         
-        // Normalize dates to compare only the date part (ignore time)
+        // Normalize dates
         const normalizedCurrent = new Date(currentDate);
         normalizedCurrent.setHours(0, 0, 0, 0);
         
@@ -1621,24 +1940,11 @@ const renderCalendarDays = () => {
         const normalizedEnd = new Date(leaveEnd);
         normalizedEnd.setHours(0, 0, 0, 0);
         
-        // Check if current date falls within the leave period (inclusive)
         return normalizedCurrent >= normalizedStart && normalizedCurrent <= normalizedEnd;
       } catch (error) {
-        console.error('Error parsing dates for employee:', employee.employee_name, error);
         return false;
       }
-    }) || [];
-    
-    // Debug logging for specific dates
-    if (day === 2 && employeesOnLeave.length > 0) {
-      console.log(`🔍 DEBUG December 2nd - Employees on leave:`, employeesOnLeave.map(e => ({
-        name: e.employee_name,
-        leave_type: e.leave_type,
-        start: e.leave_start,
-        end: e.leave_end,
-        currentDate: dateStr
-      })));
-    }
+    });
     
     days.push(
       <div 
@@ -1648,12 +1954,29 @@ const renderCalendarDays = () => {
           ...(isToday(currentDate) ? styles.calendarDayToday : {}),
           ...(employeesOnLeave.length > 0 ? styles.calendarDayWithLeave : {})
         }}
-        title={employeesOnLeave.length > 0 ? 
-          `${employeesOnLeave.length} employee(s) on leave:\n${employeesOnLeave.map(e => 
-            `${e.employee_name} - ${e.leave_type}\n(${formatDisplayDate(e.leave_start)} to ${formatDisplayDate(e.leave_end)})`
-          ).join('\n')}` : 
-          `No leaves on ${currentDate.toLocaleDateString()}`
-        }
+        onMouseEnter={(e) => {
+          if (employeesOnLeave.length > 0) {
+            const rect = e.target.getBoundingClientRect();
+            setTooltipPosition({
+              x: rect.left,
+              y: rect.top
+            });
+            setTooltipData(employeesOnLeave);
+            setHoveredDate(currentDate);
+            setTooltipVisible(true);
+          }
+        }}
+        onMouseLeave={() => {
+          setTooltipVisible(false);
+        }}
+        onMouseMove={(e) => {
+          if (employeesOnLeave.length > 0 && tooltipVisible) {
+            setTooltipPosition({
+              x: e.clientX,
+              y: e.clientY
+            });
+          }
+        }}
       >
         <div style={styles.calendarDayNumber}>{day}</div>
         
@@ -1667,7 +1990,6 @@ const renderCalendarDays = () => {
                   ...styles.leaveIndicator,
                   backgroundColor: getLeaveColor(employee.leave_type)
                 }}
-                title={`${employee.employee_name} - ${employee.leave_type} (${formatDisplayDate(employee.leave_start)} to ${formatDisplayDate(employee.leave_end)})`}
               >
                 {getLeaveAbbreviation(employee.leave_type)}
               </div>
@@ -1741,23 +2063,44 @@ const getLeaveAbbreviation = (leaveType) => {
   return (
     <div style={styles.dashboardContainer}>
    <div className="mobile-header">
-      <button 
-        className="hamburger"
-        onClick={() => setIsSidebarOpen(true)}
-      >
-        <FontAwesomeIcon icon={faBars} />
-      </button>
-      <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
-      <div className="mobile-header-right">
-        <div className="notification-badge-container" style={{position: 'relative'}}>
-          <FontAwesomeIcon icon={faBell} className="mobile-icon-bell" />
-          {/* Add notification badge if needed */}
-        </div>
-        <div className="mobile-profile">
-          {/* Add profile image if needed */}
+        <button 
+          className="hamburger"
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <FontAwesomeIcon icon={faBars} />
+        </button>
+        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+        <div className="mobile-header-right">
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={true}
+            profileData={profileData}
+            admin={admin}
+          />
         </div>
       </div>
-    </div>
+
+       <div className="desktop-header" style={styles.header}>
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
+            profileData={profileData} 
+            admin={admin} 
+          />
+        </div>
+      </div>
+
 
     {/* Mobile Sidebar Overlay */}
     {isSidebarOpen && (
@@ -1810,36 +2153,8 @@ const getLeaveAbbreviation = (leaveType) => {
             </li>
           );
         })}
-        <li>
-          <Link
-            style={styles.sb}
-            to="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setShowLogoutModal(true);
-              setIsSidebarOpen(false);
-            }}
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-          </Link>
-        </li>
       </ul>
     </div>
-
-    {/* Desktop Header */}
-    <div className="desktop-header" style={styles.header}>
-      <input type="text" placeholder="Search..." style={styles.search} />
-      
-      <div style={styles.headerRight}>
-        <div className="notification-badge-container" style={{position: 'relative'}}>
-          <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
-        </div>
-        
-        {/* Add profile container if needed */}
-      </div>
-    </div>
-
-        
 
         <div className="content" style={styles.content}>
 
@@ -1991,13 +2306,7 @@ const getLeaveAbbreviation = (leaveType) => {
                 >
                     Leave Requests
                 </button>
-                
-                <button
-                    style={tabButtonStyle(activeTab === 'leave_balances')}
-                    onClick={() => setActiveTab('leave_balances')}
-                >
-                    Leave Balances
-                </button>
+              
             </div>
 
 
@@ -2023,8 +2332,8 @@ const getLeaveAbbreviation = (leaveType) => {
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
-                                <p className='card-title' style={styles.txtlabel}>Total Requests</p>
                                 <p className='card-value' style={styles.txtData}>{filteredRecords.length}</p>
+                                <p className='card-title' style={styles.txtlabel}>Total Requests</p>
                             </div>
                         </div>
                         </div>
@@ -2034,8 +2343,8 @@ const getLeaveAbbreviation = (leaveType) => {
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
+                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Approved').length}</p>                      
                                     <p className='card-title' style={styles.txtlabel}>Approved Leaves</p>
-                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Approved').length}</p>
                                 </div>
                         </div>
                         </div>
@@ -2046,8 +2355,8 @@ const getLeaveAbbreviation = (leaveType) => {
                             <div style={styles.cardData}>
 
                                 <div style={styles.data1}>
+                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Pending').length}</p>                                 
                                     <p className='card-title' style={styles.txtlabel}>Pending Leaves</p>
-                                    <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Pending').length}</p>
                                 </div>
                             </div>
                         </div>
@@ -2057,8 +2366,8 @@ const getLeaveAbbreviation = (leaveType) => {
                         <div style={styles.cardContent}>
                             <div style={styles.cardData}>
                                 <div style={styles.data1}>
-                                    <p className='card-title' style={styles.txtlabel}>Rejected Leaves</p>
                                     <p className='card-value' style={styles.txtData}>{filteredRecords.filter(l => l.status === 'Rejected').length}</p>
+                                    <p className='card-title' style={styles.txtlabel}>Rejected Leaves</p>
                                 </div>
                             </div>
                         </div>
@@ -2075,7 +2384,7 @@ const getLeaveAbbreviation = (leaveType) => {
 
                     <div className='firstRow' style={styles.firstRow}>
                         <select className='filter' style={styles.filter}>
-                            <option disabled selected>Leave Type</option>
+                            <option disabled selected>All Leave Type</option>
                             <option>Sick Leave</option>
                             <option>Vacation Leave</option>
                             <option>Absent</option>
@@ -2083,7 +2392,7 @@ const getLeaveAbbreviation = (leaveType) => {
                         </select>
 
                         <select style={styles.filter}>
-                            <option disabled selected>Department</option>
+                            <option disabled selected>All Departments</option>
                             <option>Office of the Municipal Mayor</option>
                             <option>Human Resource Management Division</option>
                             <option>Business Permit and Licensing Division</option>
@@ -2110,9 +2419,9 @@ const getLeaveAbbreviation = (leaveType) => {
                         <FontAwesomeIcon icon={faUpload} style={styles.iconBtn}/>
                         Export
                     </button>
-                    <button onClick={handlePrint} className='btn2' style={styles.btn2}>
-                        <FontAwesomeIcon icon={faPrint} style={styles.iconBtn1}/>
-                        Print
+                    <button onClick={() => window.printTable('printable-table')} className='btn2' style={styles.btn2}>
+                      <FontAwesomeIcon icon={faPrint} style={styles.iconBtn1}/>
+                      Print
                     </button>
                     <button onClick={handleRefresh} className='btn3' style={styles.btn3}>
                         <FontAwesomeIcon icon={faRefresh} style={styles.iconBtn1}/>
@@ -2123,63 +2432,151 @@ const getLeaveAbbreviation = (leaveType) => {
         
 
             <div className='tableCon' style={styles.tableCon}>
-                <table className='table' style={styles.table}>
-                    <thead>
+              <table className='table' style={styles.table} id="printable-table">
+                <thead>
+                  <tr>
+                    <th style={styles.th}>No.</th>
+                    <th style={styles.th}>Employee Name</th>
+                    <th style={styles.th}>Department</th>
+                    <th style={styles.th}>Leave Type</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Date Filed</th>
+                    <th style={styles.th}>Actions</th> {/* New Action column */}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.length > 0 ? (
+                    filteredRecords.map((record, index) => (
+                      <tr key={index}>
+                        <td style={styles.td}>{index + 1}</td>
+                        <td style={styles.td}>{record.name}</td>
+                        <td style={styles.td}>{record.department}</td>
+                        <td style={styles.td}>{record.leaveType}</td>
+                        <td style={styles.td}>
+                          <span style={{
+                            ...styles.statusBadge,
+                            ...(record.status === 'Approved' ? styles.statusApproved : 
+                                record.status === 'Rejected' ? styles.statusRejected : 
+                                styles.statusPending)
+                          }}>
+                            {record.status}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          {record.dateFiled
+                            ? record.dateFiled.toLocaleDateString()
+                            : "N/A"}
+                        </td>
+                        <td style={styles.td}>
+                          <button
+                            style={styles.viewDetailsBtn}
+                            onClick={() => viewLeaveDetails(record)}
+                            title="View full details"
+                          >
+                            <FontAwesomeIcon icon={faEye} style={styles.iconEye} />
+                            View Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
                     <tr>
-                        <th style={styles.th}>No.</th>
-                        <th style={styles.th}>Employee Name</th>
-                        <th style={styles.th}>Department</th>
-                        <th style={styles.th}>Leave Type</th>
-                        <th style={styles.th}>Entitled</th>
-                        <th style={styles.th}>Used</th>
-                        <th style={styles.th}>Remaining</th>
-                        <th style={styles.th}>Status</th>
-                        <th style={styles.th}>Approved By</th>
-                        <th style={styles.th}>Date Filed</th>
-                        <th style={styles.th}>Range</th>
+                      <td style={styles.td} colSpan="7" align="center">
+                        No leave requests found for this day
+                      </td>
                     </tr>
-                    </thead>
-                    <tbody>
-                        {filteredRecords.length > 0 ? (
-                            filteredRecords.map((record, index) => (
-                            <tr key={index}>
-                                <td style={styles.td}>{index + 1}</td>
-                                <td style={styles.td}>{record.name}</td>
-                                <td style={styles.td}>{record.department}</td>
-                                <td style={styles.td}>{record.leaveType}</td>
-                                <td style={styles.td}>{record.entitled}</td>
-                                <td style={styles.td}>{record.used}</td>
-                                <td style={styles.td}>{record.remaining}</td>
-                                <td style={styles.td}>{record.status}</td>
-                                <td style={styles.td}>{record.approvedBy}</td>
-                                <td style={styles.td}>
-                                {record.dateFiled
-                                    ? record.dateFiled.toLocaleDateString()
-                                    : "N/A"}
-                                </td>
-                                <td style={styles.td}>
-                                {record.range.from
-                                    ? record.range.from.toLocaleDateString()
-                                    : "N/A"}{" "}
-                                -{" "}
-                                {record.range.to
-                                    ? record.range.to.toLocaleDateString()
-                                    : "N/A"}
-                                </td>
-                            </tr>
-                            ))
-                        ) : (
-                            <tr>
-                            <td style={styles.td} colSpan="15" align="center">
-                                No leave requests found for this day
-                            </td>
-                            </tr>
-                        )}
-                        </tbody>
-
-                </table>
+                  )}
+                </tbody>
+              </table>
             </div>
+
+{showDetailsModal && selectedLeaveDetails && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.detailsModal}>
+      <div style={styles.modalHeader1}>
+        <h3 style={styles.modalTitle1}>Leave Request Details</h3>
+        <button 
+          style={styles.closeModalBtn}
+          onClick={() => setShowDetailsModal(false)}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+      </div>
+      
+      <div style={styles.modalBody1}>
+        {/* Employee Info */}
+        <div style={styles.detailsSection1}>
+          <h4 style={styles.sectionTitle1}>Employee Information</h4>
+          <div style={styles.detailsGrid1}>
+            <div style={styles.detailItem1}>
+              <label style={styles.detailLabel1}>Employee Name</label>
+              <span style={styles.detailValue1}>{selectedLeaveDetails.name}</span>
+            </div>
+            <div style={styles.detailItem1}>
+              <label style={styles.detailLabel1}>Department</label>
+              <span style={styles.detailValue1}>{selectedLeaveDetails.department}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Leave Details */}
+        <div style={styles.detailsSection1}>
+          <h4 style={styles.sectionTitle1}>Leave Details</h4>
+          <div style={styles.detailsGrid2}>
+            <div style={styles.detailItem1}>
+              <label style={styles.detailLabel1}>Leave Type</label>
+              <span style={styles.detailValue1}>{selectedLeaveDetails.leaveType}</span>
+            </div>
+            <div style={styles.detailItem1}>
+              <label style={styles.detailLabel1}>Status</label>
+              <span style={{
+                ...styles.detailValue1,
+                ...(selectedLeaveDetails.status === 'Approved' ? styles.statusApproved1 : 
+                    selectedLeaveDetails.status === 'Rejected' ? styles.statusRejected1: 
+                    styles.statusPending1)
+              }}>
+                {selectedLeaveDetails.status}
+              </span>
+            </div>
+            <div style={styles.detailItem1}>
+              <label style={styles.detailLabel1}>Date Filed</label>
+              <span style={styles.detailValue1}>
+                {selectedLeaveDetails.dateFiled ? selectedLeaveDetails.dateFiled.toLocaleDateString() : "N/A"}
+              </span>
+            </div>
+            <div style={styles.detailItem1}>
+              <label style={styles.detailLabel1}>Leave Period</label>
+              <span style={styles.detailValue1}>
+                {selectedLeaveDetails.range.from
+                  ? selectedLeaveDetails.range.from.toLocaleDateString()
+                  : "N/A"} -{" "}
+                {selectedLeaveDetails.range.to
+                  ? selectedLeaveDetails.range.to.toLocaleDateString()
+                  : "N/A"}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        
+        {/* Approval Info */}
+        <div style={styles.detailsSection1}>
+          <h4 style={styles.sectionTitle1}>Approval Information</h4>
+          <div style={styles.detailsGrid1}>
+            <div style={styles.detailItem}>
+              <label style={styles.detailLabel1}>Approved By</label>
+              <span style={styles.detailValue1}>{selectedLeaveDetails.approvedBy}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+)}
+
             </>
+
             )}
 
                 {activeTab === "requests" && (
@@ -2188,7 +2585,6 @@ const getLeaveAbbreviation = (leaveType) => {
                     <div className='requestsHeader' style={styles.requestsHeader}>
                     <div style={styles.headerTitle}>
                         <h2 style={styles.requestsTitle}>Leave Requests</h2>
-                        <p style={styles.requestsSubtitle}>Review and manage employee leave applications</p>
                     </div>
                     <div className='headerControls' style={styles.headerControls}>
                         <div style={styles.searchBox}>
@@ -2247,7 +2643,6 @@ const getLeaveAbbreviation = (leaveType) => {
                             <tr>
                                 <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Employee</th>
                                 <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Leave Type</th>
-                                <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Duration</th>
                                 <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Status</th>
                                 <th className='leaveRequestsColumn' style={styles.leaveRequestsColumn}>Date Filed</th>
                             </tr>
@@ -2282,16 +2677,6 @@ const getLeaveAbbreviation = (leaveType) => {
                                     <span style={styles.leaveTypeTag}>
                                         {req.leave_type}
                                     </span>
-                                    </td>
-                                    <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
-                                    <div style={styles.durationCell}>
-                                        <div style={styles.durationDates}>
-                                        {req.inclusive_date_start} - {req.inclusive_date_end}
-                                        </div>
-                                        <div style={styles.durationDays}>
-                                        {req.number_of_days} day{req.number_of_days > 1 ? 's' : ''}
-                                        </div>
-                                    </div>
                                     </td>
                                     <td className='leaveRequestsRows' style={styles.leaveRequestsRows}>
                                     <span style={{
@@ -3082,148 +3467,7 @@ const getLeaveAbbreviation = (leaveType) => {
                 )}
             
 
-            {activeTab === 'leave_balances' && (
-                <div style={styles.leaveBalance}>
-                    <button
-                    style={styles.uploadButton}
-                    onClick={() => setShowUploadModal(true)}
-                    onMouseEnter={(e) => Object.assign(e.target.style, styles.uploadButtonHover)}
-                    onMouseLeave={(e) => Object.assign(e.target.style, styles.uploadButton)}
-                    >
-                    Upload Balances
-                    </button>
-
-                    {loading ? (
-                    <p style={styles.loadingText}>Loading...</p>
-                    ) : (
-                    <table style={styles.table2}>
-                        <thead>
-                        <tr>
-                            <th style={styles.thNew}>Employee</th>
-                            <th style={styles.thNew}>Leave Type</th>
-                            <th style={styles.thNew}>Entitled</th>
-                            <th style={styles.thNew}>Used</th>
-                            <th style={styles.thNew}>Remaining</th>
-                            <th style={styles.thNew}>Action</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {leaveBalances.map((leave) => (
-                            <tr 
-                            key={leave.id}
-                            onMouseEnter={(e) => e.target.parentNode.style.backgroundColor = 'rgba(207, 255, 112, 0.5)'}
-                            onMouseLeave={(e) => e.target.parentNode.style.backgroundColor = 'transparent'}
-                            >
-                            <td style={styles.tdNew}>
-                                <div style={styles.employeeCell}>
-                                <img
-                                    src={leave.employees?.profile_url || '/default-avatar.png'}
-                                    alt="Profile"
-                                    style={styles.employeeImage}
-                                />
-                                <div>
-                                    <div style={styles.employeeName}>{leave.employees?.full_name || 'N/A'}</div>
-                                    <div style={styles.employeeId}>{leave.id_number}</div>
-                                </div>
-                                </div>
-                            </td>
-                            <td style={styles.tdNew}>
-                                <span style={{
-                                ...styles.leaveTypeBadge,
-                                ...(leave.leave_type === 'Annual' ? styles.annualLeave :
-                                    leave.leave_type === 'Sick' ? styles.sickLeave :
-                                    leave.leave_type === 'Personal' ? styles.personalLeave :
-                                    styles.maternityLeave)
-                                }}>
-                                {leave.leave_type}
-                                </span>
-                            </td>
-                            <td style={styles.tdNew}>{leave.entitled}</td>
-                            <td style={styles.tdNew}>{leave.used}</td>
-                            <td style={styles.tdNew}>
-                                {(leave.entitled ?? 0) - (leave.used ?? 0)}
-                            </td>
-                            <td style={styles.td}>
-                            <button onClick={() => {
-                                console.log('Leave ID Number:', leave.id_number);
-                                navigate(`/employeeProfile/${leave.id_number}`)}} 
-                                style={styles.viewButton}>
-                                View Details
-                            </button>
-                            </td>                            
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                    )}
-
-                    {showUploadModal && (
-                    <div style={styles.modalOverlay}>
-                        <div style={styles.modalContent}>
-                        <h3 style={{ marginBottom: "15px" }}>Upload Leave Card Excel</h3>
-
-                        <input
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={(e) => setSelectedFile(e.target.files[0])}
-                        />
-
-                        {uploading ? (
-                            <p>Uploading...</p>
-                        ) : (
-                            <button
-                            style={styles.uploadConfirmButton}
-                            onClick={async () => {
-                                if (!selectedFile) return alert("Please select a file first!");
-
-                                setUploading(true);
-                                setUploadResult(null);
-
-                                try {
-                                const formData = new FormData();
-                                formData.append("file", selectedFile);
-
-                                const res = await fetch("http://localhost:5000/api/leave-cards/upload", {
-                                    method: "POST",
-                                    body: formData,
-                                });
-                                const data = await res.json();
-                                setUploadResult(data);
-                                } catch (err) {
-                                console.error("Upload failed:", err);
-                                alert("Failed to upload leave card.");
-                                } finally {
-                                setUploading(false);
-                                }
-                            }}
-                            >
-                            Upload
-                            </button>
-                        )}
-
-                        {uploadResult && (
-                            <div style={{ marginTop: "10px" }}>
-                            <p><strong>Inserted:</strong> {uploadResult.inserted}</p>
-                            <p><strong>Skipped (no matching employee):</strong> {uploadResult.skipped}</p>
-                            </div>
-                        )}
-
-                        <button
-                            style={styles.closeModalButton}
-                            onClick={() => setShowUploadModal(false)}
-                        >
-                            Close
-                        </button>
-                        </div>
-                    </div>
-                    )}
-
-                </div>
-
-                
-            )}
-
-{activeTab === 'calendar' && (
+            {activeTab === 'calendar' && (
   <div style={styles.leaveCalendar}>
     <div style={styles.calendarContent}>
       {/* Calendar Header */}
@@ -3233,39 +3477,91 @@ const getLeaveAbbreviation = (leaveType) => {
             const prevMonth = new Date(selectedCalendarDate);
             prevMonth.setMonth(prevMonth.getMonth() - 1);
             setSelectedCalendarDate(prevMonth);
+            fetchLeaveCalendarData(prevMonth, 'month');
           }}>
             <FontAwesomeIcon icon={faChevronLeft} />
           </button>
           
-          <h2 style={styles.calendarTitle}>
+          <p style={styles.calendarTitle1}>
             {selectedCalendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </h2>
+          </p>
           
           <button style={styles.navButton} onClick={() => {
             const nextMonth = new Date(selectedCalendarDate);
             nextMonth.setMonth(nextMonth.getMonth() + 1);
             setSelectedCalendarDate(nextMonth);
+            fetchLeaveCalendarData(nextMonth, 'month');
           }}>
             <FontAwesomeIcon icon={faChevronRight} />
           </button>
           
-          <button style={styles.todayButton} onClick={goToToday}>
-            Today
-          </button>
         </div>
         
         <div style={styles.calendarControls}>
-          <input
-            type="text"
-            placeholder="Search by employee name, department"
-            style={styles.calendarSearch}
-          />
-          <button style={styles.calendarFilter}>
-            <FontAwesomeIcon icon={faFilter} style={styles.filterIcon}/>
-            Filter
+          {/* Search Input */}
+          <div style={styles.searchBox}>
+            <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="Search by employee, department"
+              style={styles.calendarSearch}
+              value={calendarSearchQuery}
+              onChange={(e) => {
+                setCalendarSearchQuery(e.target.value);
+                // Debounce the search
+                setTimeout(() => fetchLeaveCalendarData(selectedCalendarDate, 'month'), 300);
+              }}
+            />
+          </div>
+          
+      
+          {/* Leave Type Filter */}
+          <select
+            style={styles.calendarFilter}
+            value={calendarLeaveTypeFilter}
+            onChange={(e) => setCalendarLeaveTypeFilter(e.target.value)}
+          >
+            <option value="all">All Leave Types</option>
+            {Object.entries(leaveTypeMap).map(([fullName, abbr]) => (
+              <option key={abbr} value={fullName}>
+                {fullName} ({abbr})
+              </option>
+            ))}
+          </select>
+          
+          {/* Department Filter */}
+          <select
+            style={styles.calendarFilter}
+            value={selectedDepartment}
+            onChange={(e) => {
+              setSelectedDepartment(e.target.value);
+              setTimeout(() => fetchLeaveCalendarData(selectedCalendarDate, 'month'), 300);
+            }}
+          >
+            <option value="all">All Departments</option>
+            <option value="Office of the Municipal Mayor">Mayor's Office</option>
+            <option value="Human Resource Management Division">HRMD</option>
+            <option value="Business Permit and Licensing Division">BPLD</option>
+            <option value="Sangguniang Bayan Office">Sangguniang Bayan</option>
+            {/* Add more departments as needed */}
+          </select>
+          
+          {/* Clear Filters Button */}
+          <button
+            style={styles.clearFilterBtn}
+            onClick={() => {
+              clearCalendarFilters();
+              fetchLeaveCalendarData(selectedCalendarDate, 'month');
+            }}
+            disabled={!calendarSearchQuery && calendarYearFilter === new Date().getFullYear() && 
+                      calendarLeaveTypeFilter === "all" && selectedDepartment === "all"}
+          >
+            <FontAwesomeIcon icon={faEraser} />
+            Clear
           </button>
         </div>
       </div>
+
 
       {/* Real Calendar Grid */}
       <div style={styles.calendarGrid}>
@@ -3289,99 +3585,18 @@ const getLeaveAbbreviation = (leaveType) => {
           )}
         </div>
       </div>
-    </div>
-
-    {/* Calendar Sidebar */}
-    <div style={styles.calendarBox}>
-      <div style={styles.calendarLeave}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-          <span>Leave Types</span>
-          <select style={styles.selectCalendar}>
-            <option>This Month</option>
-            <option>This Week</option>
-          </select>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          {[
-            { label: 'SL', name: 'Sick Leave', color: '#f44336', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Sick Leave').length || 0 },
-            { label: 'VL', name: 'Vacation Leave', color: '#3f51b5', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Vacation Leave').length || 0 },
-            { label: 'ML', name: 'Maternity Leave', color: '#ff9800', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Maternity Leave').length || 0 },
-            { label: 'PL', name: 'Paternity Leave', color: '#8bc34a', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Paternity Leave').length || 0 },
-            { label: 'SPL', name: 'Solo Parent Leave', color: '#e91e63', count: leaveCalendarData.employees?.filter(e => e.leave_type === 'Solo Parent Leave').length || 0 },
-          ].map((type) => (
-            <div key={type.label} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 20, height: 20, backgroundColor: type.color, borderRadius: 4 }} />
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{type.label} - {type.name}</div>
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 'bold', color: type.color }}>
-                  {type.count}
-                </div>
-              </div>
-              <div style={{ height: 6, backgroundColor: '#eee', borderRadius: 4, marginTop: 4 }}>
-                <div style={{
-                  width: `${Math.min((type.count / Math.max(leaveCalendarData.employees?.length || 1, 1)) * 100, 100)}%`,
-                  height: '100%',
-                  backgroundColor: type.color,
-                  borderRadius: 4
-                }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-          <span>Today's Leave Summary</span>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          {leaveCalendarData.employees && leaveCalendarData.employees.length > 0 ? (
-            leaveCalendarData.employees.slice(0, 3).map((employee) => (
-              <div key={employee.id} style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img 
-                  src={employee.profile_picture || "https://via.placeholder.com/30"} 
-                  alt="avatar" 
-                  style={{ width: '30px', height: '30px', borderRadius: '50%' }} 
-                />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px' }}>{employee.employee_name}</div>
-                  <div style={{ fontSize: 12, color: '#777' }}>{employee.department}</div>
-                  <div style={{ fontSize: 12, marginTop: 2 }}>
-                    <span style={{ 
-                      padding: '2px 6px', 
-                      borderRadius: '4px', 
-                      backgroundColor: employee.leave_type === 'Sick Leave' ? '#f4433620' : 
-                                      employee.leave_type === 'Vacation Leave' ? '#3f51b520' : '#4caf5020',
-                      color: employee.leave_type === 'Sick Leave' ? '#f44336' : 
-                            employee.leave_type === 'Vacation Leave' ? '#3f51b5' : '#4caf50',
-                      fontSize: '10px',
-                      fontWeight: '600'
-                    }}>
-                      {employee.leave_type}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div style={{ textAlign: 'center', color: '#666', fontSize: '14px', padding: '20px 0' }}>
-              No employees on leave today
-            </div>
-          )}
-          {leaveCalendarData.employees && leaveCalendarData.employees.length > 3 && (
-            <div style={{ textAlign: 'center', fontSize: '12px', color: '#666', marginTop: '8px' }}>
-              +{leaveCalendarData.employees.length - 3} more employees on leave
-            </div>
-          )}
-        </div>
-      </div>
+      
     </div>
   </div>
 )}
-
              </div>
+
+          <LeaveTooltip 
+            data={tooltipData}
+            position={tooltipPosition}
+            visible={tooltipVisible}
+          />
+
       </div>
   );
 }
@@ -3412,6 +3627,268 @@ const tabButtonStyle = (active) => ({
     ? 'inset 1px 1px 2px rgba(44, 44, 44, 0.44)'
     : '0 2px 4px rgba(0, 0, 0, 0.1)',
 });
+
+// Move this to the end of the file, before the styles object
+const LeaveTooltip = ({ data, position, visible }) => {
+  if (!visible || !data?.length) return null;
+
+  const displayedData = data.slice(0, 3);
+  const moreCount = data.length - 3;
+
+  return (
+    <div 
+      className="leave-tooltip"
+      style={{
+        position: 'fixed',
+        left: position.x + 12,
+        top: position.y + 12,
+        backgroundColor: 'white',
+        border: '1px solid #e4e7ec',
+        borderRadius: '10px',
+        boxShadow: '0 6px 20px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04)',
+        padding: '16px',
+        zIndex: 10000,
+        width: '320px',
+        maxHeight: '380px',
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}
+    >
+      {/* Header */}
+      <div style={{ 
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '16px',
+        paddingBottom: '12px',
+        borderBottom: '1px solid #f0f2f5'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '6px',
+            height: '20px',
+            borderRadius: '3px',
+            backgroundColor: '#3b82f6',
+          }}/>
+          <span style={{ 
+            fontSize: '15px', 
+            fontWeight: '600', 
+            color: '#1f2937',
+            letterSpacing: '-0.01em'
+          }}>
+            On Leave
+          </span>
+        </div>
+        <div style={{
+          fontSize: '13px',
+          fontWeight: '500',
+          color: '#6b7280',
+          backgroundColor: '#f9fafb',
+          padding: '4px 8px',
+          borderRadius: '12px'
+        }}>
+          {data.length} employee{data.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+
+      {/* Employee List */}
+      <div style={{ 
+        maxHeight: '280px',
+        overflowY: 'auto',
+        paddingRight: '4px',
+      }}>
+        {displayedData.map((employee, index) => (
+          <div 
+            key={employee.id || index}
+            style={{
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '8px',
+              backgroundColor: index % 2 === 0 ? '#fafbfc' : 'transparent',
+              transition: 'background-color 0.2s ease'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              {/* Avatar with color indicator */}
+              <div style={{ position: 'relative' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: getLeaveColor(employee.leave_type) + '15',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  color: getLeaveColor(employee.leave_type),
+                }}>
+                  <img
+                    src={employee.profile_picture || "/default-avatar.png"}
+                    alt="profile"
+                    style={{
+                      width: '36px', 
+                      height: '36px',
+                      borderRadius: '8px'
+                    }}
+                  />
+                </div>
+                <div style={{
+                  position: 'absolute',
+                  bottom: '-2px',
+                  right: '-2px',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  backgroundColor: getLeaveColor(employee.leave_type),
+                  border: '2px solid white'
+                }}/>
+              </div>
+
+              {/* Employee Details */}
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  marginBottom: '6px'
+                }}>
+                  <span style={{ 
+                    fontWeight: '600', 
+                    fontSize: '14px',
+                    color: '#111827'
+                  }}>
+                    {employee.employee_name}
+                  </span>
+                  <span style={{
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    color: '#6b7280',
+                    padding: '2px 8px',
+                    backgroundColor: '#f3f4f6',
+                    borderRadius: '10px'
+                  }}>
+                    {employee.leave_type}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px',
+                    marginBottom: '4px'
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="1.5"/>
+                      <line x1="16" y1="2" x2="16" y2="6" strokeWidth="1.5"/>
+                      <line x1="8" y1="2" x2="8" y2="6" strokeWidth="1.5"/>
+                      <line x1="3" y1="10" x2="21" y2="10" strokeWidth="1.5"/>
+                    </svg>
+                    <span>{formatDisplayDate(employee.leave_start)} – {formatDisplayDate(employee.leave_end)}</span>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px',
+                    marginBottom: '4px'
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M12 8v4l3 3" strokeWidth="1.5" strokeLinecap="round"/>
+                      <circle cx="12" cy="12" r="10" strokeWidth="1.5"/>
+                    </svg>
+                    <span>{calculateDaysBetween(employee.leave_start, employee.leave_end)} days</span>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px'
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" strokeWidth="1.5"/>
+                      <polyline points="9 22 9 12 15 12 15 22" strokeWidth="1.5"/>
+                    </svg>
+                    <span>{employee.department}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer with "more" indicator */}
+      {moreCount > 0 && (
+        <div style={{
+          marginTop: '12px',
+          paddingTop: '12px',
+          borderTop: '1px solid #f0f2f5',
+          textAlign: 'center'
+        }}>
+          <span style={{
+            fontSize: '13px',
+            fontWeight: '500',
+            color: '#6b7280',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="12" cy="12" r="10" strokeWidth="1.5"/>
+              <line x1="12" y1="8" x2="12" y2="12" strokeWidth="1.5"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="1.5"/>
+            </svg>
+            +{moreCount} more employee{moreCount !== 1 ? 's' : ''} on leave
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper function to calculate days between dates
+const calculateDaysBetween = (startDate, endDate) => {
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 for inclusive
+    return diffDays;
+  } catch (error) {
+    return 'N/A';
+  }
+};
+
+// Helper function to get leave color
+const getLeaveColor = (leaveType) => {
+  switch (leaveType) {
+    case 'Sick Leave': return '#f44336';
+    case 'Vacation Leave': return '#3f51b5';
+    case 'Maternity Leave': return '#ff9800';
+    case 'Paternity Leave': return '#8bc34a';
+    case 'Solo Parent Leave': return '#e91e63';
+    case 'Emergency Leave': return '#ffc107';
+    case 'Bereavement Leave': return '#757575';
+    default: return '#4caf50';
+  }
+};
+
+// Helper function to format dates for display
+const formatDisplayDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateString;
+  }
+};
 
 
 const styles = {
@@ -3452,6 +3929,7 @@ const styles = {
   },
   icon: {
     color: '#fff',
+    width: "20px"
   },
   search: {
     padding: '10px',
@@ -3489,7 +3967,6 @@ const styles = {
   },
   content: {
     marginLeft: '300px', // Adjusted to account for the sidebar width
-    padding: '20px',
     backgroundColor: '#F8F8F8',
     marginTop: '60px', 
     overflow: 'hidden'
@@ -3511,20 +3988,45 @@ const styles = {
   dateNav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
+    backgroundColor: '#fff',
+    padding: '8px 12px',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
   },
     navButton: {
-        backgroundColor: '#C4C4C433',
-        color: 'black',
-        border: 'none',
-        padding: ' 5px 10px',
-        borderRadius: '5px',
-        cursor: 'pointer',
+      backgroundColor: 'transparent',
+      color: '#6B7280',
+      border: '1px solid #E5E7EB',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: '36px',
+    },
+
+     navButton1: {
+      backgroundColor: 'transparent',
+      color: '#6B7280',
+      border: '1px solid #E5E7EB',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: '36px',
     },
     dateText: {
-        fontSize: '18px',
+        fontSize: '15px',
         fontWeight: '500',
-        color: 'black',
+        color: '#374151',
+        minWidth: '220px',
+        textAlign: 'center',
     },
     summaryCards: {
         display: 'flex',
@@ -3535,40 +4037,59 @@ const styles = {
     card: {
         backgroundColor: '#C5DEF2',
         padding: '20px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-        justifyContent: 'space-between',
-        width: '300px'
+        borderRadius: '16px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        border: '1px solid #E5E7EB',
+        transition: 'transform 0.2s, boxShadow 0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
     },
     card1: {
         backgroundColor: '#F2C6DF',
         padding: '20px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-        justifyContent: 'space-between',
-        width: '300px'
+        borderRadius: '16px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        border: '1px solid #E5E7EB',
+        transition: 'transform 0.2s, boxShadow 0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
     },
     card2: {
         backgroundColor: '#DBCDF0',
         padding: '20px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-        justifyContent: 'space-between',
-        width: '300px'
+        borderRadius: '16px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        border: '1px solid #E5E7EB',
+        transition: 'transform 0.2s, boxShadow 0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
     },
     card3: {
         backgroundColor: '#F8D9C4',
         padding: '20px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-        justifyContent: 'space-between',
-        width: '300px'
+        borderRadius: '16px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        border: '1px solid #E5E7EB',
+        transition: 'transform 0.2s, boxShadow 0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
     },
     cardContent: {
         display: 'flex',
         flexDirection: 'row',
         gap: '10px',
-        marginTop: '10px'
     },
     cardData: {
         display: 'flex',
@@ -3580,9 +4101,8 @@ const styles = {
         flexDirection: 'column'
     },
     txtData: {
-        fontSize: '25px',
+        fontSize: '32px',
         fontWeight: 'bold',
-        marginTop: '3px'
     },
     txtlabel: {
         fontSize: '14px',
@@ -3605,7 +4125,6 @@ const styles = {
         boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
         marginTop: '20px',
         marginBottom: '20px',
-        minWidth: '3000px'
     },
     tableCon:{
         overflow: 'auto',
@@ -3618,7 +4137,6 @@ const styles = {
         fontWeight: '500',
         fontSize: '14px',
         border: '1px solid #eee',
-        width: '300px'
     },
     td: {
         padding: '12px',
@@ -3667,25 +4185,26 @@ const styles = {
         justifyContent: 'space-between'
     },
     input1:{
-        padding: '5px 25px',
-        width: '250px',
-        border: '1px solid #eee',
-        borderRadius: '5px',
-        fontSize: '12px'
+      padding: '10px 25px',
+      width: '250px',
+      border: '1px solid #eee',
+      borderRadius: '10px',
+      fontSize: '12px',
+      boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)',
     },
     iconSearch: {
         position: 'absolute',
-        margin: '10px 10px',
+        margin: '15px 10px',
         fontSize: '12px',
         color: '#00000050'
     },
     filter: {
-        width: '120px',
-        borderRadius: '5px',
-        padding: '5px',
-        border: '1px solid #eee',
-        fontSize: '12px',
-        maxHeight: '100px'
+      borderRadius: '10px',
+      padding: '5px 10px',
+      border: '1px solid #eee',
+      fontSize: '12px',
+      maxHeight: '100px',
+      boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)',
     },
     firstRow: {
         display: 'flex', 
@@ -3702,32 +4221,35 @@ const styles = {
         display: 'flex', 
         flexDirection: 'row'
     },
-    btn1: {
-        padding: '5px 10px',
-        borderRadius: '5px',
-        fontWeight: '600',
-        backgroundColor: 'white',
-        border: '1px solid #00000060',
-        cursor: 'pointer'
-    },
-    btn2: {
-        padding: '5px 10px',
-        backgroundColor: '#46810390',
-        border: 'none',
-        borderRadius: '5px',
-        color: 'white',
-        fontWeight: '600',
-        cursor: 'pointer'
-    },
-    btn3: {
-        padding: '5px 10px',
-        border: 'none',
-        borderRadius: '5px',
-        backgroundColor: '#00B7FF',
-        color: 'white',
-        fontWeight: '600',
-        cursor: 'pointer'
-    },
+      btn1: {
+    padding: '10px 10px',
+    borderRadius: '10px',
+    fontWeight: '600',
+    backgroundColor: 'white',
+    border: 'none',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  btn2: {
+    padding: '5px 10px',
+    backgroundColor: '#46810390',
+    border: 'none',
+    borderRadius: '10px',
+    color: 'white',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  btn3: {
+    padding: '5px 10px',
+    border: 'none',
+    borderRadius: '10px',
+    backgroundColor: '#00B7FF',
+    color: 'white',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
     iconBtn: {
         fontSize: '12px',
         margin: '5px 5px 0'
@@ -3839,14 +4361,6 @@ const styles = {
         border: '2px solid #E5E7EB',
         backgroundColor: '#F3F4F6',
     },
-
-    employeeName: {
-        fontSize: 14,
-        fontWeight: 600,
-        color: '#1F2937',
-        marginBottom: 2,
-    },
-
     employeeId: {
         fontSize: 12,
         color: '#6B7280',
@@ -3935,10 +4449,6 @@ const styles = {
         borderTopRadius: '10px'
     },
 
-    calendarDay: {
-        color: '#9c9c9cff'
-    },
-
     tdCalendar: {
         border: '1px solid #ddd', 
         padding: '8px',
@@ -3993,11 +4503,9 @@ const styles = {
     },
     leaveRequestsColumn: {
         padding: '16px 20px',
-        textAlign: 'left',
         fontSize: 12,
         fontWeight: 600,
         color: '#374151',
-        textTransform: 'uppercase',
         letterSpacing: '0.05em',
         borderBottom: '1px solid #E5E7EB',
         width: '200px'
@@ -4008,7 +4516,6 @@ const styles = {
         borderBottom: '1px solid #F3F4F6',
         fontSize: 14,
         color: '#1F2937',
-        verticalAlign: 'middle',
     },
 
     rightSection: {
@@ -4462,20 +4969,11 @@ leaveRequests: {
     display: 'flex',
     flexDirection: 'column',
   },
-  employeeName: {
-    fontWeight: '600',
-    fontSize: '14px',
-    color: '#1F2937',
-  },
   employeeDept: {
     fontSize: '12px',
     color: '#6B7280',
   },
   leaveTypeTag: {
-    padding: '4px 8px',
-    backgroundColor: '#EFF6FF',
-    color: '#1D4ED8',
-    borderRadius: '6px',
     fontSize: '12px',
     fontWeight: '500',
   },
@@ -4555,8 +5053,8 @@ leaveRequests: {
     flex: 1,
   },
   employeeName: {
-    fontSize: '18px',
-    fontWeight: '700',
+    fontSize: '15px',
+    fontWeight: '600',
     color: '#1F2937',
     margin: '0 0 4px 0',
   },
@@ -5226,7 +5724,7 @@ calendarHeader: {
   justifyContent: 'space-between',
   alignItems: 'center',
   marginBottom: '20px',
-  padding: '20px',
+  padding: '10px',
   backgroundColor: '#ffffff',
   borderRadius: '12px',
   boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
@@ -5237,13 +5735,22 @@ calendarNavigation: {
   gap: '15px',
 },
 calendarTitle: {
-  fontSize: '24px',
+  fontSize: '15px',
   fontWeight: '600',
   color: '#1F2937',
   margin: 0,
   minWidth: '250px',
   textAlign: 'center',
 },
+
+calendarTitle1: {
+  fontSize: '15px',
+  fontWeight: '600',
+  color: '#1F2937',
+  margin: 0,
+  textAlign: 'center',
+},
+
 calendarControls: {
   display: 'flex',
   gap: '12px',
@@ -5276,14 +5783,45 @@ calendarDays: {
   backgroundColor: '#E5E7EB',
 },
 calendarDay: {
-  backgroundColor: '#ffffff',
-  minHeight: '100px',
-  padding: '8px',
-  border: '1px solid #E5E7EB',
-  position: 'relative',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-},
+    backgroundColor: '#ffffff',
+    minHeight: '100px',
+    padding: '8px',
+    border: '1px solid #E5E7EB',
+    position: 'relative',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#f8f9fa',
+      transform: 'translateY(-2px)',
+      boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+      zIndex: 10,
+    },
+  },
+  
+  calendarDayWithLeave: {
+    backgroundColor: '#ecffedff', // Light green background for days with leave
+    border: 'none',
+    boxShadow: 'inset 0 2px 5px rgba(0, 0, 0, 0.1)',
+    borderRadius: '10px',
+    '&:hover': {
+      backgroundColor: '#d4edda',
+    },
+  },
+  
+  leaveIndicator: {
+    fontSize: '10px',
+    fontWeight: '600',
+    color: 'white',
+    padding: '5px',
+    borderRadius: '5px',
+    textAlign: 'center',
+    cursor: 'pointer',
+    transition: 'transform 0.2s ease',
+    '&:hover': {
+      transform: 'scale(1.1)',
+    },
+  },
+  
 calendarDayEmpty: {
   backgroundColor: '#F9FAFB',
   minHeight: '100px',
@@ -5293,9 +5831,7 @@ calendarDayToday: {
   backgroundColor: '#e8f5e8',
   border: '2px solid #5ab049',
 },
-calendarDayWithLeave: {
-  backgroundColor: '#fff8e1',
-},
+
 calendarDayNumber: {
   fontSize: '14px',
   fontWeight: '600',
@@ -5306,15 +5842,6 @@ leaveIndicators: {
   display: 'flex',
   flexDirection: 'column',
   gap: '2px',
-},
-leaveIndicator: {
-  fontSize: '10px',
-  fontWeight: '600',
-  color: 'white',
-  padding: '2px 4px',
-  borderRadius: '3px',
-  textAlign: 'center',
-  cursor: 'pointer',
 },
 moreLeavesIndicator: {
   fontSize: '9px',
@@ -6162,6 +6689,245 @@ viewPDFsBtn: {
   marginLeft: '10px',
   marginRight: '10px'
 },
+
+viewDetailsBtn: {
+  padding: '6px 12px',
+  backgroundColor: '#5ab049ff',
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  transition: 'all 0.2s ease',
+  '&:hover': {
+    backgroundColor: '#4a9c3aff',
+  },
+},
+iconEye: {
+  fontSize: '12px',
+},
+detailsModal: {
+  backgroundColor: '#fff',
+  padding: '0',
+  borderRadius: '12px',
+  width: '600px',
+  maxHeight: '80vh',
+  overflowY: 'auto',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+},
+modalHeader: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '20px',
+  borderBottom: '1px solid #e0e0e0',
+  position: 'sticky',
+  top: 0,
+  backgroundColor: '#fff',
+  zIndex: 10,
+},
+closeModalBtn: {
+  background: 'none',
+  border: 'none',
+  fontSize: '20px',
+  color: '#666',
+  cursor: 'pointer',
+  padding: '5px',
+  borderRadius: '4px',
+  '&:hover': {
+    backgroundColor: '#f5f5f5',
+  },
+},
+
+modalBody1: {
+  padding: '10px 20px 0 20px'
+},
+detailsSection1: {
+  marginBottom: '25px',
+  backgroundColor: 'white',
+  border: '1px solid rgba(215, 215, 215, 1)',
+  borderRadius: '10px',
+  padding: '10px'
+},
+sectionTitle1: {
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#333',
+  margin: '0 0 15px 0',
+  paddingBottom: '10px',
+  borderBottom: '2px solid #f0f0f0',
+},
+detailsGrid1: {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: '20px',
+},
+detailsGrid2: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+  gap: '20px',
+},
+detailItem1: {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '5px',
+},
+detailLabel1: {
+  fontSize: '12px',
+  color: '#666',
+  fontWeight: '500',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+},
+detailValue1: {
+  fontSize: '14px',
+  color: '#333',
+  fontWeight: '500',
+  padding: '5px',
+  borderRadius: '5px',
+},
+balanceGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, 1fr)',
+  gap: '20px',
+  textAlign: 'center',
+},
+balanceItem: {
+  padding: '15px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #e0e0e0',
+},
+balanceValue: {
+  fontSize: '24px',
+  fontWeight: '700',
+  color: '#5ab049ff',
+  display: 'block',
+  marginTop: '5px',
+},
+modalHeader1: {
+  display: 'flex',
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  padding: '20px 20px 0 20px'
+},
+modalTitle1: {
+
+},
+ statusApproved1: {
+    backgroundColor: '#D1FAE5',
+    color: '#065F46',
+    width: '100px',
+    textAlign: 'center'
+  },
+  statusRejected1: {
+    backgroundColor: '#FEE2E2',
+    color: '#991B1B',
+    width: '100px',
+    textAlign: 'center'
+  },
+  statusPending1: {
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
+    width: '100px',
+    textAlign: 'center'
+  },
+
+  // Add to your styles object
+calendarControls: {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '10px',
+  alignItems: 'center',
+},
+calendarSearch: {
+  padding: '8px 12px 8px 36px',
+  border: '1px solid #ddd',
+  borderRadius: '6px',
+  width: '200px',
+  fontSize: '14px',
+},
+searchBox: {
+  position: 'relative',
+},
+searchIcon: {
+  position: 'absolute',
+  left: '12px',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  color: '#666',
+  fontSize: '14px',
+},
+calendarFilter: {
+  padding: '8px 12px',
+  border: '1px solid #ddd',
+  borderRadius: '6px',
+  fontSize: '14px',
+  minWidth: '120px',
+},
+calendarStats: {
+  display: 'flex',
+  gap: '10px',
+  margin: '15px 0',
+  flexWrap: 'wrap',
+},
+statCard: {
+  backgroundColor: '#ffffff',
+  padding: '10px 15px',
+  borderRadius: '8px',
+  border: '1px solid #e0e0e0',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  minWidth: '60px',
+},
+statNumber: {
+  fontSize: '18px',
+  fontWeight: 'bold',
+  color: '#5ab049ff',
+},
+statLabel: {
+  fontSize: '12px',
+  color: '#666',
+  marginTop: '5px',
+},
+legend: {
+  marginTop: '20px',
+  padding: '15px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+},
+legendTitle: {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#333',
+  margin: '0 0 10px 0',
+},
+legendItems: {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '15px',
+},
+legendItem: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+},
+legendColor: {
+  width: '15px',
+  height: '15px',
+  borderRadius: '3px',
+},
+legendText: {
+  fontSize: '12px',
+  color: '#666',
+},
+
 
 };
 

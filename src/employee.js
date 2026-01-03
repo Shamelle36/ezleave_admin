@@ -32,7 +32,9 @@ import {
   faSave,
   faHistory,
   faArrowRight,
-  faArrowLeft
+  faArrowLeft,
+  faArchive,
+  faRedo
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -59,6 +61,7 @@ function Employees() {
     return savedView || 'list';
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [currentInactivePage, setCurrentInactivePage] = useState(1);
   const itemsPerPage = 8;
   const listEmployeePerPage = 10;
   const fileInputRef = React.useRef(null);
@@ -103,26 +106,31 @@ function Employees() {
     profile_picture: "",
     role: ""
   });
+  
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsContent, setTermsContent] = useState('');
+  const [isEditingTerms, setIsEditingTerms] = useState(false);
+  const [termsVersions, setTermsVersions] = useState([]);
+  const [activeTermsVersion, setActiveTermsVersion] = useState(null);
+  const [newTermsVersion, setNewTermsVersion] = useState('');
+  
+  const [attendanceTimeSettings, setAttendanceTimeSettings] = useState({});
+  const [showTimeSettingsModal, setShowTimeSettingsModal] = useState(false);
+  const [editingDay, setEditingDay] = useState(null);
+  const [isLoadingTimeSettings, setIsLoadingTimeSettings] = useState(false);
 
-    const [showSettingsModal, setShowSettingsModal] = useState(false);
-    const [showTermsModal, setShowTermsModal] = useState(false);
-    const [termsContent, setTermsContent] = useState('');
-    const [isEditingTerms, setIsEditingTerms] = useState(false);
-    const [termsVersions, setTermsVersions] = useState([]);
-    const [activeTermsVersion, setActiveTermsVersion] = useState(null);
-    const [newTermsVersion, setNewTermsVersion] = useState('');
+  // Add state for reactivate modal
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
+  const [employeeToReactivate, setEmployeeToReactivate] = useState(null);
   
-    const [attendanceTimeSettings, setAttendanceTimeSettings] = useState({});
-    const [showTimeSettingsModal, setShowTimeSettingsModal] = useState(false);
-    const [editingDay, setEditingDay] = useState(null);
-    const [isLoadingTimeSettings, setIsLoadingTimeSettings] = useState(false);
-  
-    useEffect(() => {
-      if (showTermsModal) {
-        fetchTermsAndConditions();
-      }
-    }, [showTermsModal]);
-  
+  const [inputType, setInputType] = useState('text');
+
+  useEffect(() => {
+    if (showTermsModal) {
+      fetchTermsAndConditions();
+    }
+  }, [showTermsModal]);
   
   useEffect(() => {
     localStorage.setItem('employeesView', view);
@@ -176,6 +184,34 @@ function Employees() {
 
   useEffect(() => {
     loadEmployees();
+  }, []);
+
+  useEffect(() => {
+    const fetchInitialProfile = async () => {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("admin"));
+        if (!storedUser) return;
+
+        const url =
+          storedUser.role === "office_head"
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (res.ok) {
+          setAdmin(data);
+          setProfileData(data);
+        } else {
+          console.error("Error loading initial profile:", data.message);
+        }
+      } catch (err) {
+        console.error("Error loading initial profile:", err);
+      }
+    };
+
+    fetchInitialProfile();
   }, []);
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
@@ -249,25 +285,41 @@ function Employees() {
           (row) => row.some(cell => cell && String(cell).trim() !== "")
         );
 
-        const employees = validRows.map((row) => ({
-          first_name: row[0]?.trim() || "",
-          last_name: row[2]?.trim() || "",
-          full_name: `${row[0] || ""} ${row[1] || ""} ${row[2] || ""}`.trim(),
-          position: row[4]?.trim() || "",
-          department: row[5]?.trim() || "",
-          employment_status:
-            row[6]?.toUpperCase().includes("PERMANENT") ? "Permanent" :
-            row[6]?.toUpperCase().includes("COS") || row[6]?.toUpperCase().includes("JO") ? "Contractual" :
-            row[6]?.toUpperCase().includes("ELECTIVE") || row[6]?.toUpperCase().includes("CO-TERM") ? "Temporary" :
-            "Permanent",
-          id_number: String(row[7] || "").replace(".0", ""),
-          email: row[8]?.trim() || "",
-          contact_number: String(row[9] || "").trim(),
-          date_hired: row[10] ? new Date(row[10]).toISOString().split("T")[0] : "",
-          gender: row[11]?.toLowerCase() === "female" ? "Female" : "Male",
-          civil_status: row[12]?.trim() || "Single",
-          status: "active",
-        }));
+        const employees = validRows.map((row) => {
+          // Helper function to normalize civil status
+          const normalizeCivilStatus = (status) => {
+            if (!status) return "Single"; // default
+            const lowerStatus = status.toLowerCase().trim();
+            if (lowerStatus.includes('single')) return "Single";
+            if (lowerStatus.includes('married')) return "Married";
+            if (lowerStatus.includes('widowed')) return "Widowed";
+            if (lowerStatus.includes('separated')) return "Separated";
+            if (lowerStatus.includes('annulled')) return "Annulled";
+            return "Single"; // default fallback
+          };
+
+          const civilStatus = row[12]?.toString().trim() || "";
+          
+          return {
+            first_name: row[0]?.trim() || "",
+            last_name: row[2]?.trim() || "",
+            full_name: `${row[0] || ""} ${row[1] || ""} ${row[2] || ""}`.trim(),
+            position: row[4]?.trim() || "",
+            department: row[5]?.trim() || "",
+            employment_status:
+              row[6]?.toUpperCase().includes("PERMANENT") ? "Permanent" :
+              row[6]?.toUpperCase().includes("COS") || row[6]?.toUpperCase().includes("JO") ? "Contractual" :
+              row[6]?.toUpperCase().includes("ELECTIVE") || row[6]?.toUpperCase().includes("CO-TERM") ? "Temporary" :
+              "Permanent",
+            id_number: String(row[7] || "").replace(".0", ""),
+            email: row[8]?.trim() || "",
+            contact_number: String(row[9] || "").trim(),
+            date_hired: row[10] ? new Date(row[10]).toISOString().split("T")[0] : "",
+            gender: row[11]?.toString().toLowerCase().includes("female") ? "Female" : "Male",
+            civil_status: normalizeCivilStatus(civilStatus), // Use normalized value
+            status: "active",
+          };
+        });
 
         setEmployeesToUpload(employees);
         setShowConfirmModal(true);
@@ -280,22 +332,36 @@ function Employees() {
         skipEmptyLines: true,
         complete: (results) => {
           const employeesRaw = results.data
-            .filter(row => Object.values(row).some(cell => cell && cell.trim() !== "")) // skip fully empty
-            .map((row, index) => ({
-              first_name: row.first_name?.trim() || "",
-              last_name: row.last_name?.trim() || "",
-              full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
-              email: row.email?.trim() || "",
-              position: row.position?.trim() || "",
-              employment_status: row.employment_status?.trim() || "Permanent",
-              department: row.department?.trim() || "",
-              gender: row.gender?.trim() || "",
-              date_hired: row.date_hired?.trim() || "",
-              civil_status: row.civil_status?.trim() || "",
-              contact_number: row.contact_number?.trim() || "",
-              id_number: row.id_number?.trim() || "",
-              status: row.status?.trim() || "active",
-            }));
+            .filter(row => Object.values(row).some(cell => cell && cell.trim() !== ""))
+            .map((row, index) => {
+              // Helper function to normalize civil status for CSV too
+              const normalizeCivilStatus = (status) => {
+                if (!status) return "Single";
+                const lowerStatus = status.toLowerCase().trim();
+                if (lowerStatus.includes('single')) return "Single";
+                if (lowerStatus.includes('married')) return "Married";
+                if (lowerStatus.includes('widowed')) return "Widowed";
+                if (lowerStatus.includes('separated')) return "Separated";
+                if (lowerStatus.includes('annulled')) return "Annulled";
+                return "Single";
+              };
+
+              return {
+                first_name: row.first_name?.trim() || "",
+                last_name: row.last_name?.trim() || "",
+                full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
+                email: row.email?.trim() || "",
+                position: row.position?.trim() || "",
+                employment_status: row.employment_status?.trim() || "Permanent",
+                department: row.department?.trim() || "",
+                gender: row.gender?.trim() || "",
+                date_hired: row.date_hired?.trim() || "",
+                civil_status: normalizeCivilStatus(row.civil_status), // Use normalized value
+                contact_number: row.contact_number?.trim() || "",
+                id_number: row.id_number?.trim() || "",
+                status: row.status?.trim() || "active",
+              };
+            });
 
           setEmployeesToUpload(employeesRaw);
           setShowConfirmModal(true);
@@ -413,6 +479,44 @@ function Employees() {
       console.error("Bulk delete failed:", err);
     } finally {
       setTimeout(() => setIsDeleting(false), 400);
+    }
+  };
+
+  // Add function to handle employee reactivation
+  const handleReactivateClick = (employee) => {
+    setEmployeeToReactivate(employee);
+    setShowReactivateModal(true);
+  };
+
+  const confirmReactivate = async () => {
+    if (!employeeToReactivate) return;
+
+    setIsDeleting(true);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/employees/${employeeToReactivate.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...employeeToReactivate, status: "active" })
+      });
+
+      if (!response.ok) throw new Error("Failed to reactivate employee");
+
+      // Update local state
+      setEmployeeRecords((prev) =>
+        prev.map((emp) =>
+          emp.id === employeeToReactivate.id ? { ...emp, status: "active" } : emp
+        )
+      );
+
+      setShowReactivateModal(false);
+      setEmployeeToReactivate(null);
+      alert("Employee reactivated successfully!");
+    } catch (error) {
+      console.error("Reactivate error:", error);
+      alert("Failed to reactivate employee");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -534,7 +638,9 @@ function Employees() {
     return () => (document.body.style.overflow = 'auto');
   }, [showViewModal]);
 
+  // Filter active employees for list view
   const filteredEmployees = employeeRecord
+    .filter(emp => emp.status === 'active') // Only show active employees in list view
     .filter(emp => {
       const search = searchTerm.toLowerCase();
 
@@ -547,7 +653,22 @@ function Employees() {
     .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
     .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true);
 
+  // Filter inactive employees for inactive tab
+  const inactiveEmployees = employeeRecord
+    .filter(emp => emp.status === 'inactive')
+    .filter(emp => {
+      const search = searchTerm.toLowerCase();
+      const fullName = `${emp.first_name || ""} ${emp.last_name || ""}`.toLowerCase();
+      const email = (emp.email || "").toLowerCase();
+      const position = (emp.position || "").toLowerCase();
+      return fullName.includes(search) || email.includes(search) || position.includes(search);
+    })
+    .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
+    .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true);
+
   const totalPages = Math.ceil(filteredEmployees.length / listEmployeePerPage); 
+  const totalInactivePages = Math.ceil(inactiveEmployees.length / listEmployeePerPage);
+
   // Helper function to generate pagination range
   const getPaginationRange = (currentPage, totalPages) => {
     const maxVisible = 3; // show up to 5 page numbers
@@ -631,215 +752,221 @@ function Employees() {
     }
   };
 
-   useEffect(() => {
-      const fetchInitialProfile = async () => {
-        try {
-          const storedUser = JSON.parse(localStorage.getItem("admin"));
-          if (!storedUser) return;
-  
-          const url =
-            storedUser.role === "office_head"
-              ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
-              : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
-  
-          const res = await fetch(url);
-          const data = await res.json();
-  
-          if (res.ok) {
-            setAdmin(data);
-            setProfileData(data);
-          } else {
-            console.error("Error loading initial profile:", data.message);
-          }
-        } catch (err) {
-          console.error("Error loading initial profile:", err);
-        }
-      };
-  
-      fetchInitialProfile();
-    }, []);
-  
-    useEffect(() => {
-      if (!showProfileModal) return;
-  
-      const fetchProfileData = async () => {
-        try {
-          const storedUser = JSON.parse(localStorage.getItem("admin"));
-          if (!storedUser) return;
-  
-          const url =
-            storedUser.role === "office_head"
-              ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
-              : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
-  
-          const res = await fetch(url);
-          const data = await res.json();
-  
-          if (res.ok) {
-            setProfileData(data);
-          } else {
-            console.error("Error loading profile:", data.message);
-          }
-        } catch (err) {
-          console.error("Error loading profile:", err);
-        }
-      };
-  
-      fetchProfileData();
-    }, [showProfileModal]);
+  useEffect(() => {
+    const fetchInitialProfile = async () => {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("admin"));
+        if (!storedUser) return;
 
-    useEffect(() => {
-      const fetchTimeSettings = async () => {
-        setIsLoadingTimeSettings(true);
-        try {
-          const response = await fetch(`${API_URL}/api/attendance/settings/time`);
-          if (response.ok) {
-            const data = await response.json();
-            setAttendanceTimeSettings(data);
-          } else {
-            console.warn('Failed to fetch time settings from server');
-            // Don't set any defaults - let the modal handle empty state
-            setAttendanceTimeSettings({});
-          }
-        } catch (error) {
-          console.error('Error fetching time settings:', error);
-          setAttendanceTimeSettings({});
-        } finally {
-          setIsLoadingTimeSettings(false);
+        const url =
+          storedUser.role === "office_head"
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (res.ok) {
+          setAdmin(data);
+          setProfileData(data);
+        } else {
+          console.error("Error loading initial profile:", data.message);
         }
-      };
-    
-      fetchTimeSettings();
-    }, []);
-    
-    const fetchTermsAndConditions = async () => {
-  try {
-    // Fetch active terms
-    const response = await fetch(`${API_URL}/api/terms/active`);
-    const data = await response.json();
-    
-    // Check if response is valid
-    if (data && data.content) {
-      setTermsContent(data.content);
-      setActiveTermsVersion(data);
-    } else {
+      } catch (err) {
+        console.error("Error loading initial profile:", err);
+      }
+    };
+
+    fetchInitialProfile();
+  }, []);
+  
+  useEffect(() => {
+    if (!showProfileModal) return;
+
+    const fetchProfileData = async () => {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("admin"));
+        if (!storedUser) return;
+
+        const url =
+          storedUser.role === "office_head"
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (res.ok) {
+          setProfileData(data);
+        } else {
+          console.error("Error loading profile:", data.message);
+        }
+      } catch (err) {
+        console.error("Error loading profile:", err);
+      }
+    };
+
+    fetchProfileData();
+  }, [showProfileModal]);
+
+  useEffect(() => {
+    const fetchTimeSettings = async () => {
+      setIsLoadingTimeSettings(true);
+      try {
+        const response = await fetch(`${API_URL}/api/attendance/settings/time`);
+        if (response.ok) {
+          const data = await response.json();
+          setAttendanceTimeSettings(data);
+        } else {
+          console.warn('Failed to fetch time settings from server');
+          // Don't set any defaults - let the modal handle empty state
+          setAttendanceTimeSettings({});
+        }
+      } catch (error) {
+        console.error('Error fetching time settings:', error);
+        setAttendanceTimeSettings({});
+      } finally {
+        setIsLoadingTimeSettings(false);
+      }
+    };
+  
+    fetchTimeSettings();
+  }, []);
+  
+  const fetchTermsAndConditions = async () => {
+    try {
+      // Fetch active terms
+      const response = await fetch(`${API_URL}/api/terms/active`);
+      const data = await response.json();
+      
+      // Check if response is valid
+      if (data && data.content) {
+        setTermsContent(data.content);
+        setActiveTermsVersion(data);
+      } else {
+        setTermsContent('');
+        setActiveTermsVersion(null);
+      }
+      
+      // Fetch all versions - handle potential errors
+      try {
+        const versionsRes = await fetch(`${API_URL}/api/terms`);
+        const versionsData = await versionsRes.json();
+        
+        // Ensure versionsData is an array
+        if (Array.isArray(versionsData)) {
+          setTermsVersions(versionsData);
+        } else if (versionsData && Array.isArray(versionsData.data)) {
+          // Some APIs wrap arrays in a data property
+          setTermsVersions(versionsData.data);
+        } else if (versionsData && versionsData.versions) {
+          // Some APIs use a versions property
+          setTermsVersions(versionsData.versions);
+        } else {
+          // Default to empty array
+          setTermsVersions([]);
+          console.warn('API returned non-array data:', versionsData);
+        }
+      } catch (versionsError) {
+        console.error('Error fetching versions:', versionsError);
+        setTermsVersions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching active terms:', error);
       setTermsContent('');
       setActiveTermsVersion(null);
-    }
-    
-    // Fetch all versions - handle potential errors
-    try {
-      const versionsRes = await fetch(`${API_URL}/api/terms`);
-      const versionsData = await versionsRes.json();
-      
-      // Ensure versionsData is an array
-      if (Array.isArray(versionsData)) {
-        setTermsVersions(versionsData);
-      } else if (versionsData && Array.isArray(versionsData.data)) {
-        // Some APIs wrap arrays in a data property
-        setTermsVersions(versionsData.data);
-      } else if (versionsData && versionsData.versions) {
-        // Some APIs use a versions property
-        setTermsVersions(versionsData.versions);
-      } else {
-        // Default to empty array
-        setTermsVersions([]);
-        console.warn('API returned non-array data:', versionsData);
-      }
-    } catch (versionsError) {
-      console.error('Error fetching versions:', versionsError);
       setTermsVersions([]);
     }
-  } catch (error) {
-    console.error('Error fetching active terms:', error);
-    setTermsContent('');
-    setActiveTermsVersion(null);
-    setTermsVersions([]);
-  }
-};
+  };
 
-const saveTermsAndConditions = async () => {
-  if (!termsContent.trim()) {
-    alert('Please enter Terms & Conditions content');
-    return;
-  }
-
-  // Safely calculate next version number
-  const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
-  const version = newTermsVersion || `v${versionCount + 1}.0`;
-  
-  try {
-    const response = await fetch(`${API_URL}/api/terms`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        version,
-        content: termsContent
-      })
-    });
-
-    if (response.ok) {
-      alert('Terms & Conditions saved successfully!');
-      setIsEditingTerms(false);
-      fetchTermsAndConditions();
-      setNewTermsVersion('');
-    } else {
-      const errorData = await response.json();
-      alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
+  const saveTermsAndConditions = async () => {
+    if (!termsContent.trim()) {
+      alert('Please enter Terms & Conditions content');
+      return;
     }
-  } catch (error) {
-    console.error('Error saving terms:', error);
-    alert('Error saving Terms & Conditions. Check console.');
-  }
-};
 
-const activateTermsVersion = async (id) => {
-  try {
-    const response = await fetch(`${API_URL}/api/terms/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ is_active: true })
-    });
+    // Safely calculate next version number
+    const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
+    const version = newTermsVersion || `v${versionCount + 1}.0`;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/terms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          version,
+          content: termsContent
+        })
+      });
 
-    if (response.ok) {
-      fetchTermsAndConditions();
+      if (response.ok) {
+        alert('Terms & Conditions saved successfully!');
+        setIsEditingTerms(false);
+        fetchTermsAndConditions();
+        setNewTermsVersion('');
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error saving terms:', error);
+      alert('Error saving Terms & Conditions. Check console.');
     }
-  } catch (error) {
-    console.error('Error activating version:', error);
-  }
-};
+  };
 
-const deleteTermsVersion = async (id) => {
-  if (window.confirm('Are you sure you want to delete this version?')) {
+  const activateTermsVersion = async (id) => {
     try {
       const response = await fetch(`${API_URL}/api/terms/${id}`, {
-        method: 'DELETE'
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_active: true })
       });
 
       if (response.ok) {
         fetchTermsAndConditions();
       }
     } catch (error) {
-      console.error('Error deleting version:', error);
+      console.error('Error activating version:', error);
     }
-  }
-};
+  };
 
+  const deleteTermsVersion = async (id) => {
+    if (window.confirm('Are you sure you want to delete this version?')) {
+      try {
+        const response = await fetch(`${API_URL}/api/terms/${id}`, {
+          method: 'DELETE'
+        });
 
-
+        if (response.ok) {
+          fetchTermsAndConditions();
+        }
+      } catch (error) {
+        console.error('Error deleting version:', error);
+      }
+    }
+  };
 
   return (
     <div className="dashboard-container" style={styles.dashboardContainer}>
 
-    
-
       <div className="desktop-header" style={styles.header}>
-        <input type="text" placeholder="Search..." className="search-input" style={styles.search} />
-        <FontAwesomeIcon icon={faBell} className="bell-icon" style={styles.iconBell} />
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
+            profileData={profileData}
+            admin={admin}
+          />
+        </div>
       </div>
 
       <div className="sidebar" style={styles.sidebar}>
@@ -869,20 +996,6 @@ const deleteTermsVersion = async (id) => {
               </li>
             );
           })}
-
-          <li className="sidebar-item">
-            <Link
-              className="sidebar-link"
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-              }}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} className="sidebar-icon" style={styles.icon} /> Logout
-            </Link>
-          </li>
         </ul>
       </div>
 
@@ -1426,35 +1539,8 @@ const deleteTermsVersion = async (id) => {
               </li>
             );
           })}
-          <li>
-            <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-                setIsSidebarOpen(false);
-              }}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </Link>
-          </li>
         </ul>
       </div>
-
-      <div className="desktop-header" style={styles.header}>
-              <div style={styles.headerRight}>
-                <ProfileDropdown
-                  showSettingsModal={showSettingsModal}
-                  setShowSettingsModal={setShowSettingsModal}
-                  showProfileModal={showProfileModal}
-                  setShowProfileModal={setShowProfileModal}
-                  showLogoutModal={showLogoutModal}
-                  setShowLogoutModal={setShowLogoutModal}
-                  isMobile={false}
-                />
-              </div>
-            </div>
 
       <div className="content" style={styles.content}>
       
@@ -1483,6 +1569,38 @@ const deleteTermsVersion = async (id) => {
           </div>
         )}
 
+        {/* Reactivate Modal */}
+        {showReactivateModal && employeeToReactivate && (
+          <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal-content" style={styles.modalContent}>
+              <h3>Reactivate Employee</h3>
+              <p>
+                Are you sure you want to reactivate <strong>{employeeToReactivate.full_name}</strong>? 
+                This will restore their access to the system.
+              </p>
+              <div className="modal-actions" style={styles.modalActions}>
+                <button
+                  className="cancel-btn"
+                  style={styles.cancelBtn}
+                  onClick={() => {
+                    setShowReactivateModal(false);
+                    setEmployeeToReactivate(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="confirm-btn"
+                  style={styles.confirmBtn}
+                  onClick={confirmReactivate}
+                >
+                  Reactivate
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="view-buttons" style={styles.buttons}>
           <button 
             className={`view-btn ${view === 'list' ? 'active' : ''}`}
@@ -1497,6 +1615,13 @@ const deleteTermsVersion = async (id) => {
             onClick={() => setView('directory')}
           >
             Directory
+          </button>
+          <button 
+            className={`view-btn ${view === 'inactive' ? 'active' : ''}`}
+            style={view === 'inactive' ? styles.btn1 : styles.btn}
+            onClick={() => setView('inactive')}
+          >
+            Inactive Employees
           </button>
         </div>
 
@@ -1606,8 +1731,6 @@ const deleteTermsVersion = async (id) => {
                       <span>Delete Selected ({selectedEmployees.length})</span>
                     </button>
                   )}
-
-                  
 
                   {showBulkDeleteModal && (
                     <div className="bulk-delete-modal" style={{
@@ -2503,14 +2626,23 @@ const deleteTermsVersion = async (id) => {
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
-
+                    
                     <input
-                      type="date"
-                      className="modal-input"
-                      style={styles.modalInput}
-                      value={newEmployee.date_hired || ''}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
-                    />
+                        placeholder="Select date hired"
+                        type="text"
+                        onFocus={(e) => {
+                          e.target.type = 'date';
+                        }}
+                        onBlur={(e) => {
+                          if (!e.target.value) {
+                            e.target.type = 'text';
+                          }
+                        }}
+                        className="modal-input"
+                        style={styles.modalInput}
+                        value={newEmployee.date_hired || ''}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
+                      />
                   </div>
 
                   <div className="modal-actions" style={styles.modalActions}>
@@ -2662,6 +2794,18 @@ const deleteTermsVersion = async (id) => {
                       <p className="employee-name" style={styles.name}>{`${emp.first_name || ''} ${emp.last_name || ''}`.trim()}</p>
                       <p className="employee-position" style={styles.position}>{emp.position || '—'}</p>
                       <p className="employee-department" style={styles.department}>{emp.department || '—'}</p>
+                      <div style={{
+                        display: 'inline-block',
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '500',
+                        backgroundColor: emp.status === 'active' ? '#d4edda' : '#f8d7da',
+                        color: emp.status === 'active' ? '#155724' : '#721c24',
+                        marginTop: '5px'
+                      }}>
+                        {emp.status === 'active' ? 'Active' : 'Inactive'}
+                      </div>
                     </div>
                   </div>
               ))}
@@ -2739,6 +2883,212 @@ const deleteTermsVersion = async (id) => {
 
           </div>
         )}
+
+        {view === 'inactive' && (
+          <div className="inactive-view" style={styles.content1}>
+            <div className="filters-row" style={styles.firstRow}>
+              {/* Search Input */}
+              <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px'}}>
+                <input
+                  type="text"
+                  placeholder="Search inactive employees by name, email, or position..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="search-input"
+                  style={{ ...styles.searchInput, width: '300px' }}
+                />
+
+                {/* Department Filter */}
+                <select
+                  value={filterDepartment}
+                  onChange={(e) => setFilterDepartment(e.target.value)}
+                  className="department-filter"
+                  style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
+                >
+                  <option value="">All Departments</option>
+                  {departments.map((dept, idx) => (
+                    <option key={idx} value={dept}>{dept}</option>
+                  ))}
+                </select>
+
+                {/* Employment Status Filter */}
+                <select
+                  value={filterEmploymentStatus}
+                  onChange={(e) => setFilterEmploymentStatus(e.target.value)}
+                  className="employment-status-filter"
+                  style={{ ...styles.filterDropdown, padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc'}}
+                >
+                  <option value="">All Employment Status</option>
+                  <option value="Temporary">Temporary</option>
+                  <option value="Contractual">Contractual</option>
+                  <option value="Permanent">Permanent</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Job Order">Job Order</option>
+                  <option value="Coterminous">Coterminous</option>
+                </select>
+              </div>
+
+            </div>
+
+            <div className="table-container" style={styles.tableContainer}>
+              <div className="table-wrapper" style={styles.table}>
+                <table className="employee-table" style={styles.employeeTable}>
+                  <thead>
+                    <tr>
+                      <th className="column-number" style={styles.columnName}>No.</th>
+                      <th className="column-id" style={styles.columnName}>ID Number</th>
+                      <th className="column-name" style={styles.columnName}>Name</th>
+                      <th className="column-position" style={styles.columnName}>Position</th>
+                      <th className="column-department" style={styles.columnName}>Department</th>
+                      <th className="column-employment-status" style={styles.columnName}>Status of Employment</th>
+                      <th className="column-status" style={styles.columnName}>Account Status</th>
+                      <th className="column-actions" style={styles.columnName}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inactiveEmployees.length > 0 ? (
+                      inactiveEmployees
+                        .slice((currentInactivePage - 1) * listEmployeePerPage, currentInactivePage * listEmployeePerPage)
+                        .map((record, index) => (
+                          <tr key={record.id} className="employee-row" style={{ opacity: 0.8 }}>
+                            <td className="row-number" style={styles.rowName}>
+                              {index + 1 + (currentInactivePage - 1) * listEmployeePerPage}
+                            </td>
+                            <td className="row-id" style={styles.rowName}>{record.id_number || '—'}</td>
+                            <td className="row-name" style={styles.rowName}>
+                              {`${record.first_name || ''} ${record.last_name || ''}`.trim()}
+                            </td>
+                            <td className="row-position" style={styles.rowName}>{record.position}</td>
+                            <td className="row-department" style={{ 
+                              ...styles.rowName, 
+                              maxWidth: '220px',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {record.department || '—'}
+                            </td>
+                            <td className="row-employment-status" style={styles.rowName}>{record.employment_status}</td>
+                            <td className="row-status" style={styles.rowName}>
+                              <span style={{
+                                padding: '3px 8px',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: '500',
+                                backgroundColor: '#f8d7da',
+                                color: '#721c24'
+                              }}>
+                                Inactive
+                              </span>
+                            </td>
+                            <td className="row-actions" style={styles.rowName}>
+                              {canPerformActions(record.department) && (
+                                <>
+                                  <button 
+                                    className="reactivate-btn" 
+                                    style={{
+                                      ...styles.viewBtn,
+                                      backgroundColor: '#28a745',
+                                      color: 'white',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      marginLeft: '5px'
+                                    }}
+                                    onClick={() => handleReactivateClick(record)}
+                                  >
+                                    <FontAwesomeIcon icon={faRedo} /> Reactivate
+                                  </button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                    ) : (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                          No inactive employees found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Pagination for inactive employees */}
+                {inactiveEmployees.length > 0 && (
+                  <div className="pagination-container" style={styles.paginationContainer}>
+                    {/* Previous Button */}
+                    <button
+                      className="page-btn prev-btn"
+                      onClick={() => setCurrentInactivePage(prev => Math.max(prev - 1, 1))}
+                      style={styles.pageBtn}
+                      disabled={currentInactivePage === 1}
+                    >
+                      {'<'}
+                    </button>
+
+                    {/* First page + ellipsis if needed */}
+                    {getPaginationRange(currentInactivePage, totalInactivePages)[0] > 1 && (
+                      <>
+                        <button 
+                          className="page-btn" 
+                          onClick={() => setCurrentInactivePage(1)} 
+                          style={styles.pageBtn}
+                        >
+                          1
+                        </button>
+                        {getPaginationRange(currentInactivePage, totalInactivePages)[0] > 2 && (
+                          <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+                        )}
+                      </>
+                    )}
+
+                    {/* Visible page numbers */}
+                    {getPaginationRange(currentInactivePage, totalInactivePages).map((page) => (
+                      <button
+                        key={page}
+                        className={`page-btn ${currentInactivePage === page ? 'active' : ''}`}
+                        onClick={() => setCurrentInactivePage(page)}
+                        style={{
+                          ...styles.pageBtn,
+                          ...(currentInactivePage === page ? styles.activePageBtn : {}),
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    {/* Last page + ellipsis if needed */}
+                    {getPaginationRange(currentInactivePage, totalInactivePages).slice(-1)[0] < totalInactivePages && (
+                      <>
+                        {getPaginationRange(currentInactivePage, totalInactivePages).slice(-1)[0] < totalInactivePages - 1 && (
+                          <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+                        )}
+                        <button 
+                          className="page-btn" 
+                          onClick={() => setCurrentInactivePage(totalInactivePages)} 
+                          style={styles.pageBtn}
+                        >
+                          {totalInactivePages}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Next Button */}
+                    <button
+                      className="page-btn next-btn"
+                      onClick={() => setCurrentInactivePage(prev => Math.min(prev + 1, totalInactivePages))}
+                      style={styles.pageBtn}
+                      disabled={currentInactivePage === totalInactivePages}
+                    >
+                      {'>'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -2782,6 +3132,7 @@ const styles = {
   },
   icon: {
     color: '#fff',
+    width: "20px"
   },
   search: {
     padding: '10px',
@@ -2833,7 +3184,7 @@ const styles = {
     gap: '10px'
   },
   btn1: {
-    padding: '5px 5px',
+    padding: '10px 16px',
     borderRadius: '5px',
     backgroundColor: '#5ab049ff',
     boxShadow: 'inset 1px 1px 2px rgba(44, 44, 44, 0.44)',
@@ -2843,7 +3194,7 @@ const styles = {
     color: '#fefcf5'
   },
   btn: {
-    padding: '5px 5px',
+    padding: '10px 16px',
     borderRadius: '5px',
     backgroundColor: '#fff',
     boxShadow: '1px 1px 2px rgba(44, 44, 44, 0.44)',
@@ -3057,9 +3408,9 @@ const styles = {
 
   cardGrid: {
     display: 'flex',
-    gap: '3rem',
+    gap: '2rem',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     maxWidth: '1200px',
     margin: '0 auto',
     boxSizing: 'border-box',
@@ -3067,7 +3418,7 @@ const styles = {
   card: {
     backgroundColor: '#fff',
     borderRadius: '10px',
-    padding: '1.5rem',
+    padding: '1rem',
     boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
     textAlign: 'center',
     transition: 'transform 0.2s',

@@ -44,6 +44,7 @@ import "react-calendar/dist/Calendar.css";
 import "./dashboardCalendar.css";
 import "./employeeProfile-responsive.css";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import ProfileDropdown from "./profileDropdown.js";
 
 // External libs for export
 import * as XLSX from "xlsx";
@@ -74,6 +75,12 @@ function EmployeeProfile() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [admin, setAdmin] = useState(null);
+    const [profileData, setProfileData] = useState({
+      full_name: "",
+      profile_picture: "",
+      role: ""
+    });
   const [loadingLeaveBalances, setLoadingLeaveBalances] = useState(false);
 
   // Leave balance editing states
@@ -92,10 +99,40 @@ function EmployeeProfile() {
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
-    { name: "Settings", icon: faCog, to: "#" },
   ];
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
+
+
+   useEffect(() => {
+      const fetchInitialProfile = async () => {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem("admin"));
+          if (!storedUser) return;
+  
+          const url =
+            storedUser.role === "office_head"
+              ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+              : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+  
+          const res = await fetch(url);
+          const data = await res.json();
+  
+          if (res.ok) {
+            setAdmin(data);
+            setProfileData(data);
+          } else {
+            console.error("Error loading initial profile:", data.message);
+          }
+        } catch (err) {
+          console.error("Error loading initial profile:", err);
+        }
+      };
+  
+      fetchInitialProfile();
+    }, []);
+
+
 
   const allowedMenus = menuItems.filter((item) => {
     if (role === "admin") return true;
@@ -856,7 +893,7 @@ function EmployeeProfile() {
               style={styles.cancelEditBtn}
               disabled={isSaving}
             >
-              <FontAwesomeIcon icon={faTimesCircle} /> Cancel
+              Cancel
             </button>
             <button 
               onClick={handleSaveLeave} 
@@ -865,11 +902,11 @@ function EmployeeProfile() {
             >
               {isSaving ? (
                 <>
-                  <div style={styles.savingSpinner}></div> Saving...
+                  Saving...
                 </>
               ) : (
                 <>
-                  <FontAwesomeIcon icon={faSave} /> Save Changes
+                  Save Changes
                 </>
               )}
             </button>
@@ -885,54 +922,54 @@ function EmployeeProfile() {
       {/* Edit Leave Balance Modal */}
       <EditLeaveModal />
 
-      {/* Sidebar */}
-      <aside  className={`mobile-sidebar desktop-sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} 
-        style={styles.sidebar} >
-        <div className="sidebar-header">
-          <button 
-            className="sidebar-close-btn"
-            onClick={() => setIsSidebarOpen(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} />
-          </button>
-          <img 
-            className='logo-sidebar' 
-            src={require("./images/logo_ez.png")} 
-            alt="logo" 
-          />
+      <div className="desktop-header" style={styles.header}>
+      <button onClick={() => navigate(-1)} style={styles.backBtn}>
+          <FontAwesomeIcon icon={faArrowLeft} />
+        </button>
+        <div style={styles.headerRight}>
+            <ProfileDropdown
+              showLogoutModal={showLogoutModal}
+              setShowLogoutModal={setShowLogoutModal}
+              isMobile={false}
+              profileData={profileData}
+              admin={admin}
+            />
         </div>
+      </div>
 
-        <img 
-          src={require("./images/logo_ez.png")} 
-          alt="logo" 
-          style={styles.logo} 
-          className='logo-desktop'
-        />
-        <ul style={styles.sidebarList}>
-          {allowedMenus.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <li key={item.name} style={isActive ? styles.btnActive : {}}>
-                <Link style={{ ...styles.sb, ...(isActive ? styles.btnActive : {}) }} to={item.to}>
-                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-                </Link>
-              </li>
-            );
-          })}
-          <li>
-            <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-              }}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </Link>
-          </li>
-        </ul>
-      </aside>
+          
+      {/* Sidebar */}
+<div className="sidebar" style={styles.sidebar}>
+  <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
+  <ul className="sidebar-list" style={styles.sidebarList}>
+    {allowedMenus.map((item) => {
+      // FIX: Highlight "Employees" when on employee profile page
+      const isActive = location.pathname === item.to || 
+        (item.name === "Employees" && location.pathname.includes("/employeeProfile/"));
+
+      return (
+        <li
+          key={item.name}
+          className={`sidebar-item ${isActive ? 'active' : ''}`}
+          style={{
+            ...(isActive ? styles.btnActive : {}),
+          }}
+        >
+          <Link
+            className={`sidebar-link ${isActive ? 'active' : ''}`}
+            style={{
+              ...styles.sb,
+              ...(isActive ? styles.btnActive : {}),
+            }}
+            to={item.to}
+          >
+            <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+          </Link>
+        </li>
+      );
+    })}
+  </ul>
+</div>
 
       <div className="mobile-header">
         <button 
@@ -950,16 +987,7 @@ function EmployeeProfile() {
       {isSidebarOpen && (
         <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
       )}
-
-      {/* Header */}
-      <header style={styles.header}>
-        <button onClick={() => navigate(-1)} style={styles.backBtn}>
-          <FontAwesomeIcon icon={faArrowLeft} />
-        </button>
-        <div style={styles.headerRight}>
-          <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
-        </div>
-      </header>
+   
 
       {/* Main Content */}
       <main className="content" style={styles.content1}>
@@ -1034,16 +1062,9 @@ function EmployeeProfile() {
 
                     <div className="leaveControls" style={styles.leaveControls}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button title="Toggle compact view" onClick={() => setCompactView(v => !v)} style={styles.iconBtn}>
-                          <FontAwesomeIcon icon={compactView ? faExpandAlt : faCompressAlt} />
-                        </button>
-
                         <div className="exportGroup" style={styles.exportGroup}>
                           <button className="exportBtn" style={styles.exportBtn} title="Export to PDF" onClick={exportToPDF}>
                             <FontAwesomeIcon icon={faFilePdf} /> PDF
-                          </button>
-                          <button className="exportBtn" style={styles.exportBtn} title="Export to Excel" onClick={exportToExcelAll}>
-                            <FontAwesomeIcon icon={faFileExcel} /> Excel
                           </button>
                         </div>
                       </div>
@@ -1243,7 +1264,6 @@ function EmployeeProfile() {
                                 <th className="th" style={styles.th}>AM Out</th>
                                 <th className="th" style={styles.th}>PM In</th>
                                 <th className="th" style={styles.th}>PM Out</th>
-                                <th className="th" style={styles.th}>Hours</th>
                                 <th className="th" style={styles.th}>Leave Type</th>
                               </tr>
                             </thead>
@@ -1287,11 +1307,6 @@ function EmployeeProfile() {
                                   <td className="td" style={styles.td}>
                                     <div style={getTimeStyle(log.pm_checkout, 'PM')}>
                                       {log.pm_checkout ? log.pm_checkout.substring(0, 5) : "-"}
-                                    </div>
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    <div style={styles.hoursCell}>
-                                      {log.total_hours ? `${parseFloat(log.total_hours).toFixed(1)}h` : "-"}
                                     </div>
                                   </td>
                                   <td className="td" style={styles.td}>
@@ -1411,14 +1426,51 @@ const tabButtonStyle = (active) => ({
 });
 
 const styles = {
-  dashboardContainer: { display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' },
-  sidebar: { backgroundColor: '#009205', width: '280px', height: '100vh', position: 'fixed', padding: '20px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'start' },
-  logo: { width: '120px', margin: '0 auto 30px', display: 'block' },
-  sidebarList: { listStyle: 'none', padding: 0, margin: 0 },
-  sb: { color: '#fff', textDecoration: 'none', padding: '10px 15px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '16px', borderRadius: '6px', marginBottom: '5px', transition: '0.2s' },
-  btnActive: { backgroundColor: '#A8FC00', color: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' },
-  icon: { color: '#fff' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'fixed', top: 0, left: '280px', width: 'calc(100% - 280px)', padding: '15px 25px', backgroundColor: '#009205', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', zIndex: 10 },
+  dashboardContainer: {
+    display: 'flex',
+    minHeight: '100vh',
+    backgroundColor: '#F8F8F8',
+  },
+  sidebar: {
+    backgroundColor: '#009205',
+    width: '280px',
+    height: '100vh',
+    margin: '0',
+    position: 'fixed',
+    padding: '20px',
+    boxSizing: 'border-box', 
+  },
+  logo: {
+    width: '100px',
+    height: 'auto',
+    display: 'block',
+    margin: '20px auto',
+  },
+  sidebarList: {
+    listStyleType: 'none',
+    padding: '0',
+    margin: '0',
+  },
+  sb: {
+    color: '#fff',
+    textDecoration: 'none',
+    padding: '10px 15px',
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '16px',
+    gap: '10px',
+    transition: 'background-color 0.2s ease', 
+  },
+  icon: {
+    color: '#fff',
+    width: "20px"
+  },
+  btnActive: {
+    backgroundColor: '#A8FC0080',
+    borderRadius: '5px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+  },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'fixed', top: 0, left: '280px', width: 'calc(100% - 280px)', padding: '10px', backgroundColor: '#009205', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', zIndex: 10 },
   headerRight: { display: 'flex', alignItems: 'center', gap: '15px' },
   search: { padding: '8px 12px', borderRadius: '6px', border: 'none', fontSize: '14px' },
   iconBell: { fontSize: '22px', color: '#fff', cursor: 'pointer' },
@@ -1814,7 +1866,6 @@ const styles = {
     marginBottom: '24px',
   },
   leaveTypeBadge: {
-    padding: '8px 16px',
     borderRadius: '20px',
     fontSize: '14px',
     fontWeight: '600',

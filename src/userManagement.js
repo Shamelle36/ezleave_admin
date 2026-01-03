@@ -226,12 +226,12 @@ function UserManagement() {
           </li>
           <li>
             <Link style={styles.sb} to="/messages">
-              <FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Messages
+              <FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message
             </Link>
           </li>
           <li>
             <Link style={styles.sb} to="/announcement">
-              <FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcements
+              <FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement
             </Link>
           </li>
           <li>
@@ -242,11 +242,6 @@ function UserManagement() {
           <li style={styles.btnActive}>
             <Link style={styles.sb} to="#">
               <FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="#">
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
             </Link>
           </li>
         </ul>

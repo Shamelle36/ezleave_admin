@@ -81,7 +81,7 @@ function Messages() {
     return false;
   });
 
-  const API_URL = "https://ezleave-admin-api.onrender.com";
+  const API_URL = "https://ezleave-admin-api.onrender.com" || "http://localhost:5000";
 
   useEffect(() => {
     if (isMobile && selectedUser) {
@@ -947,19 +947,6 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
               </li>
             );
           })}
-
-          <li>
-            <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-              }}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </Link>
-          </li>
         </ul>
       </div>
       
@@ -1318,6 +1305,7 @@ const styles = {
   },
   icon: {
     color: '#fff',
+    width: "20px"
   },
   search: {
     padding: '10px',

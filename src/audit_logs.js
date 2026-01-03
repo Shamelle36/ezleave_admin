@@ -146,8 +146,7 @@ function AuditLogs() {
           <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
           <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
           <li style={styles.btnActive}><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-          <li><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout</Link></li>
+          <li><Link style={styles.sb} to="/userManagement"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
         </ul>
       </div>
 
@@ -370,6 +369,7 @@ const styles = {
   },
   icon: {
     color: '#fff',
+    width: "20px"
   },
   search: {
     padding: '10px',

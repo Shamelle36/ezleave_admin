@@ -2981,6 +2981,7 @@ const styles = {
   },
   icon: {
     color: '#fff',
+    width: "20px"
   },
   header: {
     display: 'flex',
