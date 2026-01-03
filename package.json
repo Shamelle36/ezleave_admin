@@ -13,7 +13,7 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.11.0",
     "date-holidays": "^3.26.6",
-    "firebase": "^11.9.1",
+    "firebase": "^11.10.0",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
     "papaparse": "^5.5.3",

@@ -26,7 +26,24 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useState, useEffect, useRef } from 'react';
 import './message-responsive.css';
-import { io } from "socket.io-client";
+import ProfileDropdown from './profileDropdown';
+
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, set, push, onValue, off, query, orderByChild, equalTo, update, onDisconnect, serverTimestamp } from 'firebase/database';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCo4mCzk0ciAlOYvgrpKpkazjcRsE4wZ4I",
+  authDomain: "ezleave-chat.firebaseapp.com",
+  databaseURL: "https://ezleave-chat-default-rtdb.firebaseio.com",
+  projectId: "ezleave-chat",
+  storageBucket: "ezleave-chat.firebasestorage.app",
+  messagingSenderId: "1002626168552",
+  appId: "1:1002626168552:web:b3a673fb9902c764997b5d",
+  measurementId: "G-1WMJBQBJFD"
+};
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
 
 
 function Messages() {
@@ -57,6 +74,20 @@ function Messages() {
   const [role, setRole] = useState(localStorage.getItem("role") || "admin");
   const getFullId = (type, id) => `${type}:${id}`;
 
+  const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null); // Get from localStorage
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [profileData, setProfileData] = useState({
+      full_name: "",
+      email: "",
+      role: "",
+      profile_picture: "",
+    });
+
+  const myFullId = adminData && adminType ? `${adminType}:${adminData.id}` : null;
+  const messagesRef = useRef(null);
+  const onlineRef = useRef(null);
+  const typingRef = useRef(null);
+  const userStatusRef = useRef(null);
   
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -87,6 +118,77 @@ function Messages() {
   const API_URL = "https://ezleave-admin-api.onrender.com";
 
 useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("admin"));
+    if (storedUser) {
+      setAdmin(storedUser);
+      setProfileData({
+        full_name: storedUser.full_name || storedUser.name || "",
+        email: storedUser.email || "",
+        role: storedUser.role || "",
+        profile_picture: storedUser.profile_picture || ""
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+          const fetchInitialProfile = async () => {
+            try {
+              const storedUser = JSON.parse(localStorage.getItem("admin"));
+              if (!storedUser) return;
+      
+              const url =
+                storedUser.role === "office_head"
+                  ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                  : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+      
+              const res = await fetch(url);
+              const data = await res.json();
+      
+              if (res.ok) {
+                setAdmin(data);
+                setProfileData(data);
+              } else {
+                console.error("Error loading initial profile:", data.message);
+              }
+            } catch (err) {
+              console.error("Error loading initial profile:", err);
+            }
+          };
+      
+          fetchInitialProfile();
+        }, []);
+
+useEffect(() => {
+        if (!showProfileModal) return;
+    
+        const fetchProfileData = async () => {
+          try {
+            const storedUser = JSON.parse(localStorage.getItem("admin"));
+            if (!storedUser) return;
+    
+            const url =
+              storedUser.role === "office_head"
+                ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+    
+            const res = await fetch(url);
+            const data = await res.json();
+    
+            if (res.ok) {
+              setProfileData(data);
+            } else {
+              console.error("Error loading profile:", data.message);
+            }
+          } catch (err) {
+            console.error("Error loading profile:", err);
+          }
+        };
+    
+        fetchProfileData();
+      }, [showProfileModal]);
+
+
+useEffect(() => {
   scrollToBottom();
 }, [messages]);
 
@@ -102,90 +204,203 @@ const scrollToBottom = () => {
     }
   }, [selectedUser, isMobile]);
 
-
-// REPLACE your existing useEffect for admin data with this:
-useEffect(() => {
-  const checkAndConnect = async () => {
-    const admin = JSON.parse(localStorage.getItem("admin"));
-    if (admin) {
-      console.log("👤 Found admin data:", admin);
-      setAdminData(admin);
-      
-      // ✅ SIMPLIFIED FIX: Determine admin type based on role
-      let adminType = '';
-      
-      // Check the role field first (most reliable)
-      if (admin.role) {
-        console.log(`🎭 Admin role detected: ${admin.role}`);
+ useEffect(() => {
+    const checkAndConnect = async () => {
+      const admin = JSON.parse(localStorage.getItem("admin"));
+      if (admin) {
+        console.log("👤 Found admin data:", admin);
+        setAdminData(admin);
         
-        // Check for mayor role
-        if (admin.role.toLowerCase() === 'mayor') {
-          adminType = 'admin_account'; // Mayors should be admin_account type
-        } 
-        // Check for office_head role
-        else if (admin.role.toLowerCase() === 'office_head') {
-          adminType = 'admin_account'; // Office heads should also be admin_account type
-        }
-        // Check for regular admin roles
-        else if (admin.role.toLowerCase().includes('admin')) {
-          // Check if it's useradmin or admin_account
-          if (admin.role.toLowerCase().includes('useradmin') || admin.role === 'admin') {
-            adminType = 'useradmin';
-          } else {
+        let adminType = '';
+        
+        if (admin.role) {
+          console.log(`🎭 Admin role detected: ${admin.role}`);
+          
+          if (admin.role.toLowerCase() === 'mayor') {
+            adminType = 'admin_account';
+          } 
+          else if (admin.role.toLowerCase() === 'office_head') {
             adminType = 'admin_account';
           }
-        } else {
-          // Default to user if no admin role detected
-          adminType = 'user';
+          else if (admin.role.toLowerCase().includes('admin')) {
+            if (admin.role.toLowerCase().includes('useradmin') || admin.role === 'admin') {
+              adminType = 'useradmin';
+            } else {
+              adminType = 'admin_account';
+            }
+          } else {
+            adminType = 'user';
+          }
+        } 
+        else if (admin.table) {
+          console.log(`📊 Admin table detected: ${admin.table}`);
+          adminType = admin.table === 'useradmin' ? 'useradmin' : 
+                     admin.table === 'admin_accounts' ? 'admin_account' : 'user';
         }
-      } 
-      // If no role field, check table field
-      else if (admin.table) {
-        console.log(`📊 Admin table detected: ${admin.table}`);
-        adminType = admin.table === 'useradmin' ? 'useradmin' : 
-                   admin.table === 'admin_accounts' ? 'admin_account' : 'user';
-      }
-      // Last resort: check localStorage for stored admin type
-      else {
-        const storedAdminType = localStorage.getItem('admin_type');
-        if (storedAdminType) {
-          adminType = storedAdminType;
-          console.log(`💾 Using stored admin type: ${adminType}`);
-        } else {
-          // Default to useradmin for safety
-          adminType = 'useradmin';
-          console.log(`⚠️ No admin type detected, defaulting to: ${adminType}`);
+        else {
+          const storedAdminType = localStorage.getItem('admin_type');
+          if (storedAdminType) {
+            adminType = storedAdminType;
+          } else {
+            adminType = 'useradmin';
+          }
         }
+        
+        console.log(`🔧 FINAL admin type: ${adminType}`);
+        setAdminType(adminType);
+        localStorage.setItem('admin_type', adminType);
+        
+        // Initialize Firebase listeners
+        initializeFirebaseListeners();
+      } else {
+        console.log('❌ No admin data found in localStorage');
+        navigate("/");
       }
-      
-      console.log(`🔧 FINAL admin type: ${adminType}`);
-      setAdminType(adminType);
-      
-      // Store admin type in localStorage for future use
-      localStorage.setItem('admin_type', adminType);
-      
-      // Initialize WebSocket connection
-      setTimeout(() => {
-        initializeSocket();
-      }, 500);
-    } else {
-      console.log('❌ No admin data found in localStorage');
-      // Redirect to login if no admin data
-      navigate("/");
-    }
-  };
-  
-  checkAndConnect();
-  
-  // Cleanup function
-  return () => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
-  };
-}, []);
+    };
+    
+    checkAndConnect();
+    
+    // Cleanup function
+    return () => {
+      cleanupFirebaseListeners();
+    };
+  }, []);
 
-// KEEP your existing initializeWebSocket function as is
+  const initializeFirebaseListeners = () => {
+    if (!adminData || !adminType) return;
+    
+    const myId = `${adminType}:${adminData.id}`;
+    console.log('🔥 Initializing Firebase listeners for:', myId);
+    
+    setConnectionStatus("Connecting...");
+    
+    // Set online status
+    userStatusRef.current = ref(database, `status/${myId}`);
+    set(userStatusRef.current, {
+      online: true,
+      lastSeen: serverTimestamp(),
+      name: adminData.full_name || adminData.name
+    });
+    
+    // Set onDisconnect to mark as offline
+    onDisconnect(userStatusRef.current).set({
+      online: false,
+      lastSeen: serverTimestamp()
+    });
+    
+    // Listen for online status of other users
+    onlineRef.current = ref(database, 'status');
+    onValue(onlineRef.current, (snapshot) => {
+      const statusData = snapshot.val();
+      const newOnlineStatus = {};
+      
+      if (statusData) {
+        Object.keys(statusData).forEach(userKey => {
+          if (userKey !== myId) {
+            newOnlineStatus[userKey] = statusData[userKey].online === true;
+          }
+        });
+        
+        setOnlineStatus(newOnlineStatus);
+        setConnectionStatus("Connected");
+      }
+    });
+    
+    // Listen for typing indicators
+    typingRef.current = ref(database, `typing/${myId}`);
+    onValue(typingRef.current, (snapshot) => {
+      const typingData = snapshot.val();
+      
+      if (typingData && selectedUser) {
+        const senderFullId = `${selectedUser.account_type}:${selectedUser.id}`;
+        const myTypingRef = ref(database, `typing/${senderFullId}/${myId}`);
+        
+        if (typingData[senderFullId]) {
+          setIsTyping(true);
+          
+          // Clear typing indicator after 2 seconds
+          setTimeout(() => {
+            set(myTypingRef, false);
+          }, 2000);
+        }
+      }
+    });
+  };
+
+  // Cleanup Firebase listeners
+  const cleanupFirebaseListeners = () => {
+    if (messagesRef.current) {
+      off(messagesRef.current);
+    }
+    if (onlineRef.current) {
+      off(onlineRef.current);
+    }
+    if (typingRef.current) {
+      off(typingRef.current);
+    }
+    
+    // Set offline status on cleanup
+    if (userStatusRef.current) {
+      set(userStatusRef.current, {
+        online: false,
+        lastSeen: serverTimestamp()
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedUser || !adminData || !adminType) return;
+    
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
+    
+    // Create conversation ID (sorted to ensure consistency)
+    const conversationId = [myId, otherId].sort().join('_');
+    
+    console.log('📡 Listening to conversation:', conversationId);
+    
+    // Listen for messages in this conversation
+    messagesRef.current = ref(database, `conversations/${conversationId}/messages`);
+    const messagesQuery = query(messagesRef.current, orderByChild('timestamp'));
+    
+    onValue(messagesQuery, (snapshot) => {
+      const messagesData = snapshot.val();
+      if (messagesData) {
+        const formattedMessages = Object.values(messagesData)
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .map(msg => ({
+            id: msg.id || msg.timestamp,
+            sender: msg.senderId === myId ? 'me' : 'other',
+            text: msg.message,
+            time: new Date(msg.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            delivered: true,
+            read_status: msg.read || false,
+            timestamp: msg.timestamp
+          }));
+        
+        setMessages(formattedMessages);
+        
+        // Mark messages as read
+        markMessagesAsReadInFirebase(conversationId, myId);
+      } else {
+        setMessages([]);
+      }
+      setMessageLoading(false);
+    });
+    
+    // Cleanup previous listener
+    return () => {
+      if (messagesRef.current) {
+        off(messagesRef.current);
+      }
+    };
+  }, [selectedUser, adminData, adminType]);
+
+
+
 
   useEffect(() => {
   const checkMobile = () => {
@@ -204,95 +419,8 @@ useEffect(() => {
     setIsUserListOpen(false);
   }
 };
-useEffect(() => {
-  if (adminData && adminType) {
-    initializeSocket();
-  }
 
-  return () => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
-  };
-}, [adminData, adminType]);
 
-const initializeSocket = () => {
-  if (!adminData || !adminType) return;
-
-  // Disconnect existing socket
-  if (socketRef.current) {
-    socketRef.current.disconnect();
-  }
-
-  const socket = io(API_URL, {
-    transports: ["websocket", "polling"], // Add polling as fallback
-    query: {
-      userId: adminData.id,
-      userType: adminType,
-    },
-  });
-
-  socketRef.current = socket;
-
-  setConnectionStatus("Connecting...");
-
-  socket.on("connect", () => {
-    console.log("✅ Socket.IO connected:", socket.id);
-    setConnectionStatus("Connected");
-    
-    // Register with the server
-    socket.emit("register", {
-      userId: adminData.id,
-      userType: adminType
-    });
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.log("❌ Socket disconnected:", reason);
-    setConnectionStatus("Disconnected");
-  });
-
-  // 🔥 FIX: Listen to "message" event, not "new_message"
-  socket.on("message", (data) => {
-    console.log("📨 Received message event:", data);
-    
-    if (!data || !data.type) return;
-    
-    switch (data.type) {
-      case "new_message":
-        handleIncomingMessage(data);
-        break;
-      case "typing":
-        if (
-          selectedUser &&
-          data.senderId === selectedUser.id &&
-          data.senderType === selectedUser.account_type
-        ) {
-          setIsTyping(data.isTyping);
-        }
-        break;
-      case "online_status":
-        setOnlineStatus((prev) => ({
-          ...prev,
-          [`${data.userType}:${data.userId}`]: data.isOnline,
-        }));
-        break;
-      case "message_sent": // Handle confirmation
-        console.log("✅ Message sent confirmation:", data);
-        if (data.tempId) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === data.tempId ? { ...msg, delivered: true } : msg
-          ));
-        }
-        break;
-    }
-  });
-
-  socket.on("connect_error", (err) => {
-    console.error("❌ Socket error:", err.message);
-    setConnectionStatus("Connection Error");
-  });
-};
 
 const processIncomingMessage = (messageData) => {
   if (!messageData || !adminData || !adminType) return;
@@ -543,32 +671,31 @@ const handleIncomingMessage = (data) => {
 
   // Handle typing indicator
 const handleInputChange = (e) => {
-  const value = e.target.value;
-  setInput(value);
+    const value = e.target.value;
+    setInput(value);
 
-  if (!socketRef.current || !selectedUser) return;
+    if (!selectedUser || !adminData || !adminType) return;
 
-  // clear previous timeout
-  if (typingTimeoutRef.current) {
-    clearTimeout(typingTimeoutRef.current);
-  }
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
+    const typingRefPath = ref(database, `typing/${otherId}/${myId}`);
 
-  if (value.length > 0) {
-    socketRef.current.emit("typing", {
-      receiverId: selectedUser.id,
-      receiverType: selectedUser.account_type,
-      isTyping: true,
-    });
-  }
+    // Clear previous timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
 
-  typingTimeoutRef.current = setTimeout(() => {
-    socketRef.current.emit("typing", {
-      receiverId: selectedUser.id,
-      receiverType: selectedUser.account_type,
-      isTyping: false,
-    });
-  }, 1500);
-};
+    if (value.length > 0) {
+      // Set typing indicator
+      set(typingRefPath, true);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      // Clear typing indicator
+      set(typingRefPath, false);
+    }, 1500);
+  };
+
 
 
   const handleLogout = async () => {
@@ -691,108 +818,121 @@ const handleInputChange = (e) => {
     }
   };
 
-const sendMessage = async (receiverId, receiverType, messageText) => {
-  const tempId = Date.now();
-  const token = localStorage.getItem("token");
-  
-  if (!socketRef.current || !socketRef.current.connected) {
-    console.error("❌ Socket not connected");
-    alert("Cannot send message. Please check your connection.");
-    return false;
-  }
-
-  // Create optimistic message - THIS SHOULD APPEAR IMMEDIATELY
-  const tempMessage = {
-    id: tempId,
-    sender: 'me',
-    text: messageText,
-    time: new Date().toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    }),
-    pinned: false,
-    delivered: false,
-    read_status: false,
-    timestamp: new Date().toISOString()
+  const markMessagesAsReadInFirebase = async (conversationId, myId) => {
+    try {
+      const messagesRef = ref(database, `conversations/${conversationId}/messages`);
+      const snapshot = await onValue(messagesRef, (snapshot) => {
+        const updates = {};
+        
+        snapshot.forEach((childSnapshot) => {
+          const message = childSnapshot.val();
+          if (message.receiverId === myId && !message.read) {
+            updates[`${childSnapshot.key}/read`] = true;
+          }
+        });
+        
+        if (Object.keys(updates).length > 0) {
+          update(messagesRef, updates);
+        }
+      }, { onlyOnce: true });
+      
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
   };
-  
-  console.log('📤 Adding optimistic message:', tempMessage);
-  
-  // Add to UI immediately - This is the key fix
-  setMessages(prev => [...prev, tempMessage]);
-  
-  // Clear input immediately
-  setInput('');
-  
-  try {
-    // 1️⃣ First send via WebSocket for real-time delivery
-    socketRef.current.emit("send_message", {
-      receiverId,
-      receiverType,
-      message: messageText,
-      tempId,
-      timestamp: new Date().toISOString(),
-    });
+
+const sendMessage = async () => {
+    if (input.trim() === '' || !selectedUser || !adminData || !adminType) {
+      return false;
+    }
+
+    const myId = `${adminType}:${adminData.id}`;
+    const otherId = `${selectedUser.account_type}:${selectedUser.id}`;
+    const conversationId = [myId, otherId].sort().join('_');
     
-    console.log(`📤 WebSocket message sent to ${receiverType}:${receiverId}`);
+    const messageText = input.trim();
+    const timestamp = Date.now();
+    const tempId = timestamp;
     
-    // 2️⃣ Then save to database
-    const requestBody = {
-      sender_id: adminData.id,
-      sender_type: adminType,
-      receiver_id: receiverId,
-      receiver_type: receiverType,
-      message: messageText
+    // Create optimistic message
+    const tempMessage = {
+      id: tempId,
+      sender: 'me',
+      text: messageText,
+      time: new Date(timestamp).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      delivered: false,
+      read_status: false,
+      timestamp: timestamp
     };
     
-    const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(requestBody)
-    });
+    // Add to UI immediately
+    setMessages(prev => [...prev, tempMessage]);
+    setInput('');
     
-    if (response.ok) {
-      const data = await response.json();
-      console.log('💾 Database save response:', data);
+    try {
+      // 1. Save to Firebase
+      const messageRef = push(ref(database, `conversations/${conversationId}/messages`));
+      const messageData = {
+        id: messageRef.key,
+        senderId: myId,
+        receiverId: otherId,
+        message: messageText,
+        timestamp: timestamp,
+        read: false,
+        senderName: adminData.full_name || adminData.name
+      };
       
-      if (data.success) {
-        // Update with real database ID
-        if (data.data?.id) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === tempId ? { 
-              ...msg, 
-              id: data.data.id, 
-              delivered: true,
-              timestamp: data.data.time || new Date().toISOString()
-            } : msg
-          ));
-        } else {
-          setMessages(prev => prev.map(msg => 
-            msg.id === tempId ? { ...msg, delivered: true } : msg
-          ));
-        }
-        return true;
+      await set(messageRef, messageData);
+      
+      // 2. Update last message in conversation metadata
+      const conversationRef = ref(database, `conversations/${conversationId}`);
+      await update(conversationRef, {
+        lastMessage: messageText,
+        lastMessageTime: timestamp,
+        participants: [myId, otherId]
+      });
+      
+      // 3. Save to your database for persistence
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          sender_id: adminData.id,
+          sender_type: adminType,
+          receiver_id: selectedUser.id,
+          receiver_type: selectedUser.account_type,
+          message: messageText,
+          firebaseId: messageRef.key
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('💾 Database save response:', data);
       }
+      
+      // Update optimistic message
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...msg, delivered: true, id: messageRef.key } : msg
+      ));
+      
+      return true;
+    } catch (error) {
+      console.error("❌ Error sending message:", error);
+      // Mark as failed
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
+      ));
+      return false;
     }
-    
-    // If database save fails, still mark as delivered (WebSocket may have worked)
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { ...msg, delivered: true } : msg
-    ));
-    return true;
-    
-  } catch (error) {
-    console.error("❌ Error sending message:", error);
-    // Mark as failed but keep it visible
-    setMessages(prev => prev.map(msg => 
-      msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
-    ));
-    return false;
-  }
-};
+  };
 
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
@@ -856,25 +996,8 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
   };
 
  const handleSend = async () => {
-  if (input.trim() !== '' && selectedUser && adminData && adminType) {
-    // Save the message text
-    const messageText = input.trim();
-    
-    // Clear input immediately
-    setInput('');
-    
-    // Send the message
-    const success = await sendMessage(
-      selectedUser.id, 
-      selectedUser.account_type, 
-      messageText
-    );
-    
-    if (!success) {
-      alert('Failed to send message. Please try again.');
-    }
-  }
-};
+    await sendMessage();
+  };
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
@@ -1020,15 +1143,18 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
       </ul>
     </div>
 
-      <div className='desktop-header' style={styles.header}>
-        <input 
-          type="text" 
-          placeholder="Search..." 
-          style={styles.search} 
-          value={searchQuery}
-          onChange={handleSearch}
-        />
-        <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+      <div className="desktop-header" style={styles.header}>
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
+            profileData={profileData}
+            admin={admin}
+          />
+        </div>
       </div>
 
       <div className='desktop-sidebar' style={styles.sidebar}>
