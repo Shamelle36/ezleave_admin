@@ -670,10 +670,9 @@ const handleInputChange = (e) => {
 
 const sendMessage = async (receiverId, receiverType, messageText) => {
   const tempId = Date.now();
-
   const token = localStorage.getItem("token");
 
-  // optimistic UI
+  // Optimistic UI update
   setMessages(prev => [
     ...prev,
     {
@@ -686,40 +685,60 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     }
   ]);
 
-  // 🔥 REALTIME SEND
-  if (socketRef.current) {
-    socketRef.current.emit("send_message", {
-      receiverId,
-      receiverType,
-      message: messageText,
-      tempId,
+  // Clear input immediately
+  setInput('');
+  
+  try {
+    // 🔥 REALTIME SEND via WebSocket
+    if (socketRef.current) {
+      socketRef.current.emit("send_message", {
+        receiverId,
+        receiverType,
+        message: messageText,
+        tempId,
+      });
+    }
+
+    // 💾 SAVE TO DB
+    const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        sender_id: adminData.id,
+        sender_type: adminType,
+        receiver_id: receiverId,
+        receiver_type: receiverType,
+        message: messageText,
+      }),
     });
-  }
 
-  // 💾 SAVE TO DB
-  const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      sender_id: adminData.id,
-      sender_type: adminType,
-      receiver_id: receiverId,
-      receiver_type: receiverType,
-      message: messageText,
-    }),
-  });
+    const data = await response.json();
 
-  const data = await response.json();
-
-  if (data.success && data.data?.id) {
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === tempId ? { ...m, id: data.data.id, delivered: true } : m
-      )
-    );
+    if (data.success && data.data?.id) {
+      // Update the temporary ID with the real database ID
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === tempId ? { ...m, id: data.data.id, delivered: true } : m
+        )
+      );
+      return { success: true, data };
+    } else {
+      // If API fails, remove the optimistic update or mark as failed
+      console.error("Failed to send message:", data.message);
+      return { 
+        success: false, 
+        message: data.message || "Failed to send message"
+      };
+    }
+  } catch (error) {
+    console.error("Error sending message:", error);
+    return { 
+      success: false, 
+      message: "Network error. Please check your connection."
+    };
   }
 };
 
