@@ -221,31 +221,14 @@ const initializeWebSocket = () => {
   console.log('🔍 WebSocket connection data:', {
     adminId: adminData.id,
     adminType: adminType,
-    name: adminData.full_name || adminData.name,
+    name: adminData.full_name || adminData.name || 'Admin',
     email: adminData.email,
     role: adminData.role
   });
 
-  // Try different parameter formats to see what works
-  let connectUrl;
-  
-  // Try multiple formats - one of these should work
-  const formats = [
-    // Format 1: Standard format
-    `${API_URL.replace('https', 'wss')}/ws?id=${adminData.id}&type=${adminType}&name=${encodeURIComponent(adminData.full_name || adminData.name)}`,
-    
-    // Format 2: Alternative format
-    `${API_URL.replace('https', 'wss')}/ws?userId=${adminData.id}&userType=${adminType}`,
-    
-    // Format 3: Another common format
-    `${API_URL.replace('https', 'wss')}/ws?adminId=${adminData.id}&adminType=${adminType}`,
-    
-    // Format 4: Simple format
-    `${API_URL.replace('https', 'wss')}/ws?${adminType}_id=${adminData.id}`
-  ];
-
-  // Try the first format for now
-  connectUrl = formats[0];
+  // ✅ CRITICAL FIX: Use the correct parameter names based on your server code
+  // Looking at your sendToUser function in backend, it expects userId and userType
+  const connectUrl = `${API_URL.replace('https', 'wss')}/?userId=${adminData.id}&userType=${adminType}`;
   
   console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
   setConnectionStatus('Connecting...');
@@ -259,7 +242,7 @@ const initializeWebSocket = () => {
       ws.close();
       setConnectionStatus('Connection Timeout');
     }
-  }, 10000);
+  }, 5000);
 
   ws.onopen = () => {
     clearTimeout(connectionTimeout);
@@ -267,22 +250,21 @@ const initializeWebSocket = () => {
     setSocket(ws);
     setConnectionStatus('Connected');
     
-    // Send authentication message immediately after connection
+    // Send a welcome/identification message after connection
     setTimeout(() => {
       if (ws.readyState === WebSocket.OPEN) {
-        const authMessage = {
-          type: 'auth',
-          id: adminData.id,
+        const welcomeMessage = {
+          type: 'identification',
+          userId: adminData.id,
           userType: adminType,
-          name: adminData.full_name || adminData.name,
-          email: adminData.email,
-          role: adminData.role || 'admin'
+          userName: adminData.full_name || adminData.name || 'Admin',
+          timestamp: new Date().toISOString()
         };
         
-        console.log('🔑 Sending auth message:', authMessage);
-        ws.send(JSON.stringify(authMessage));
+        console.log('👋 Sending identification:', welcomeMessage);
+        ws.send(JSON.stringify(welcomeMessage));
       }
-    }, 100);
+    }, 500);
   };
 
   ws.onmessage = (event) => {
@@ -291,62 +273,74 @@ const initializeWebSocket = () => {
       console.log('📩 WebSocket message received:', data);
 
       switch(data.type) {
-        case 'auth_success':
-        case 'connection_established':
-          console.log('✅ WebSocket authentication confirmed:', data.message || 'Connected');
-          if (data.clientId) {
-            console.log('🆔 Assigned client ID:', data.clientId);
-          }
+        case 'welcome':
+        case 'identification_accepted':
+          console.log('✅ Server accepted our identification');
           break;
           
         case 'new_message':
           console.log('💌 New message via WebSocket:', data);
-          handleIncomingMessage(data);
-          break;
-          
-        case 'typing':
-          if (data.senderId && data.senderType) {
-            // Only show typing if it's from the selected user
-            if (selectedUser && 
-                selectedUser.id == data.senderId && 
-                selectedUser.account_type === data.senderType) {
-              setIsTyping(data.isTyping);
-            }
+          // Process incoming message
+          if (data.message) {
+            processIncomingMessage(data.message);
           }
           break;
           
-        case 'message_sent':
-          // Update message status in UI
+        case 'message_received':
+          console.log('✓ Message delivery confirmation:', data);
           if (data.messageId) {
             setMessages(prev => prev.map(msg => 
-              msg.id === data.messageId ? { ...msg, delivered: true, id: data.realId || msg.id } : msg
+              msg.id === data.messageId ? { ...msg, delivered: true } : msg
             ));
           }
           break;
           
-        case 'online_status':
-          if (data.userId && data.userType && data.status !== undefined) {
+        case 'typing':
+          console.log('⌨️ Typing indicator:', data);
+          if (data.isTyping && selectedUser && 
+              data.senderId == selectedUser.id && 
+              data.senderType === selectedUser.account_type) {
+            setIsTyping(true);
+            
+            // Clear typing indicator after 2 seconds
+            setTimeout(() => {
+              setIsTyping(false);
+            }, 2000);
+          } else if (!data.isTyping) {
+            setIsTyping(false);
+          }
+          break;
+          
+        case 'user_online':
+          console.log('🟢 User online:', data);
+          if (data.userId && data.userType) {
             setOnlineStatus(prev => ({
               ...prev,
-              [`${data.userType}:${data.userId}`]: data.status === 'online'
+              [`${data.userType}:${data.userId}`]: true
+            }));
+          }
+          break;
+          
+        case 'user_offline':
+          console.log('🔴 User offline:', data);
+          if (data.userId && data.userType) {
+            setOnlineStatus(prev => ({
+              ...prev,
+              [`${data.userType}:${data.userId}`]: false
             }));
           }
           break;
           
         case 'error':
           console.error('❌ WebSocket error:', data.message);
-          if (data.message.includes('Missing user identification')) {
-            // Try a different connection format
-            console.log('🔄 Server wants different parameters, checking server code...');
-          }
           break;
           
         case 'pong':
-          // Heartbeat response
+          // Heartbeat response - ignore
           break;
           
         default:
-          console.log('📨 Received unknown message type:', data.type);
+          console.log('📨 Unknown message type:', data.type, data);
       }
     } catch (error) {
       console.error('❌ Error parsing WebSocket message:', error);
@@ -384,12 +378,95 @@ const initializeWebSocket = () => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'ping' }));
     }
-  }, 25000); // Every 25 seconds
+  }, 30000); // Every 30 seconds
 
   // Store the interval ID for cleanup
   ws.heartbeatInterval = heartbeatInterval;
   
   setSocket(ws);
+};
+
+const processIncomingMessage = (messageData) => {
+  if (!messageData || !adminData || !adminType) return;
+  
+  const myFullId = `${adminType}:${adminData.id}`;
+  const senderFullId = messageData.sender_id;
+  const receiverFullId = messageData.receiver_id;
+  
+  // Check if this message is for me
+  if (receiverFullId !== myFullId) return;
+  
+  // Check if this is from the currently selected user
+  const isFromSelectedUser = selectedUser && 
+    senderFullId === `${selectedUser.account_type}:${selectedUser.id}`;
+  
+  // Add to messages if viewing this conversation
+  if (isFromSelectedUser) {
+    const newMessage = {
+      id: messageData.id || Date.now(),
+      sender: 'other',
+      text: messageData.message,
+      time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      pinned: messageData.pinned || false,
+      read_status: messageData.read_status || false,
+      delivered: true
+    };
+    
+    // Avoid duplicates
+    setMessages(prev => {
+      if (prev.some(m => m.id === newMessage.id)) return prev;
+      return [...prev, newMessage];
+    });
+    
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      const el = document.getElementById('messagesArea');
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 100);
+  }
+  
+  // Update user list with latest message
+  setUsers(prev => prev.map(user => {
+    const userFullId = `${user.account_type}:${user.id}`;
+    
+    if (senderFullId === userFullId) {
+      return {
+        ...user,
+        message: messageData.message,
+        time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        // Increment unread if not viewing this conversation
+        unread: !isFromSelectedUser ? (user.unread || 0) + 1 : user.unread
+      };
+    }
+    return user;
+  }));
+  
+  // Mark as read if viewing this conversation
+  if (isFromSelectedUser && !messageData.read_status) {
+    markMessagesAsRead(selectedUser.id, selectedUser.account_type);
+    
+    // Send read receipt via WebSocket
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'message_read',
+        messageId: messageData.id,
+        senderId: selectedUser.id,
+        senderType: selectedUser.account_type
+      }));
+    }
+  }
+  
+  // Show notification if not viewing conversation
+  if (!isFromSelectedUser) {
+    console.log('📱 New message from:', messageData.sender_name);
+    // You could add a toast notification here
+  }
 };
 
 const handleIncomingMessage = (data) => {
@@ -499,36 +576,45 @@ const handleIncomingMessage = (data) => {
   };
 
   // Handle typing indicator
-  const handleInputChange = (e) => {
-    setInput(e.target.value);
+ const handleInputChange = (e) => {
+  const value = e.target.value;
+  setInput(value);
+  
+  if (!socket || socket.readyState !== WebSocket.OPEN || !selectedUser) return;
+  
+  // Clear previous timeout
+  if (typingTimeoutRef.current) {
+    clearTimeout(typingTimeoutRef.current);
+  }
+  
+  // Send typing started
+  if (value.length > 0) {
+    const typingMessage = {
+      type: 'typing',
+      isTyping: true,
+      receiverId: selectedUser.id,
+      receiverType: selectedUser.account_type
+    };
     
-    if (socket && socket.readyState === WebSocket.OPEN && selectedUser) {
-      // Clear previous timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      // Send typing started
-      socket.send(JSON.stringify({
+    console.log('⌨️ Sending typing started:', typingMessage);
+    socket.send(JSON.stringify(typingMessage));
+  }
+  
+  // Set timeout to send typing stopped
+  typingTimeoutRef.current = setTimeout(() => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const typingStopped = {
         type: 'typing',
-        isTyping: true,
+        isTyping: false,
         receiverId: selectedUser.id,
         receiverType: selectedUser.account_type
-      }));
-
-      // Set timeout to send typing stopped
-      typingTimeoutRef.current = setTimeout(() => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: 'typing',
-            isTyping: false,
-            receiverId: selectedUser.id,
-            receiverType: selectedUser.account_type
-          }));
-        }
-      }, 1000);
+      };
+      
+      console.log('⌨️ Sending typing stopped:', typingStopped);
+      socket.send(JSON.stringify(typingStopped));
     }
-  };
+  }, 1500); // Send typing stopped after 1.5 seconds of no typing
+};
 
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin"));
@@ -651,9 +737,55 @@ const handleIncomingMessage = (data) => {
   };
 
 const sendMessage = async (receiverId, receiverType, messageText) => {
+  // Declare tempId at the beginning of the function so it's available in all blocks
+  const tempId = Date.now();
+  
   try {
     const token = localStorage.getItem("token");
     
+    // Create temp message for immediate UI update
+    const tempMessage = {
+      id: tempId,
+      sender: 'me',
+      text: messageText,
+      time: new Date().toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      pinned: false,
+      delivered: false,
+      read_status: false
+    };
+    
+    // Add to UI immediately
+    setMessages(prev => [...prev, tempMessage]);
+    
+    // Scroll to bottom
+    setTimeout(() => {
+      const messagesArea = document.getElementById('messagesArea');
+      if (messagesArea) {
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+      }
+    }, 100);
+    
+    // ✅ Send via WebSocket for real-time delivery
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const wsMessage = {
+        type: 'send_message',
+        receiverId: receiverId,
+        receiverType: receiverType,
+        message: messageText,
+        tempId: tempId,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('📤 Sending via WebSocket:', wsMessage);
+      socket.send(JSON.stringify(wsMessage));
+    } else {
+      console.warn('⚠️ WebSocket not connected, message will only be saved to DB');
+    }
+    
+    // Also send via REST API to save to database
     const requestBody = {
       sender_id: adminData.id,
       sender_type: adminType,
@@ -661,41 +793,9 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
       receiver_type: receiverType,
       message: messageText
     };
-
-    console.log('📤 Sending message via REST API:', requestBody);
-
-    console.log('🔍 DEBUG sendMessage - Full request details:');
-    console.log('📤 Request Body:', requestBody);
-    console.log('👤 adminData:', adminData);
-    console.log('🏷️ adminType:', adminType);
-    console.log('📍 selectedUser:', selectedUser);
-
-    // ✅ FIX: First send via WebSocket for real-time
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const wsMessage = {
-        type: 'new_message',
-        receiverId: receiverId,
-        receiverType: receiverType,
-        message: {
-          id: Date.now(), // Temporary ID
-          sender_id: `${adminType}:${adminData.id}`,
-          sender_type: adminType,
-          receiver_id: `${receiverType}:${receiverId}`,
-          receiver_type: receiverType,
-          message: messageText,
-          time: new Date().toISOString(),
-          sender_name: adminData.full_name || adminData.name,
-          receiver_name: selectedUser?.name || '',
-          pinned: false,
-          read_status: false
-        }
-      };
-      
-      socket.send(JSON.stringify(wsMessage));
-      console.log('📤 Message sent via WebSocket');
-    }
-
-    // Then send via REST API to save to database
+    
+    console.log('💾 Saving to database:', requestBody);
+    
     const response = await fetch(`${API_URL}/api/admin/messages/send`, {
       method: 'POST',
       headers: {
@@ -711,52 +811,40 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
       console.log('📨 Server response:', data);
     } catch (e) {
       console.error('❌ Failed to parse response:', e);
-      return false;
+      // Still mark as delivered since we sent via WebSocket
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...msg, delivered: true } : msg
+      ));
+      return true;
     }
     
     if (response.ok && data.success) {
-      // Update the message with the real ID from database
-      const newMessage = {
-        id: data.data?.id || Date.now(),
-        sender: 'me',
-        text: messageText,
-        time: new Date(data.data?.time || Date.now()).toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        pinned: false,
-        delivered: true,
-        read_status: false
-      };
-      
-      
-      // Send typing stopped
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-          type: 'typing',
-          isTyping: false,
-          receiverId: receiverId,
-          receiverType: receiverType
-        }));
+      // Update with real database ID
+      if (data.data?.id) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempId ? { ...msg, id: data.data.id, delivered: true } : msg
+        ));
+      } else {
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempId ? { ...msg, delivered: true } : msg
+        ));
       }
-      
-      // Scroll to bottom
-      setTimeout(() => {
-        const messagesArea = document.getElementById('messagesArea');
-        if (messagesArea) {
-          messagesArea.scrollTop = messagesArea.scrollHeight;
-        }
-      }, 100);
       
       return true;
     } else {
       console.error('❌ Server error response:', data);
-      alert(`Error: ${data.message || 'Failed to send message'}`);
+      // Mark as failed
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
+      ));
       return false;
     }
   } catch (error) {
     console.error('❌ Network error sending message:', error);
-    alert('Network error. Check console for details.');
+    // Mark as failed
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
+    ));
     return false;
   }
 };
@@ -824,37 +912,15 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     }
   };
 
-  const handleSend = async () => {
+ const handleSend = async () => {
   if (input.trim() !== '' && selectedUser && adminData && adminType) {
-    // Immediately add message to UI
-    const tempMessage = {
-      id: Date.now(), // Temporary ID
-      sender: 'me',
-      text: input.trim(),
-      time: new Date().toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      }),
-      pinned: false,
-      delivered: false,
-      read_status: false
-    };
-    
-    setMessages(prev => [...prev, tempMessage]);
-    
-    // Clear input
+    // Save the message text
     const messageText = input.trim();
+    
+    // Clear input immediately
     setInput('');
     
-    // Scroll to bottom
-    setTimeout(() => {
-      const messagesArea = document.getElementById('messagesArea');
-      if (messagesArea) {
-        messagesArea.scrollTop = messagesArea.scrollHeight;
-      }
-    }, 100);
-    
-    // Send message to server
+    // Send the message
     const success = await sendMessage(
       selectedUser.id, 
       selectedUser.account_type, 
@@ -862,10 +928,7 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
     );
     
     if (!success) {
-      // If sending failed, mark message as failed
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempMessage.id ? { ...msg, delivered: false, error: true } : msg
-      ));
+      alert('Failed to send message. Please try again.');
     }
   }
 };
