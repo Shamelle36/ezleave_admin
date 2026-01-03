@@ -17,10 +17,14 @@ import {
   faTimes,
   faSpinner,
   faSearch,
+  faChevronLeft,
+  faChevronRight,
+  faPen,
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import { FaEllipsisV } from "react-icons/fa";
+import ProfileDropdown from './profileDropdown';
 
 function Announcement() {
   const [showModal, setShowModal] = useState(false);
@@ -37,8 +41,8 @@ function Announcement() {
   const imageInputRef = useRef(null);
   const [images, setImages] = useState([]);
   const [previewImage, setPreviewImage] = useState(null);
-  const [expanded, setExpanded] = useState(false);
-  const toggleExpand = () => setExpanded(!expanded);
+  const [expanded, setExpanded] = useState({});
+  const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
   const [menuOpen, setMenuOpen] = useState(null);
 
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
@@ -59,7 +63,19 @@ function Announcement() {
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("role") || "admin");
-    
+  const [hasEllipsis, setHasEllipsis] = useState({});
+  
+  // Add new state for image carousel
+  const [imageCarouselStates, setImageCarouselStates] = useState({});
+  const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null); // Get from localStorage
+   const [showProfileModal, setShowProfileModal] = useState(false);
+    const [profileData, setProfileData] = useState({
+      full_name: "",
+      email: "",
+      role: "",
+      profile_picture: "",
+    });
+
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
     { name: "Employees", icon: faUsers, to: "/employee" },
@@ -70,7 +86,7 @@ function Announcement() {
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
-    
+  
   const allowedMenus = menuItems.filter((item) => {
     if (role === "admin") return true;
     if (role === "mayor" || role === "office_head") {
@@ -85,12 +101,84 @@ function Announcement() {
     }
     return false;
   });
+  
+  const API_URL = "https://ezleave-admin-api.onrender.com";
+
+   useEffect(() => {
+      const storedUser = JSON.parse(localStorage.getItem("admin"));
+      if (storedUser) {
+        setAdmin(storedUser);
+        setProfileData({
+          full_name: storedUser.full_name || storedUser.name || "",
+          email: storedUser.email || "",
+          role: storedUser.role || "",
+          profile_picture: storedUser.profile_picture || ""
+        });
+      }
+    }, []);
+  
+    useEffect(() => {
+            const fetchInitialProfile = async () => {
+              try {
+                const storedUser = JSON.parse(localStorage.getItem("admin"));
+                if (!storedUser) return;
+        
+                const url =
+                  storedUser.role === "office_head"
+                    ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                    : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+        
+                const res = await fetch(url);
+                const data = await res.json();
+        
+                if (res.ok) {
+                  setAdmin(data);
+                  setProfileData(data);
+                } else {
+                  console.error("Error loading initial profile:", data.message);
+                }
+              } catch (err) {
+                console.error("Error loading initial profile:", err);
+              }
+            };
+        
+            fetchInitialProfile();
+          }, []);
+  
+  useEffect(() => {
+          if (!showProfileModal) return;
+      
+          const fetchProfileData = async () => {
+            try {
+              const storedUser = JSON.parse(localStorage.getItem("admin"));
+              if (!storedUser) return;
+      
+              const url =
+                storedUser.role === "office_head"
+                  ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+                  : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+      
+              const res = await fetch(url);
+              const data = await res.json();
+      
+              if (res.ok) {
+                setProfileData(data);
+              } else {
+                console.error("Error loading profile:", data.message);
+              }
+            } catch (err) {
+              console.error("Error loading profile:", err);
+            }
+          };
+      
+          fetchProfileData();
+        }, [showProfileModal]);
 
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin"));
 
     if (user) {
-      await fetch("http://localhost:5000/api/auth/logout", {
+      await fetch(`${API_URL}/api/auth/logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, role: user.role }),
@@ -101,12 +189,62 @@ function Announcement() {
     navigate("/");
   };
 
+  const checkEllipsis = (id, element) => {
+    if (!element) return;
+    const isTruncated = element.scrollHeight > element.clientHeight;
+    setHasEllipsis(prev => ({ ...prev, [id]: isTruncated }));
+  };
+
+  // Initialize carousel state for an announcement
+  const initializeCarousel = (announcementId, imageCount) => {
+    setImageCarouselStates(prev => ({
+      ...prev,
+      [announcementId]: {
+        currentIndex: 0,
+        totalImages: imageCount,
+        showArrows: imageCount > 6
+      }
+    }));
+  };
+
+  // Navigate to next image in carousel
+  const nextImage = (announcementId) => {
+    setImageCarouselStates(prev => {
+      const state = prev[announcementId];
+      if (!state) return prev;
+      
+      return {
+        ...prev,
+        [announcementId]: {
+          ...state,
+          currentIndex: (state.currentIndex + 1) % state.totalImages
+        }
+      };
+    });
+  };
+
+  // Navigate to previous image in carousel
+  const prevImage = (announcementId) => {
+    setImageCarouselStates(prev => {
+      const state = prev[announcementId];
+      if (!state) return prev;
+      
+      return {
+        ...prev,
+        [announcementId]: {
+          ...state,
+          currentIndex: (state.currentIndex - 1 + state.totalImages) % state.totalImages
+        }
+      };
+    });
+  };
+
   // Fetch announcements with loading state
   useEffect(() => {
     const fetchAnnouncements = async () => {
       setLoading(prev => ({ ...prev, fetch: true }));
       try {
-        const res = await fetch("http://localhost:5000/api/announcements");
+        const res = await fetch(`${API_URL}/api/announcements`);
         const data = await res.json();
         
         // Process data - only handle images now
@@ -135,6 +273,17 @@ function Announcement() {
 
     fetchAnnouncements();
   }, []);
+
+  // Update carousel initialization when announcements change
+  useEffect(() => {
+    announcements.forEach(announcement => {
+      if (announcement.images && announcement.images.length > 0) {
+        if (!imageCarouselStates[announcement.id]) {
+          initializeCarousel(announcement.id, announcement.images.length);
+        }
+      }
+    });
+  }, [announcements]);
 
   // Apply search and filter whenever searchQuery, visibilityFilter, or announcements change
   useEffect(() => {
@@ -323,9 +472,18 @@ function Announcement() {
         </div>
       )}
 
-      <div style={styles.header}>
-        <input type="text" placeholder="Search..." style={styles.search} />
-        <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+      <div className="attendance-desktop-header" style={styles.header}>
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={false}
+            profileData={profileData}
+            admin={admin}
+          />
+        </div>
       </div>
 
       <div style={styles.sidebar}>
@@ -381,7 +539,7 @@ function Announcement() {
         )}
 
         <div style={styles.announcementBoard}>
-          <p style={{ fontSize: '20px', fontWeight: '600' }}>Announcement</p>
+          <h1>Announcement</h1>
 
           <div style={styles.announcementFilter}>
             <div style={styles.announcementLeft}>
@@ -403,16 +561,7 @@ function Announcement() {
                   </button>
                 )}
               </div>
-              
-              <select 
-                style={styles.filterBtn}
-                value={visibilityFilter}
-                onChange={handleVisibilityFilterChange}
-              >
-                <option value="All">All Visibility</option>
-                <option value="All Employee">All Employee</option>
-                <option value="Specific Department">Specific Department</option>
-              </select>
+            
               
               {(searchQuery || visibilityFilter !== "All") && (
                 <button 
@@ -429,7 +578,7 @@ function Announcement() {
                 onClick={() => setShowModal(true)}
                 disabled={loading.post || loading.update || loading.delete}
               >
-                {loading.post ? 'Posting...' : 'Post'}
+               <FontAwesomeIcon icon={faPen} style={{paddingRight: '5px'}}/> {loading.post ? 'Posting...' : 'Post'}
               </button>
             </div>
           </div>
@@ -456,167 +605,254 @@ function Announcement() {
               )}
             </div>
           ) : (
-            <div style={styles.announcementsList}>
+            <div style={styles.announcementsContainer}>
               <div style={styles.resultsCount}>
                 Showing {filteredAnnouncements.length} of {announcements.length} announcements
               </div>
-              {filteredAnnouncements.map((announcement, index) => (
-                <div
-                  key={announcement.id || index}
-                  style={{
-                    ...styles.announcementCardContent,
-                    borderLeft: '10px solid #4A90E2', // All announcements have same border color
-                  }}
-                >
-                  <div style={styles.announcementRow1}>
-                    <div style={styles.announcementSender}>
-                      <div style={styles.announcementProfile}></div>
-                      <div style={styles.announcementName}>
-                        <p style={styles.lblName}>{announcement.posted_by}</p>
-                        <p style={styles.lblPosition}>{announcement.position}</p>
-                        {announcement.visibility && (
-                          <p style={styles.lblVisibility}>
-                            Visibility: {announcement.visibility}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div style={styles.announcementDate}>
-                      <p style={styles.lblDate}>{announcement.created_at}</p>
+              
+              {/* 2-Column Grid Layout */}
+              <div style={styles.announcementsGrid}>
+                {filteredAnnouncements.map((announcement, index) => {
+                  const carouselState = imageCarouselStates[announcement.id] || { 
+                    currentIndex: 0, 
+                    totalImages: 0, 
+                    showArrows: false 
+                  };
+                  const imagesToShow = announcement.images || [];
+                  const hasCarousel = imagesToShow.length > 6;
+                  
+                  // Get visible images based on carousel state
+                  let visibleImages = imagesToShow;
+                  if (hasCarousel) {
+                    // For carousel mode, show only 6 images at a time
+                    const startIndex = carouselState.currentIndex;
+                    const endIndex = Math.min(startIndex + 6, imagesToShow.length);
+                    visibleImages = imagesToShow.slice(startIndex, endIndex);
+                    
+                    // If we're near the end, wrap around
+                    if (endIndex > imagesToShow.length) {
+                      const remaining = 6 - (imagesToShow.length - startIndex);
+                      visibleImages = [
+                        ...imagesToShow.slice(startIndex),
+                        ...imagesToShow.slice(0, remaining)
+                      ];
+                    }
+                  }
 
-                      <div style={{ position: "relative", display: "inline-block" }}>
-                        <button
-                          style={{
-                            ...styles.menuDots,
-                            ...((loading.update || loading.delete) && styles.menuDotsDisabled)
-                          }}
-                          onClick={() =>
-                            setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
-                          }
-                          onBlur={() => setMenuOpen(null)}
-                          disabled={loading.update || loading.delete}
-                        >
-                          <FaEllipsisV />
-                        </button>
-
-                        {menuOpen === announcement.id && (
-                          <div style={styles.menu}>
-                            <button
-                              style={styles.buttonMenu1}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => editAnnouncement(announcement.id)}
-                              disabled={loading.update}
-                            >
-                              {loading.update ? 'Editing...' : 'Edit'}
-                            </button>
-                            <button
-                              style={styles.buttonMenu}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => deleteAnnouncement(announcement.id)}
-                              disabled={loading.delete}
-                            >
-                              {loading.delete ? 'Deleting...' : 'Delete'}
-                            </button>
+                  return (
+                    <div
+                      key={announcement.id || index}
+                      style={styles.announcementCard}
+                    >
+                      <div style={styles.announcementCardContent}>
+                        {/* Header Section */}
+                        <div style={styles.announcementHeader}>
+                          <div style={styles.announcementSender}>
+                            <div style={styles.announcementProfile}>
+                              <img src={announcement.profile_picture} alt='Profile' style={styles.announcementProfile}/>
+                            </div>
+                            <div style={styles.announcementName}>
+                              <p style={styles.lblName}>{announcement.posted_by}</p>
+                              <p style={styles.lblPosition}>{announcement.position}</p>
+                              {announcement.visibility && (
+                                <p style={styles.lblVisibility}>
+                                  Visibility: {announcement.visibility}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        )}
+                          <div style={styles.announcementDate}>
+                            <p style={styles.lblDate}>{announcement.created_at}</p>
+
+                            <div style={{ position: "relative", display: "inline-block" }}>
+                              <button
+                                style={{
+                                  ...styles.menuDots,
+                                  ...((loading.update || loading.delete) && styles.menuDotsDisabled)
+                                }}
+                                onClick={() =>
+                                  setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
+                                }
+                                onBlur={() => setMenuOpen(null)}
+                                disabled={loading.update || loading.delete}
+                              >
+                                <FaEllipsisV />
+                              </button>
+
+                              {menuOpen === announcement.id && (
+                                <div style={styles.menu}>
+                                  <button
+                                    style={styles.buttonMenu1}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => editAnnouncement(announcement.id)}
+                                    disabled={loading.update}
+                                  >
+                                    {loading.update ? 'Editing...' : 'Edit'}
+                                  </button>
+                                  <button
+                                    style={styles.buttonMenu}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => deleteAnnouncement(announcement.id)}
+                                    disabled={loading.delete}
+                                  >
+                                    {loading.delete ? 'Deleting...' : 'Delete'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Content Section */}
+                        <div style={styles.announcementContent}>
+                          <div style={styles.announcementText}>
+                            <p style={styles.lblTitle}>{announcement.title}</p>
+                            <p 
+                              ref={(el) => {
+                                if (el) {
+                                  // Check after rendering
+                                  setTimeout(() => checkEllipsis(announcement.id, el), 50);
+                                }
+                              }}
+                              style={{
+                                ...styles.lblDetails,
+                                textAlign: "justify",
+                                display: "-webkit-box",
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                WebkitLineClamp: expanded[announcement.id] ? "unset" : 3,
+                              }}
+                            >
+                              {announcement.details}
+                            </p>
+                          </div>
+
+                          {/* Images Section with Carousel */}
+                          {imagesToShow.length > 0 && (
+                            <div style={styles.imagesContainerWrapper}>
+                              
+                              <div style={styles.imagesContainer}>
+                                {/* Left arrow for carousel */}
+                                {hasCarousel && (
+                                  <button 
+                                    style={styles.carouselArrowLeft}
+                                    onClick={() => prevImage(announcement.id)}
+                                    title="Previous images"
+                                  >
+                                    <FontAwesomeIcon icon={faChevronLeft} />
+                                  </button>
+                                )}
+                                
+                                {/* Images grid */}
+                                <div style={{
+                                  ...styles.imagesGrid,
+                                  marginLeft: hasCarousel ? '30px' : '0',
+                                  marginRight: hasCarousel ? '30px' : '0'
+                                }}>
+                                  {visibleImages.map((img, i) => {
+                                    const actualIndex = hasCarousel 
+                                      ? (carouselState.currentIndex + i) % imagesToShow.length
+                                      : i;
+                                    
+                                    return (
+                                      <div key={i} style={styles.imageWrapper}>
+                                        <img
+                                          src={img} 
+                                          alt={`attachment-${actualIndex}`}
+                                          style={styles.announcementImage}
+                                          onClick={() => setPreviewImage(img)}
+                                          title={`Image ${actualIndex + 1} of ${imagesToShow.length}`}
+                                        />
+                                        {hasCarousel && imagesToShow.length > 6 && (
+                                          <div style={styles.imageNumberBadge}>
+                                            {actualIndex + 1}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                
+                                {/* Right arrow for carousel */}
+                                {hasCarousel && (
+                                  <button 
+                                    style={styles.carouselArrowRight}
+                                    onClick={() => nextImage(announcement.id)}
+                                    title="Next images"
+                                  >
+                                    <FontAwesomeIcon icon={faChevronRight} />
+                                  </button>
+                                )}
+                              </div>
+                              
+                              {/* Carousel indicators */}
+                              {hasCarousel && imagesToShow.length > 6 && (
+                                <div style={styles.carouselIndicators}>
+                                  {Array.from({ length: Math.ceil(imagesToShow.length / 6) }).map((_, i) => (
+                                    <button
+                                      key={i}
+                                      style={{
+                                        ...styles.carouselIndicator,
+                                        ...(Math.floor(carouselState.currentIndex / 6) === i 
+                                          ? styles.carouselIndicatorActive 
+                                          : {})
+                                      }}
+                                      onClick={() => {
+                                        setImageCarouselStates(prev => ({
+                                          ...prev,
+                                          [announcement.id]: {
+                                            ...prev[announcement.id],
+                                            currentIndex: i * 6
+                                          }
+                                        }));
+                                      }}
+                                      title={`View images ${i * 6 + 1}-${Math.min((i + 1) * 6, imagesToShow.length)}`}
+                                    >
+                                      {i + 1}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Footer Section */}
+                        <div style={styles.announcementFooter}>
+                          {(hasEllipsis[announcement.id] || expanded[announcement.id]) && ( 
+                           <button 
+                              onClick={() => toggleExpand(announcement.id)} 
+                              style={expanded[announcement.id] 
+                                ? { ...styles.readBtn,  backgroundColor: "#fff", border: '1px solid #009205', color: '#009205'}   // Show Less style
+                                : { ...styles.readBtn,  backgroundColor: "#009205", color: '#fff'  } // Read More style
+                              }
+                            >
+                              {expanded[announcement.id] ? "Show Less" : "Read More"}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div style={styles.announcementDetails}>
-                    <div style={styles.announcementText}>
-                      <p style={styles.lblTitle}>{announcement.title}</p>
-                      <p style={{
-                        ...styles.lblDetails,
-                        textAlign: "justify",
-                        display: "-webkit-box",
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        WebkitLineClamp: expanded ? "unset" : 2, 
-                      }}>
-                      {announcement.details}
-                      </p>
-
-                      {/* Images */}
-                      {announcement.images && announcement.images.length > 0 && (
-                        <div style={{ marginTop: "10px" }}>
-                          {announcement.images.map((img, i) => (
-                            <img
-                              key={i}
-                              src={img} 
-                              alt={`attachment-${i}`}
-                              style={{ 
-                                maxWidth: "120px",
-                                maxHeight: "120px",
-                                marginRight: "10px",
-                                marginBottom: "10px",
-                                cursor: "pointer",
-                                borderRadius: "6px",
-                                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                              }}
-                              onClick={() => setPreviewImage(img)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={styles.announcementRead}>
-                    {announcement.details.length > 100 && ( 
-                      <button onClick={toggleExpand} style={styles.readBtn}>
-                        {expanded ? "Show Less" : "Read More"}
-                      </button>
-                    )}                    
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {previewImage && (
             <div
-              style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: "rgba(0,0,0,0.7)",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 1000,
-              }}
+              style={styles.previewOverlay}
               onClick={() => setPreviewImage(null)} 
             >
               <img
                 src={previewImage}
                 alt="preview"
-                style={{
-                  maxWidth: "90%",
-                  maxHeight: "90%",
-                  borderRadius: "8px",
-                  boxShadow: "0 0 20px rgba(0,0,0,0.5)",
-                }}
+                style={styles.previewImageLarge}
               />
 
               <button
                 onClick={() => setPreviewImage(null)}
-                style={{
-                  position: "absolute",
-                  background: "red",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "50%",
-                  width: "30px",
-                  height: "30px",
-                  fontSize: "18px",
-                  cursor: "pointer",
-                  top: 10,
-                  right: 100,
-                  marginRight: '10px'
-                }}
+                style={styles.closePreviewButton}
               >
                 ✕
               </button>
@@ -646,22 +882,6 @@ function Announcement() {
                 </div>
 
                 <div style={styles.modalBody}>
-                  <div style={styles.formGrid}>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Visibility</label>
-                      <select
-                        style={styles.formSelect}
-                        name="visibility"
-                        value={newAnnouncement.visibility}
-                        onChange={handleInputChange}
-                        disabled={loading.post || loading.update}
-                      >
-                        <option value="All Employee">All Employee</option>
-                        <option value="Specific Department">Specific Department</option>
-                      </select>
-                    </div>
-                  </div>
-
                   <div style={styles.formGroup}>
                     <label style={styles.formLabel}>Title</label>
                     <input
@@ -880,18 +1100,11 @@ const styles = {
   },
   content: {
     marginLeft: '300px', 
-    padding: '20px',
     backgroundColor: '#F8F8F8',
-    marginTop: '60px', 
-    flex: 1
-  },
-  header1: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginTop: '80px', 
+    flex: 1,
     marginBottom: '20px',
-    gap: '20px',
-    justifyContent: 'flex-start',
+    marginRight: '20px'
   },
   
   // Search Container Styles
@@ -925,9 +1138,9 @@ const styles = {
   },
 
   btnActive: {
-      backgroundColor: '#A8FC0080',
-      borderRadius: '5px',
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+    backgroundColor: '#A8FC0080',
+    borderRadius: '5px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
   },
 
   announcementFilter: {
@@ -979,102 +1192,343 @@ const styles = {
     padding: '8px 20px',
     borderRadius: '5px',
     border: 'none',
-    backgroundColor: '#A8FC0080',
-    boxShadow: '2px 2px 2px rgba(0, 0, 0, 0.16)',
-    fontWeight: 500,
+    backgroundColor: '#006C03',
+    boxShadow: '0 2px 2px rgba(0, 0, 0, 0.16)',
+    fontWeight: 600,
     cursor: 'pointer',
     fontSize: '14px',
+    color: 'white',
+  },
+
+  // 2-Column Grid Styles
+  announcementsContainer: {
+    marginTop: '20px',
+  },
+
+  announcementsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(500px, 1fr))',
+    gap: '20px',
+    marginTop: '15px',
+  },
+
+  announcementCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    border: '1px solid #e9ecef',
+    transition: 'all 0.3s ease',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
   },
 
   announcementCardContent: {
-    backgroundColor: '#fcf8fc',
-    padding: '15px',
-    borderRadius: '10px',
-    borderLeft: '10px solid #4a90e2',
-    boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.08)',
-    marginTop: '20px',
-    marginBottom: '20px',
+    padding: '20px',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
   },
 
-  announcementProfile: {
-    backgroundColor: '#6ecf68',
-    width: '40px',
-    height: '40px',
-    borderRadius: '50px'
+  announcementHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '15px',
+    borderBottom: '1px solid #f0f0f0',
+    paddingBottom: '15px',
   },
 
   announcementSender: {
     display: 'flex',
-    flexDirection: 'row',
-    gap: '10px'
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1,
   },
-  
+
+  announcementProfile: {
+    backgroundColor: '#6ecf68',
+    width: '50px',
+    height: '50px',
+    borderRadius: '50%',
+    flexShrink: 0,
+    objectFit: 'cover'
+  },
+
+  announcementName: {
+    flex: 1,
+  },
+
   lblName: {
-    fontWeight: '500',
-    fontSize: '14px',
+    fontWeight: '600',
+    fontSize: '16px',
+    margin: 0,
+    marginBottom: '4px',
   },
 
   lblPosition: {
-    fontSize: '12px',
-    color: '#6d6d6dfb'
+    fontSize: '13px',
+    color: '#6d6d6d',
+    margin: 0,
+    marginBottom: '4px',
   },
   
   lblVisibility: {
     fontSize: '12px',
     color: '#009205',
     fontStyle: 'italic',
-    marginTop: '2px',
-  },
-
-  announcementRow1: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    margin: 0,
+    padding: '2px 6px',
+    backgroundColor: '#f0f9f0',
+    borderRadius: '4px',
+    display: 'inline-block',
   },
 
   announcementDate: {
-    display:'flex',
-    flexDirection: 'row',
-    gap: '10px',
-    alignItems: 'center'
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '8px',
+    marginLeft: '10px',
   },
 
   lblDate: {
     fontSize: '12px',
     color: '#666',
+    margin: 0,
+    textAlign: 'right',
   },
 
-  announcementDetails: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginLeft: '5px',
-    marginTop: '10px'
+  menuDots: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '6px',
+    fontSize: '16px',
+    color: '#666',
+  },
+
+  // Announcement Content
+  announcementContent: {
+    flex: 1,
+    marginBottom: '15px',
+  },
+
+  announcementText: {
+    marginBottom: '15px',
   },
 
   lblTitle: {
-    fontWeight: '600',
-    fontSize: '20px',
-    marginBottom: '8px',
+    fontWeight: '700',
+    fontSize: '18px',
+    margin: 0,
+    marginBottom: '10px',
+    color: '#333',
   },
 
   lblDetails: {
     fontSize: '14px',
     lineHeight: '1.6',
+    color: '#555',
+    margin: 0,
+  },
+
+  // Images Container Wrapper
+  imagesContainerWrapper: {
+    marginTop: '10px',
+    position: 'relative',
+  },
+
+  // Carousel Header
+  carouselHeader: {
+    marginBottom: '8px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  carouselCounter: {
+    fontSize: '12px',
+    color: '#666',
+    fontWeight: '500',
+    backgroundColor: '#f0f0f0',
+    padding: '4px 8px',
+    borderRadius: '4px',
+  },
+
+  // Images Container with carousel
+  imagesContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    position: 'relative',
+    minHeight: '90px',
+  },
+
+  imagesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(6, 1fr)',
+    gap: '8px',
+    flex: 1,
+  },
+
+  imageWrapper: {
+    position: 'relative',
+  },
+
+  announcementImage: {
+    width: '100%',
+    height: '80px',
+    objectFit: 'cover',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    border: '1px solid #e0e0e0',
+    transition: 'transform 0.2s ease',
+  },
+
+  // Carousel Arrows
+  carouselArrowLeft: {
+    position: 'absolute',
+    left: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'rgba(0, 146, 5, 0.8)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '28px',
+    height: '28px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    transition: 'all 0.2s ease',
+  },
+
+  carouselArrowRight: {
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'rgba(0, 146, 5, 0.8)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '28px',
+    height: '28px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    transition: 'all 0.2s ease',
+  },
+
+  // Image Number Badge
+  imageNumberBadge: {
+    position: 'absolute',
+    top: '4px',
+    right: '4px',
+    background: 'rgba(0, 0, 0, 0.7)',
+    color: 'white',
+    fontSize: '10px',
+    fontWeight: 'bold',
+    width: '18px',
+    height: '18px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Carousel Indicators
+  carouselIndicators: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '6px',
+    marginTop: '10px',
+  },
+
+  carouselIndicator: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
+    border: '1px solid #ddd',
+    background: 'white',
+    cursor: 'pointer',
+    fontSize: '11px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+  },
+
+  carouselIndicatorActive: {
+    background: '#009205',
+    color: 'white',
+    borderColor: '#009205',
+  },
+
+  // Footer
+  announcementFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    paddingTop: '15px',
+    borderTop: '1px solid #f0f0f0',
   },
 
   readBtn: {
-    padding: '5px 10px',
+    padding: '6px 16px',
     fontWeight: '500',
-    borderRadius: '5px',
+    borderRadius: '6px',
     border: 'none',
-    backgroundColor: '#4a90e2',
-    color: '#fff',
     cursor: 'pointer',
     transition: 'background-color 0.2s ease-in-out',
-    fontSize: '14px',
+    fontSize: '13px',
   },
 
+
+  // Preview Overlay
+  previewOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.85)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+  },
+
+  previewImageLarge: {
+    maxWidth: '90%',
+    maxHeight: '90%',
+    borderRadius: '8px',
+    boxShadow: '0 0 30px rgba(0,0,0,0.5)',
+  },
+
+  closePreviewButton: {
+    position: 'absolute',
+    background: 'rgba(255, 255, 255, 0.2)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
+    fontSize: '20px',
+    cursor: 'pointer',
+    top: '20px',
+    right: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.2s ease',
+  },
+
+
+  // Modal Styles
   modalOverlay: {
     position: 'fixed',
     top: 0,
@@ -1142,12 +1596,6 @@ const styles = {
     backgroundColor: '#f8f9fa',
   },
 
-  formGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr',
-    gap: '16px',
-    marginBottom: '20px',
-  },
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
@@ -1223,42 +1671,6 @@ const styles = {
     color: '#333',
     marginBottom: '12px',
   },
-  attachmentList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  attachmentItem: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px',
-    backgroundColor: '#fff',
-    borderRadius: '6px',
-    border: '1px solid #e9ecef',
-  },
-  attachmentIcon: {
-    marginRight: '8px',
-    color: '#666',
-  },
-  attachmentName: {
-    flex: 1,
-    fontSize: '14px',
-    color: '#333',
-  },
-  removeButton: {
-    background: 'none',
-    border: 'none',
-    color: '#ff4757',
-    cursor: 'pointer',
-    padding: '4px',
-    borderRadius: '4px',
-    width: '24px',
-    height: '24px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   imagesPreview: {
     display: 'flex',
     gap: '12px',
@@ -1375,122 +1787,12 @@ const styles = {
   resultsCount: {
     fontSize: '14px',
     color: '#666',
-    marginBottom: '10px',
+    marginBottom: '15px',
     fontStyle: 'italic',
-  },
-  
-  announcementsList: {
-    marginTop: '20px',
+    paddingLeft: '5px',
   },
 
-  // Disabled states
-  menuDotsDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  uploadButtonDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  deleteBtnDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-
-  // Rest of existing styles...
-  inputsColumn: {
-    display: 'flex',
-    justifyContent: 'space-between'
-  },
-  btnFile: {
-    padding: '8px 15px',
-    borderRadius: '6px',
-    backgroundColor: '#ff574b',
-    color: '#fff',
-    border: 'none',
-    cursor: 'pointer',
-    marginRight: '10px',
-    boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.57)',
-    fontWeight: '500'
-  },
-  btnImage: {
-    padding: '8px 15px',
-    borderRadius: '6px',
-    backgroundColor: '#9cff4b',
-    color: '#000',
-    border: 'none',
-    cursor: 'pointer',
-    boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.57)',
-    fontWeight: '500'
-  },
-  inputsRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: '10px'
-  },
-  inputsRow2: {
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  btnBottom: {
-    display: 'flex',
-    gap: '10px',
-    marginTop: '10px',
-    justifyContent: 'flex-end'
-  },
-  btnPost: {
-    backgroundColor: '#001eff',
-    color: '#fff',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '6px',
-    fontSize: '14px',
-    cursor: 'pointer',
-  },
-  btnCancel: {
-    backgroundColor: '#ccc',
-    color: '#000',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '6px',
-    fontSize: '14px',
-    cursor: 'pointer',
-  },
-  modalInputs: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '15px',
-  },
-  txtArea: {
-    width: '100%',
-    height: '100px',
-    padding: '10px',
-    borderRadius: '6px',
-    border: '1px solid #ccc',
-    fontSize: '14px',
-    resize: 'vertical',
-  },
-  selects: {
-    padding: '3px 10px',
-    marginLeft: '5px',
-    borderRadius: '5px',
-  },
-  postAnnouncement: {
-    borderBottom: '1px solid #dcdcdcff',
-    fontSize: '20px',
-    fontWeight: '500'
-  },
-  menuDots: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '6px',
-    fontSize: '16px'
-  },
+  // Menu Styles
   menu: {
     position: "absolute",
     top: "100%",
@@ -1498,7 +1800,7 @@ const styles = {
     background: "#fff",
     border: "1px solid #ddd",
     borderRadius: "6px",
-    boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
     zIndex: 9999,
     minWidth: "120px",
     display: 'flex',
@@ -1508,9 +1810,11 @@ const styles = {
     border: 'none',
     background: 'none',
     cursor: 'pointer',
-    padding: '8px 12px',
+    padding: '10px 16px',
     textAlign: 'left',
     fontSize: '14px',
+    color: '#333',
+    transition: 'background-color 0.2s ease',
   },
   buttonMenu1: {
     borderBottom: '1px solid #eee',
@@ -1519,48 +1823,56 @@ const styles = {
     borderTop: 'none',
     background: 'none',
     cursor: 'pointer',
-    padding: '8px 12px',
+    padding: '10px 16px',
     textAlign: 'left',
     fontSize: '14px',
+    color: '#333',
+    transition: 'background-color 0.2s ease',
   },
+
+  // Delete Modal
   deleteButtons: {
     display: 'flex',
     flexDirection: 'row',
     gap: '20px',
   },
   deleteBtn: {
-    padding: '8px 20px',
+    padding: '10px 24px',
     fontSize: '14px',
     fontWeight: 500,
     border: 'none',
-    borderRadius: '5px',
-    backgroundColor: 'red',
+    borderRadius: '6px',
+    backgroundColor: '#ff4757',
     color: 'white',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
   },
   cnldeleteBtn: {
-    padding: '8px 20px',
+    padding: '10px 24px',
     fontSize: '14px',
     fontWeight: 500,
     border: 'none',
-    borderRadius: '5px',
-    backgroundColor: 'rgba(200, 200, 200, 1)',
-    cursor: 'pointer'
+    borderRadius: '6px',
+    backgroundColor: '#e9ecef',
+    color: '#333',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
   },
   questionDelete: {
-    fontSize: '20px',
+    fontSize: '18px',
     textAlign: 'center',
-    marginBottom: '20px',
+    marginBottom: '24px',
+    color: '#333',
   },
   modalContainerDel: {
     backgroundColor: '#ffffff',
     width: '500px',
-    padding: '30px',
+    padding: '32px',
     borderRadius: '12px',
-    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.2)',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    gap: '24px',
     alignItems: 'center'
   },
   modalContent: {
@@ -1597,6 +1909,24 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
+  },
+
+  // Disabled states
+  menuDotsDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  uploadButtonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  deleteBtnDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
   },
 };
 
