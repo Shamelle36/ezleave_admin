@@ -321,72 +321,75 @@ function Messages() {
   };
 
   // Listen to all conversations to get latest messages for preview
-  useEffect(() => {
-    if (!adminData || !adminType) return;
+useEffect(() => {
+  if (!adminData || !adminType) return;
 
-    const myId = `${adminType}:${adminData.id}`;
+  const myId = `${adminType}:${adminData.id}`;
+  
+  // Listen to all conversations
+  conversationsRef.current = ref(database, 'conversations');
+  
+  const unsubscribe = onValue(conversationsRef.current, (snapshot) => {
+    const conversationsData = snapshot.val();
     
-    // Listen to all conversations
-    conversationsRef.current = ref(database, 'conversations');
-    
-    const unsubscribe = onValue(conversationsRef.current, (snapshot) => {
-      const conversationsData = snapshot.val();
+    if (conversationsData) {
+      console.log('📂 Loading conversations for previews...');
       
-      if (conversationsData) {
-        console.log('📂 Loading conversations for previews...');
+      // Create a map to store latest conversation data for each user
+      const userConversationsMap = {};
+      
+      Object.keys(conversationsData).forEach(conversationId => {
+        const conversation = conversationsData[conversationId];
         
-        // Process each conversation to find the latest message
-        const conversationUpdates = {};
-        
-        Object.keys(conversationsData).forEach(conversationId => {
-          const conversation = conversationsData[conversationId];
+        // Check if this conversation involves the current user
+        if (conversation.participants && conversation.participants[myId]) {
+          // Find the other participant
+          const otherParticipantId = Object.keys(conversation.participants).find(id => id !== myId);
           
-          // Check if this conversation involves the current user
-          if (conversation.participants && conversation.participants[myId]) {
-            // Find the other participant
-            const otherParticipantId = Object.keys(conversation.participants).find(id => id !== myId);
-            
-            if (otherParticipantId) {
-              const otherParticipant = conversation.participants[otherParticipantId];
-              
-              // Store the latest message for this user
-              conversationUpdates[otherParticipantId] = {
-                lastMessage: conversation.lastMessage || '',
-                lastMessageTime: conversation.lastMessageTime || 0,
-                lastMessageSender: conversation.lastMessageSender || ''
-              };
-            }
+          if (otherParticipantId && conversation.lastMessageTime) {
+            // Store conversation data for this user
+            userConversationsMap[otherParticipantId] = {
+              lastMessage: conversation.lastMessage || '',
+              lastMessageTime: conversation.lastMessageTime || 0,
+              lastMessageSender: conversation.lastMessageSender || '',
+              hasConversation: true
+            };
           }
+        }
+      });
+      
+      // Update users with their latest messages
+      setUsers(prevUsers => {
+        return prevUsers.map(user => {
+          const userKey = `${user.account_type}:${user.id}`;
+          const conversationData = userConversationsMap[userKey];
+          
+          if (conversationData) {
+            return {
+              ...user,
+              message: conversationData.lastMessage,
+              time: formatTime(conversationData.lastMessageTime),
+              lastMessageTime: conversationData.lastMessageTime,
+              lastMessageSender: conversationData.lastMessageSender,
+              hasConversation: true
+            };
+          }
+          return {
+            ...user,
+            lastMessageTime: user.lastMessageTime || 0,
+            hasConversation: user.hasConversation || false
+          };
         });
-        
-        // Update users with their latest messages
-        setUsers(prevUsers => {
-          return prevUsers.map(user => {
-            const userKey = `${user.account_type}:${user.id}`;
-            const conversationData = conversationUpdates[userKey];
-            
-            if (conversationData) {
-              return {
-                ...user,
-                message: conversationData.lastMessage,
-                time: conversationData.lastMessageTime ? 
-                  formatTime(conversationData.lastMessageTime) : '',
-                lastMessageTime: conversationData.lastMessageTime,
-                lastMessageSender: conversationData.lastMessageSender
-              };
-            }
-            return user;
-          });
-        });
-      }
-    });
-    
-    return () => {
-      if (conversationsRef.current) {
-        off(conversationsRef.current);
-      }
-    };
-  }, [adminData, adminType]);
+      });
+    }
+  });
+  
+  return () => {
+    if (conversationsRef.current) {
+      off(conversationsRef.current);
+    }
+  };
+}, [adminData, adminType]);
 
   // Format time for display
   const formatTime = (timestamp) => {
@@ -482,21 +485,22 @@ function Messages() {
   }, [selectedUser, adminData, adminType]);
 
   // Update user preview with latest message
-  const updateUserPreview = (userId, message, timestamp) => {
-    setUsers(prevUsers => {
-      return prevUsers.map(user => {
-        if (user.id === userId) {
-          return {
-            ...user,
-            message: message,
-            time: formatTime(timestamp),
-            lastMessageTime: timestamp
-          };
-        }
-        return user;
-      });
+const updateUserPreview = (userId, message, timestamp) => {
+  setUsers(prevUsers => {
+    return prevUsers.map(user => {
+      if (user.id === userId) {
+        return {
+          ...user,
+          message: message,
+          time: formatTime(timestamp),
+          lastMessageTime: timestamp,
+          hasConversation: true // Mark that this user has a conversation
+        };
+      }
+      return user;
     });
-  };
+  });
+};
 
   // Setup typing indicator listener
   const setupTypingListener = (myId, otherId) => {
@@ -1062,19 +1066,25 @@ function Messages() {
     setSearchQuery(e.target.value);
   };
 
-  // Sort users by last message time (most recent first)
-  const sortedUsers = [...users].sort((a, b) => {
-    if (a.lastMessageTime && b.lastMessageTime) {
-      return b.lastMessageTime - a.lastMessageTime;
-    }
-    if (a.lastMessageTime && !b.lastMessageTime) {
-      return -1;
-    }
-    if (!a.lastMessageTime && b.lastMessageTime) {
-      return 1;
-    }
-    return 0;
-  });
+ const sortedUsers = [...users].sort((a, b) => {
+  // First, prioritize users with conversations over those without
+  if (a.hasConversation && !b.hasConversation) return -1;
+  if (!a.hasConversation && b.hasConversation) return 1;
+  
+  // Then sort by last message time (most recent first)
+  if (a.lastMessageTime && b.lastMessageTime) {
+    return b.lastMessageTime - a.lastMessageTime;
+  }
+  if (a.lastMessageTime && !b.lastMessageTime) {
+    return -1;
+  }
+  if (!a.lastMessageTime && b.lastMessageTime) {
+    return 1;
+  }
+  
+  // Finally, sort alphabetically by name
+  return a.name.localeCompare(b.name);
+});
 
   const filteredUsers = sortedUsers.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
