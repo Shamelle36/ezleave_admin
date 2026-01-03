@@ -205,7 +205,7 @@ useEffect(() => {
   };
 }, [adminData, adminType]);
 
- const initializeWebSocket = () => {
+const initializeWebSocket = () => {
   // Clear any existing socket first
   if (socket) {
     socket.close();
@@ -217,34 +217,72 @@ useEffect(() => {
     return;
   }
 
+  // Debug: Check what data we have
+  console.log('🔍 WebSocket connection data:', {
+    adminId: adminData.id,
+    adminType: adminType,
+    name: adminData.full_name || adminData.name,
+    email: adminData.email,
+    role: adminData.role
+  });
+
+  // Try different parameter formats to see what works
   let connectUrl;
   
-  // ✅ FIXED: Use the correct parameter names your server expects
-  if (adminType === 'useradmin') {
-    connectUrl = `${API_URL.replace('https', 'wss')}/?id=${adminData.id}&type=useradmin`;
-  } else if (adminType === 'admin_account') {
-    connectUrl = `${API_URL.replace('https', 'wss')}/?id=${adminData.id}&type=admin_account`;
-  } else {
-    connectUrl = `${API_URL.replace('https', 'wss')}/?id=${adminData.id}&type=user`;
-  }
+  // Try multiple formats - one of these should work
+  const formats = [
+    // Format 1: Standard format
+    `${API_URL.replace('https', 'wss')}/ws?id=${adminData.id}&type=${adminType}&name=${encodeURIComponent(adminData.full_name || adminData.name)}`,
+    
+    // Format 2: Alternative format
+    `${API_URL.replace('https', 'wss')}/ws?userId=${adminData.id}&userType=${adminType}`,
+    
+    // Format 3: Another common format
+    `${API_URL.replace('https', 'wss')}/ws?adminId=${adminData.id}&adminType=${adminType}`,
+    
+    // Format 4: Simple format
+    `${API_URL.replace('https', 'wss')}/ws?${adminType}_id=${adminData.id}`
+  ];
 
+  // Try the first format for now
+  connectUrl = formats[0];
+  
   console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
   setConnectionStatus('Connecting...');
 
   const ws = new WebSocket(connectUrl);
   
+  // Add connection timeout
+  const connectionTimeout = setTimeout(() => {
+    if (ws.readyState === WebSocket.CONNECTING) {
+      console.error('❌ WebSocket connection timeout');
+      ws.close();
+      setConnectionStatus('Connection Timeout');
+    }
+  }, 10000);
+
   ws.onopen = () => {
+    clearTimeout(connectionTimeout);
     console.log('✅ WebSocket connected successfully');
     setSocket(ws);
     setConnectionStatus('Connected');
     
-    // Send authentication message
-    ws.send(JSON.stringify({
-      type: 'auth',
-      adminId: adminData.id,
-      adminType: adminType,
-      name: adminData.full_name || adminData.name
-    }));
+    // Send authentication message immediately after connection
+    setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        const authMessage = {
+          type: 'auth',
+          id: adminData.id,
+          userType: adminType,
+          name: adminData.full_name || adminData.name,
+          email: adminData.email,
+          role: adminData.role || 'admin'
+        };
+        
+        console.log('🔑 Sending auth message:', authMessage);
+        ws.send(JSON.stringify(authMessage));
+      }
+    }, 100);
   };
 
   ws.onmessage = (event) => {
@@ -254,7 +292,11 @@ useEffect(() => {
 
       switch(data.type) {
         case 'auth_success':
-          console.log('✅ WebSocket authentication confirmed');
+        case 'connection_established':
+          console.log('✅ WebSocket authentication confirmed:', data.message || 'Connected');
+          if (data.clientId) {
+            console.log('🆔 Assigned client ID:', data.clientId);
+          }
           break;
           
         case 'new_message':
@@ -293,6 +335,14 @@ useEffect(() => {
           
         case 'error':
           console.error('❌ WebSocket error:', data.message);
+          if (data.message.includes('Missing user identification')) {
+            // Try a different connection format
+            console.log('🔄 Server wants different parameters, checking server code...');
+          }
+          break;
+          
+        case 'pong':
+          // Heartbeat response
           break;
           
         default:
@@ -300,26 +350,33 @@ useEffect(() => {
       }
     } catch (error) {
       console.error('❌ Error parsing WebSocket message:', error);
+      console.log('📨 Raw message:', event.data);
     }
   };
 
   ws.onerror = (error) => {
+    clearTimeout(connectionTimeout);
     console.error('❌ WebSocket error:', error);
     setConnectionStatus('Connection Error');
   };
 
   ws.onclose = (event) => {
-    console.log('🔌 WebSocket disconnected:', event.code, event.reason);
-    setConnectionStatus('Disconnected');
+    clearTimeout(connectionTimeout);
+    console.log('🔌 WebSocket disconnected:', {
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean
+    });
+    setConnectionStatus(`Disconnected: ${event.reason || 'Unknown reason'}`);
     setSocket(null);
     
-    // Auto-reconnect after 5 seconds
+    // Auto-reconnect after 3 seconds
     setTimeout(() => {
       if (adminData && adminType) {
         console.log('🔄 Attempting to reconnect WebSocket...');
         initializeWebSocket();
       }
-    }, 5000);
+    }, 3000);
   };
 
   // Set up heartbeat to keep connection alive
@@ -327,7 +384,7 @@ useEffect(() => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'ping' }));
     }
-  }, 30000);
+  }, 25000); // Every 25 seconds
 
   // Store the interval ID for cleanup
   ws.heartbeatInterval = heartbeatInterval;
