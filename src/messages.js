@@ -22,8 +22,7 @@ import {
   faCheck,
   faTimes,
   faBars,
-  faArrowLeft,
-  faRefresh
+  faArrowLeft
 } from '@fortawesome/free-solid-svg-icons';
 import { useState, useEffect, useRef } from 'react';
 import './message-responsive.css';
@@ -44,8 +43,7 @@ function Messages() {
   const [isTyping, setIsTyping] = useState(false);
   const [socket, setSocket] = useState(null);
   const typingTimeoutRef = useRef(null);
-  const [connectionStatus, setConnectionStatus] = useState('Disconnected');
-  const [lastMessageTime, setLastMessageTime] = useState(null);
+    const [connectionStatus, setConnectionStatus] = useState('Disconnected');
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
@@ -54,6 +52,8 @@ function Messages() {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  const getFullId = (type, id) => `${type}:${id}`;
+
   
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
@@ -91,298 +91,396 @@ function Messages() {
     }
   }, [selectedUser, isMobile]);
 
-  useEffect(() => {
-    const checkAndConnect = async () => {
-      const admin = JSON.parse(localStorage.getItem("admin"));
-      if (admin) {
-        console.log("👤 Found admin data:", admin);
-        setAdminData(admin);
+
+// REPLACE your existing useEffect for admin data with this:
+useEffect(() => {
+  const checkAndConnect = async () => {
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    if (admin) {
+      console.log("👤 Found admin data:", admin);
+      setAdminData(admin);
+      
+      // ✅ SIMPLIFIED FIX: Determine admin type based on role
+      let adminType = '';
+      
+      // Check the role field first (most reliable)
+      if (admin.role) {
+        console.log(`🎭 Admin role detected: ${admin.role}`);
         
-        let adminType = '';
-        
-        if (admin.role) {
-          console.log(`🎭 Admin role detected: ${admin.role}`);
-          
-          if (admin.role.toLowerCase() === 'mayor') {
-            adminType = 'admin_account';
-          } else if (admin.role.toLowerCase() === 'office_head') {
-            adminType = 'admin_account';
-          } else if (admin.role.toLowerCase().includes('admin')) {
-            if (admin.role.toLowerCase().includes('useradmin') || admin.role === 'admin') {
-              adminType = 'useradmin';
-            } else {
-              adminType = 'admin_account';
-            }
-          } else {
-            adminType = 'user';
-          }
-        } else if (admin.table) {
-          console.log(`📊 Admin table detected: ${admin.table}`);
-          adminType = admin.table === 'useradmin' ? 'useradmin' : 
-                     admin.table === 'admin_accounts' ? 'admin_account' : 'user';
-        } else {
-          const storedAdminType = localStorage.getItem('admin_type');
-          if (storedAdminType) {
-            adminType = storedAdminType;
-            console.log(`💾 Using stored admin type: ${adminType}`);
-          } else {
-            adminType = 'useradmin';
-            console.log(`⚠️ No admin type detected, defaulting to: ${adminType}`);
-          }
+        // Check for mayor role
+        if (admin.role.toLowerCase() === 'mayor') {
+          adminType = 'admin_account'; // Mayors should be admin_account type
+        } 
+        // Check for office_head role
+        else if (admin.role.toLowerCase() === 'office_head') {
+          adminType = 'admin_account'; // Office heads should also be admin_account type
         }
-        
-        console.log(`🔧 FINAL admin type: ${adminType}`);
-        setAdminType(adminType);
-        localStorage.setItem('admin_type', adminType);
-        
-        setTimeout(() => {
-          initializeWebSocket();
-        }, 500);
-      } else {
-        console.log('❌ No admin data found in localStorage');
-        navigate("/");
+        // Check for regular admin roles
+        else if (admin.role.toLowerCase().includes('admin')) {
+          // Check if it's useradmin or admin_account
+          if (admin.role.toLowerCase().includes('useradmin') || admin.role === 'admin') {
+            adminType = 'useradmin';
+          } else {
+            adminType = 'admin_account';
+          }
+        } else {
+          // Default to user if no admin role detected
+          adminType = 'user';
+        }
+      } 
+      // If no role field, check table field
+      else if (admin.table) {
+        console.log(`📊 Admin table detected: ${admin.table}`);
+        adminType = admin.table === 'useradmin' ? 'useradmin' : 
+                   admin.table === 'admin_accounts' ? 'admin_account' : 'user';
       }
-    };
-    
-    checkAndConnect();
-    
-    return () => {
-      if (socket) {
-        console.log('🧹 Cleaning up WebSocket connection');
-        socket.close();
+      // Last resort: check localStorage for stored admin type
+      else {
+        const storedAdminType = localStorage.getItem('admin_type');
+        if (storedAdminType) {
+          adminType = storedAdminType;
+          console.log(`💾 Using stored admin type: ${adminType}`);
+        } else {
+          // Default to useradmin for safety
+          adminType = 'useradmin';
+          console.log(`⚠️ No admin type detected, defaulting to: ${adminType}`);
+        }
       }
-    };
-  }, []);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  const closeMobileMenus = () => {
-    if (isMobile) {
-      setIsSidebarOpen(false);
-      setIsUserListOpen(false);
+      
+      console.log(`🔧 FINAL admin type: ${adminType}`);
+      setAdminType(adminType);
+      
+      // Store admin type in localStorage for future use
+      localStorage.setItem('admin_type', adminType);
+      
+      // Initialize WebSocket connection
+      setTimeout(() => {
+        initializeWebSocket();
+      }, 500);
+    } else {
+      console.log('❌ No admin data found in localStorage');
+      // Redirect to login if no admin data
+      navigate("/");
     }
   };
+  
+  checkAndConnect();
+  
+  // Cleanup function
+  return () => {
+    if (socket) {
+      console.log('🧹 Cleaning up WebSocket connection');
+      socket.close();
+    }
+  };
+}, []);
+
+// KEEP your existing initializeWebSocket function as is
 
   useEffect(() => {
-    if (adminData && adminType) {
-      initializeWebSocket();
-    }
+  const checkMobile = () => {
+    setIsMobile(window.innerWidth <= 768);
+  };
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  return () => window.removeEventListener('resize', checkMobile);
+}, []);
 
-    return () => {
-      if (socket) {
-        socket.close();
-      }
-    };
-  }, [adminData, adminType]);
+ 
 
-  useEffect(() => {
-  if (socket) {
-    console.log('🔌 Socket connection status:', {
-      readyState: socket.readyState,
-      CONNECTING: WebSocket.CONNECTING,
-      OPEN: WebSocket.OPEN,
-      CLOSING: WebSocket.CLOSING,
-      CLOSED: WebSocket.CLOSED
-    });
-    
-    switch(socket.readyState) {
-      case WebSocket.CONNECTING:
-        setConnectionStatus('Connecting...');
-        break;
-      case WebSocket.OPEN:
-        setConnectionStatus('Connected');
-        break;
-      case WebSocket.CLOSING:
-        setConnectionStatus('Disconnecting...');
-        break;
-      case WebSocket.CLOSED:
-        setConnectionStatus('Disconnected');
-        break;
-    }
+  const closeMobileMenus = () => {
+  if (isMobile) {
+    setIsSidebarOpen(false);
+    setIsUserListOpen(false);
   }
-}, [socket]);
+};
+useEffect(() => {
+  if (adminData && adminType) {
+    initializeWebSocket();
+  }
 
-  const initializeWebSocket = () => {
+  return () => {
     if (socket) {
       socket.close();
     }
+  };
+}, [adminData, adminType]);
 
-    if (!adminData || !adminData.id || !adminType) {
-      console.error('❌ Cannot initialize WebSocket: Missing admin data');
-      setConnectionStatus('Missing admin data');
-      return;
+const initializeWebSocket = () => {
+  // Clear any existing socket first
+  if (socket) {
+    socket.close();
+  }
+
+  if (!adminData || !adminData.id || !adminType) {
+    console.error('❌ Cannot initialize WebSocket: Missing admin data');
+    setConnectionStatus('Missing admin data');
+    return;
+  }
+
+  // Debug: Check what data we have
+  console.log('🔍 WebSocket connection data:', {
+    adminId: adminData.id,
+    adminType: adminType,
+    name: adminData.full_name || adminData.name || 'Admin',
+    email: adminData.email,
+    role: adminData.role
+  });
+
+  // ✅ CRITICAL FIX: Use the correct parameter names based on your server code
+  // Looking at your sendToUser function in backend, it expects userId and userType
+  const connectUrl = `${API_URL.replace('https', 'wss')}/?userId=${adminData.id}&userType=${adminType}`;
+  
+  console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
+  setConnectionStatus('Connecting...');
+
+  const ws = new WebSocket(connectUrl);
+  
+  // Add connection timeout
+  const connectionTimeout = setTimeout(() => {
+    if (ws.readyState === WebSocket.CONNECTING) {
+      console.error('❌ WebSocket connection timeout');
+      ws.close();
+      setConnectionStatus('Connection Timeout');
     }
+  }, 5000);
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsBase = API_URL.replace(/^https?:\/\//, '');
-    const connectUrl = `${wsProtocol}//${wsBase}/ws/?userId=${adminData.id}&userType=${adminType}`;
-    
-    console.log(`🔗 Connecting to WebSocket: ${connectUrl}`);
-    setConnectionStatus('Connecting...');
-
-    const ws = new WebSocket(connectUrl);
-    
-    const connectionTimeout = setTimeout(() => {
-      if (ws.readyState === WebSocket.CONNECTING) {
-        console.error('❌ WebSocket connection timeout');
-        ws.close();
-        setConnectionStatus('Connection Timeout');
-      }
-    }, 5000);
-
-    ws.onopen = () => {
-      clearTimeout(connectionTimeout);
-      console.log('✅ WebSocket connected successfully');
-      setSocket(ws);
-      setConnectionStatus('Connected');
-      
-      setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          const welcomeMessage = {
-            type: 'identification',
-            userId: adminData.id,
-            userType: adminType,
-            userName: adminData.full_name || adminData.name || 'Admin',
-            email: adminData.email,
-            timestamp: new Date().toISOString()
-          };
-          
-          console.log('👋 Sending identification:', welcomeMessage);
-          ws.send(JSON.stringify(welcomeMessage));
-        }
-      }, 500);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('📩 WebSocket message received:', data);
-
-        switch(data.type) {
-          case 'welcome':
-          case 'identification_accepted':
-            console.log('✅ Server accepted our identification');
-            break;
-            
-          case 'new_message':
-            console.log('💌 New message via WebSocket:', data);
-            if (data.message) {
-              handleIncomingMessage(data);
-            }
-            break;
-            
-          case 'message_sent':
-            console.log('✓ Message sent confirmation:', data);
-            if (data.message && data.message.messageId) {
-              setMessages(prev => prev.map(msg => 
-                msg.tempId === data.message.tempId ? { ...msg, id: data.message.messageId, delivered: true } : msg
-              ));
-            }
-            break;
-            
-          case 'message_received':
-            console.log('✓ Message delivery confirmation:', data);
-            if (data.messageId) {
-              setMessages(prev => prev.map(msg => 
-                msg.id === data.messageId ? { ...msg, delivered: true } : msg
-              ));
-            }
-            break;
-            
-          case 'typing':
-            console.log('⌨️ Typing indicator:', data);
-            if (data.isTyping && selectedUser && 
-                data.senderId == selectedUser.id && 
-                data.senderType === selectedUser.account_type) {
-              setIsTyping(true);
-              
-              setTimeout(() => {
-                setIsTyping(false);
-              }, 2000);
-            } else if (!data.isTyping) {
-              setIsTyping(false);
-            }
-            break;
-            
-          case 'user_online':
-            console.log('🟢 User online:', data);
-            if (data.userId && data.userType) {
-              setOnlineStatus(prev => ({
-                ...prev,
-                [`${data.userType}:${data.userId}`]: true
-              }));
-            }
-            break;
-            
-          case 'user_offline':
-            console.log('🔴 User offline:', data);
-            if (data.userId && data.userType) {
-              setOnlineStatus(prev => ({
-                ...prev,
-                [`${data.userType}:${data.userId}`]: false
-              }));
-            }
-            break;
-            
-          case 'error':
-            console.error('❌ WebSocket error:', data.message);
-            break;
-            
-          case 'pong':
-            break;
-            
-          default:
-            console.log('📨 Unknown message type:', data.type, data);
-        }
-      } catch (error) {
-        console.error('❌ Error parsing WebSocket message:', error);
-        console.log('📨 Raw message:', event.data);
-      }
-    };
-
-    ws.onerror = (error) => {
-      clearTimeout(connectionTimeout);
-      console.error('❌ WebSocket error:', error);
-      setConnectionStatus('Connection Error');
-    };
-
-    ws.onclose = (event) => {
-      clearTimeout(connectionTimeout);
-      console.log('🔌 WebSocket disconnected:', {
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean
-      });
-      setConnectionStatus(`Disconnected: ${event.reason || 'Unknown reason'}`);
-      setSocket(null);
-      
-      setTimeout(() => {
-        if (adminData && adminType) {
-          console.log('🔄 Attempting to reconnect WebSocket...');
-          initializeWebSocket();
-        }
-      }, 3000);
-    };
-
-    const heartbeatInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 30000);
-
-    ws.heartbeatInterval = heartbeatInterval;
-    
+  ws.onopen = () => {
+    clearTimeout(connectionTimeout);
+    console.log('✅ WebSocket connected successfully');
     setSocket(ws);
+    setConnectionStatus('Connected');
+    
+    // Send a welcome/identification message after connection
+    setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        const welcomeMessage = {
+          type: 'identification',
+          userId: adminData.id,
+          userType: adminType,
+          userName: adminData.full_name || adminData.name || 'Admin',
+          timestamp: new Date().toISOString()
+        };
+        
+        console.log('👋 Sending identification:', welcomeMessage);
+        ws.send(JSON.stringify(welcomeMessage));
+      }
+    }, 500);
   };
 
-  const handleIncomingMessage = (data) => {
+ ws.onmessage = (event) => {
+  try {
+    const data = JSON.parse(event.data);
+    console.log('📩 WebSocket message received:', data);
+
+    switch(data.type) {
+      case 'welcome':
+      case 'identification_accepted':
+        console.log('✅ Server accepted our identification');
+        break;
+        
+      case 'new_message':
+        console.log('💌 New message via WebSocket:', data);
+        // Process incoming message for BOTH sidebar AND chat area
+        if (data.message) {
+          handleIncomingMessage(data);
+        }
+        break;
+        
+      case 'message_sent':
+        console.log('✓ Message sent confirmation:', data);
+        if (data.message && data.message.messageId) {
+          // Update message delivery status
+          setMessages(prev => prev.map(msg => 
+            msg.id === data.message.messageId ? { ...msg, delivered: true } : msg
+          ));
+        }
+        break;
+        
+      case 'message_received':
+        console.log('✓ Message delivery confirmation:', data);
+        if (data.messageId) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === data.messageId ? { ...msg, delivered: true } : msg
+          ));
+        }
+        break;
+        
+      case 'typing':
+        console.log('⌨️ Typing indicator:', data);
+        if (data.isTyping && selectedUser && 
+            data.senderId == selectedUser.id && 
+            data.senderType === selectedUser.account_type) {
+          setIsTyping(true);
+          
+          // Clear typing indicator after 2 seconds
+          setTimeout(() => {
+            setIsTyping(false);
+          }, 2000);
+        } else if (!data.isTyping) {
+          setIsTyping(false);
+        }
+        break;
+        
+      case 'user_online':
+        console.log('🟢 User online:', data);
+        if (data.userId && data.userType) {
+          setOnlineStatus(prev => ({
+            ...prev,
+            [`${data.userType}:${data.userId}`]: true
+          }));
+        }
+        break;
+        
+      case 'user_offline':
+        console.log('🔴 User offline:', data);
+        if (data.userId && data.userType) {
+          setOnlineStatus(prev => ({
+            ...prev,
+            [`${data.userType}:${data.userId}`]: false
+          }));
+        }
+        break;
+        
+      case 'error':
+        console.error('❌ WebSocket error:', data.message);
+        break;
+        
+      case 'pong':
+        // Heartbeat response - ignore
+        break;
+        
+      default:
+        console.log('📨 Unknown message type:', data.type, data);
+    }
+  } catch (error) {
+    console.error('❌ Error parsing WebSocket message:', error);
+    console.log('📨 Raw message:', event.data);
+  }
+};
+
+  ws.onerror = (error) => {
+    clearTimeout(connectionTimeout);
+    console.error('❌ WebSocket error:', error);
+    setConnectionStatus('Connection Error');
+  };
+
+  ws.onclose = (event) => {
+    clearTimeout(connectionTimeout);
+    console.log('🔌 WebSocket disconnected:', {
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean
+    });
+    setConnectionStatus(`Disconnected: ${event.reason || 'Unknown reason'}`);
+    setSocket(null);
+    
+    // Auto-reconnect after 3 seconds
+    setTimeout(() => {
+      if (adminData && adminType) {
+        console.log('🔄 Attempting to reconnect WebSocket...');
+        initializeWebSocket();
+      }
+    }, 3000);
+  };
+
+  // Set up heartbeat to keep connection alive
+  const heartbeatInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'ping' }));
+    }
+  }, 30000); // Every 30 seconds
+
+  // Store the interval ID for cleanup
+  ws.heartbeatInterval = heartbeatInterval;
+  
+  setSocket(ws);
+};
+
+const processIncomingMessage = (messageData) => {
+  if (!messageData || !adminData || !adminType) return;
+  
+  const myFullId = `${adminType}:${adminData.id}`;
+  const senderFullId = messageData.sender_id;
+  const receiverFullId = messageData.receiver_id;
+  
+  // Check if this message is for me
+  if (receiverFullId !== myFullId) return;
+  
+  // Check if this is from the currently selected user
+  const isFromSelectedUser = selectedUser && 
+    senderFullId === `${selectedUser.account_type}:${selectedUser.id}`;
+  
+  // Add to messages if viewing this conversation
+  if (isFromSelectedUser) {
+    const newMessage = {
+      id: messageData.id || Date.now(),
+      sender: 'other',
+      text: messageData.message,
+      time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      pinned: messageData.pinned || false,
+      read_status: messageData.read_status || false,
+      delivered: true
+    };
+    
+    // Avoid duplicates
+    setMessages(prev => {
+      if (prev.some(m => m.id === newMessage.id)) return prev;
+      return [...prev, newMessage];
+    });
+    
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      const el = document.getElementById('messagesArea');
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 100);
+  }
+  
+  // Update user list with latest message
+  setUsers(prev => prev.map(user => {
+    const userFullId = `${user.account_type}:${user.id}`;
+    
+    if (senderFullId === userFullId) {
+      return {
+        ...user,
+        message: messageData.message,
+        time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        // Increment unread if not viewing this conversation
+        unread: !isFromSelectedUser ? (user.unread || 0) + 1 : user.unread
+      };
+    }
+    return user;
+  }));
+  
+  // Mark as read if viewing this conversation
+  if (isFromSelectedUser && !messageData.read_status) {
+    markMessagesAsRead(selectedUser.id, selectedUser.account_type);
+    
+    // Send read receipt via WebSocket
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'message_read',
+        messageId: messageData.id,
+        senderId: selectedUser.id,
+        senderType: selectedUser.account_type
+      }));
+    }
+  }
+  
+  // Show notification if not viewing conversation
+  if (!isFromSelectedUser) {
+    console.log('📱 New message from:', messageData.sender_name);
+    // You could add a toast notification here
+  }
+};
+
+const handleIncomingMessage = (data) => {
   console.log('📥 handleIncomingMessage called with:', data);
   
   if (!data.message || !adminData || !adminType) {
@@ -393,72 +491,117 @@ function Messages() {
   const messageData = data.message;
   const myFullId = `${adminType}:${adminData.id}`;
   
-  console.log('🔍 Checking message destination:', {
-    myFullId,
-    receiverId: messageData.receiver_id,
-    senderId: messageData.sender_id
+  console.log('🔍 Message details:', {
+    messageId: messageData.id,
+    sender_id: messageData.sender_id,
+    receiver_id: messageData.receiver_id,
+    myFullId: myFullId,
+    isForMe: messageData.receiver_id === myFullId,
+    isFromMe: messageData.sender_id === myFullId
   });
   
   // Check if message is for me
-  if (messageData.receiver_id === myFullId) {
-    console.log('✅ Message is for me');
+  if (messageData.receiver_id !== myFullId) {
+    console.log('📨 Message not for me, ignoring');
+    return;
+  }
+  
+  const isForMe = messageData.receiver_id === myFullId;
+  const isFromMe = messageData.sender_id === myFullId;
+  
+  // If message is from me, don't process it as incoming (it's outgoing)
+  if (isFromMe) {
+    console.log('📤 This is my own outgoing message, skipping');
+    return;
+  }
+  
+  // Extract sender ID from the sender_id format "type:id"
+  let senderId, senderType;
+  if (messageData.sender_id && messageData.sender_id.includes(':')) {
+    const parts = messageData.sender_id.split(':');
+    senderType = parts[0];
+    senderId = parts[1];
+  } else {
+    console.log('❌ Invalid sender_id format:', messageData.sender_id);
+    return;
+  }
+  
+  console.log('👤 Extracted sender info:', { senderId, senderType });
+  
+  // Check if this message is from the currently selected user
+  const isFromSelectedUser = selectedUser && 
+    selectedUser.id.toString() === senderId && 
+    selectedUser.account_type === senderType;
+  
+  console.log('🤔 Is from selected user?', {
+    isFromSelectedUser,
+    selectedUserId: selectedUser?.id,
+    selectedUserType: selectedUser?.account_type,
+    senderId,
+    senderType
+  });
+  
+  // If it's a new message for me AND from the selected user, add to chat
+  if (isForMe && isFromSelectedUser) {
+    console.log('💬 Adding message to chat area:', messageData);
     
-    // Parse sender info
-    let senderId, senderType;
-    if (messageData.sender_id && messageData.sender_id.includes(':')) {
-      const parts = messageData.sender_id.split(':');
-      senderType = parts[0];
-      senderId = parts[1];
-    } else {
-      console.log('❌ Invalid sender_id format');
-      return;
-    }
+    const newMessage = {
+      id: messageData.id || Date.now(),
+      sender: 'other',
+      text: messageData.message,
+      time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      pinned: messageData.pinned || false,
+      read_status: messageData.read_status || false,
+      delivered: true,
+      timestamp: messageData.time || new Date().toISOString()
+    };
     
-    // Check if from selected user
-    const isFromSelectedUser = selectedUser && 
-      selectedUser.id.toString() === senderId && 
-      selectedUser.account_type === senderType;
+    console.log('📝 New message object:', newMessage);
     
-    if (isFromSelectedUser) {
-      // Add to current chat
-      const newMessage = {
-        id: messageData.id || `ws-${Date.now()}`,
-        sender: 'other',
-        text: messageData.message,
-        time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-        pinned: messageData.pinned || false,
-        read_status: messageData.read_status || false,
-        delivered: true,
-        timestamp: messageData.time || new Date().toISOString()
-      };
+    // Add to messages, avoiding duplicates
+    setMessages(prev => {
+      const isDuplicate = prev.some(m => m.id === newMessage.id);
+      console.log('🔍 Checking for duplicates:', { isDuplicate, prevLength: prev.length, newId: newMessage.id });
       
-      setMessages(prev => {
-        // Prevent duplicates
-        const isDuplicate = prev.some(m => 
-          m.id === newMessage.id || 
-          (m.text === newMessage.text && Math.abs(new Date(m.timestamp) - new Date(newMessage.timestamp)) < 1000)
-        );
-        
-        if (isDuplicate) {
-          console.log('⚠️ Duplicate message detected, skipping');
-          return prev;
-        }
-        
-        return [...prev, newMessage];
-      });
+      if (isDuplicate) {
+        console.log('⚠️ Duplicate message detected, skipping');
+        return prev;
+      }
       
-      // Mark as read immediately if viewing chat
-      markMessagesAsRead(senderId, senderType);
-    }
+      console.log('✅ Adding new message to state');
+      const newMessages = [...prev, newMessage];
+      console.log('📊 New messages length:', newMessages.length);
+      return newMessages;
+    });
     
-    // Update user list with latest message
-    setUsers(prev => prev.map(user => {
+    // Auto-scroll to bottom after message is added
+    setTimeout(() => {
+      const el = document.getElementById('messagesArea');
+      if (el) {
+        console.log('⬇️ Auto-scrolling to bottom');
+        el.scrollTop = el.scrollHeight;
+      }
+    }, 100);
+    
+    // Mark as read immediately
+    if (!messageData.read_status) {
+      console.log('📖 Marking message as read');
+      markMessagesAsRead(selectedUser.id, selectedUser.account_type);
+    }
+  }
+  
+  // Always update the user list with latest message
+  setUsers(prev => {
+    const updatedUsers = prev.map(user => {
       const userFullId = `${user.account_type}:${user.id}`;
       
+      // Check if this user is the sender of this message
       if (messageData.sender_id === userFullId) {
+        console.log(`📱 Updating user ${user.name} with new message`);
+        
         const updatedUser = {
           ...user,
           message: messageData.message,
@@ -468,39 +611,91 @@ function Messages() {
           }),
         };
         
-        // Only increment unread if not from selected user
-        if (!isFromSelectedUser) {
+        // If this message is for me and not read, increment unread count
+        // But only if I'm NOT viewing this conversation
+        if (isForMe && !messageData.read_status && !isFromSelectedUser) {
           updatedUser.unread = (user.unread || 0) + 1;
+          console.log(`📱 Incremented unread count for ${user.name}: ${updatedUser.unread}`);
         }
         
         return updatedUser;
       }
       return user;
-    }));
-  }
+    });
+    
+    console.log('👥 Updated user list');
+    return updatedUsers;
+  });
 };
 
-  useEffect(() => {
-    console.log('🔄 Messages state updated:', {
-      messageCount: messages.length,
-      lastMessage: messages[messages.length - 1],
-      selectedUser: selectedUser ? `${selectedUser.account_type}:${selectedUser.id}` : 'none'
-    });
-  }, [messages]);
 
-  useEffect(() => {
-    console.log('👤 Selected user changed:', selectedUser);
-    if (selectedUser) {
-      setMessages([]);
-      fetchConversation(selectedUser.id, selectedUser.account_type);
-    }
-  }, [selectedUser]);
+  const handleMessageRead = (messageId, senderId, senderType) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, read_status: true } : msg
+    ));
+  };
 
-  useEffect(() => {
-    if (adminData && adminType) {
-      fetchAllAccounts();
+  const handleTypingStatus = (senderId, senderType, isTyping) => {
+    if (selectedUser && 
+        selectedUser.id.toString() === senderId.split(':')[1] && 
+        selectedUser.account_type === senderType) {
+      setIsTyping(isTyping);
     }
-  }, [adminData, adminType]);
+  };
+
+  const handleOnlineStatus = (userId, userType, isOnline) => {
+    setOnlineStatus(prev => ({
+      ...prev,
+      [`${userType}:${userId}`]: isOnline
+    }));
+  };
+
+  const handleMessageDelivered = (messageId) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, delivered: true } : msg
+    ));
+  };
+
+  // Handle typing indicator
+ const handleInputChange = (e) => {
+  const value = e.target.value;
+  setInput(value);
+  
+  if (!socket || socket.readyState !== WebSocket.OPEN || !selectedUser) return;
+  
+  // Clear previous timeout
+  if (typingTimeoutRef.current) {
+    clearTimeout(typingTimeoutRef.current);
+  }
+  
+  // Send typing started
+  if (value.length > 0) {
+    const typingMessage = {
+      type: 'typing',
+      isTyping: true,
+      receiverId: selectedUser.id,
+      receiverType: selectedUser.account_type
+    };
+    
+    console.log('⌨️ Sending typing started:', typingMessage);
+    socket.send(JSON.stringify(typingMessage));
+  }
+  
+  // Set timeout to send typing stopped
+  typingTimeoutRef.current = setTimeout(() => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const typingStopped = {
+        type: 'typing',
+        isTyping: false,
+        receiverId: selectedUser.id,
+        receiverType: selectedUser.account_type
+      };
+      
+      console.log('⌨️ Sending typing stopped:', typingStopped);
+      socket.send(JSON.stringify(typingStopped));
+    }
+  }, 1500); // Send typing stopped after 1.5 seconds of no typing
+};
 
   const handleLogout = async () => {
     const user = JSON.parse(localStorage.getItem("admin"));
@@ -521,6 +716,22 @@ function Messages() {
     navigate("/");
   };
 
+  // Fetch all accounts for messaging
+  useEffect(() => {
+    if (adminData && adminType) {
+      fetchAllAccounts();
+    }
+  }, [adminData, adminType]);
+
+  // Fetch conversation when a user is selected
+  useEffect(() => {
+    if (selectedUser && adminData && adminType) {
+      fetchConversation(selectedUser.id, selectedUser.account_type);
+      // Mark messages as read when conversation is opened
+      markMessagesAsRead(selectedUser.id, selectedUser.account_type);
+    }
+  }, [selectedUser, adminData, adminType]);
+
   const fetchAllAccounts = async () => {
     try {
       setLoading(true);
@@ -539,6 +750,7 @@ function Messages() {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
+          // Transform API response to match component format
           const transformedUsers = data.data.map(account => ({
             id: account.id,
             name: account.full_name || `${account.first_name} ${account.last_name}`,
@@ -563,7 +775,6 @@ function Messages() {
 
   const fetchConversation = async (contactId, contactType) => {
     try {
-      console.log(`📡 Fetching conversation with ${contactType}:${contactId}`);
       setMessageLoading(true);
       const token = localStorage.getItem("token");
       
@@ -579,8 +790,6 @@ function Messages() {
       
       if (response.ok) {
         const data = await response.json();
-        console.log('📨 Conversation API response:', data);
-        
         if (data.success) {
           const formattedMessages = data.data.map(msg => {
             const isFromMe = msg.sender_id === `${adminType}:${adminData.id}`;
@@ -595,22 +804,10 @@ function Messages() {
               }),
               pinned: msg.pinned,
               read_status: msg.read_status,
-              delivered: true,
-              timestamp: msg.time
+              delivered: true // Assuming fetched messages are delivered
             };
           });
-          
-          console.log(`📊 Loaded ${formattedMessages.length} messages`);
           setMessages(formattedMessages);
-          
-          setTimeout(() => {
-            const el = document.getElementById('messagesArea');
-            if (el) {
-              el.scrollTop = el.scrollHeight;
-            }
-          }, 100);
-          
-          markMessagesAsRead(contactId, contactType);
         }
       }
     } catch (error) {
@@ -620,140 +817,124 @@ function Messages() {
     }
   };
 
-  const sendMessage = async (receiverId, receiverType, messageText) => {
-    const tempId = `temp-${Date.now()}`;
+const sendMessage = async (receiverId, receiverType, messageText) => {
+  // Declare tempId at the beginning of the function so it's available in all blocks
+  const tempId = Date.now();
+  
+  try {
+    const token = localStorage.getItem("token");
     
+    // Create temp message for immediate UI update
+    const tempMessage = {
+      id: tempId,
+      sender: 'me',
+      text: messageText,
+      time: new Date().toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      pinned: false,
+      delivered: false,
+      read_status: false
+    };
+    
+    // Add to UI immediately
+    setMessages(prev => [...prev, tempMessage]);
+    
+    // Scroll to bottom
+    setTimeout(() => {
+      const messagesArea = document.getElementById('messagesArea');
+      if (messagesArea) {
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+      }
+    }, 100);
+    
+    // ✅ Send via WebSocket for real-time delivery
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const wsMessage = {
+        type: 'send_message',
+        receiverId: receiverId,
+        receiverType: receiverType,
+        message: messageText,
+        tempId: tempId,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('📤 Sending via WebSocket:', wsMessage);
+      socket.send(JSON.stringify(wsMessage));
+    } else {
+      console.warn('⚠️ WebSocket not connected, message will only be saved to DB');
+    }
+    
+    // Also send via REST API to save to database
+    const requestBody = {
+      sender_id: adminData.id,
+      sender_type: adminType,
+      receiver_id: receiverId,
+      receiver_type: receiverType,
+      message: messageText
+    };
+    
+    console.log('💾 Saving to database:', requestBody);
+    
+    const response = await fetch(`${API_URL}/api/admin/messages/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    let data;
     try {
-      console.log(`📤 Sending message to ${receiverType}:${receiverId}`, messageText);
-      
-      const token = localStorage.getItem("token");
-      
-      const tempMessage = {
-        id: tempId,
-        sender: 'me',
-        text: messageText,
-        time: new Date().toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        pinned: false,
-        delivered: false,
-        read_status: false,
-        timestamp: new Date().toISOString(),
-        tempId: tempId
-      };
-      
-      console.log('💾 Temp message:', tempMessage);
-      
-      setMessages(prev => {
-        console.log('➕ Adding temp message to UI');
-        return [...prev, tempMessage];
-      });
-      
-      setTimeout(() => {
-        const messagesArea = document.getElementById('messagesArea');
-        if (messagesArea) {
-          messagesArea.scrollTop = messagesArea.scrollHeight;
-        }
-      }, 100);
-      
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        const wsMessage = {
-          type: 'send_message',
-          senderId: adminData.id,
-          senderType: adminType,
-          receiverId: receiverId,
-          receiverType: receiverType,
-          message: messageText,
-          tempId: tempId,
-          timestamp: new Date().toISOString()
-        };
-        
-        console.log('📤 Sending via WebSocket:', wsMessage);
-        socket.send(JSON.stringify(wsMessage));
-      } else {
-        console.warn('⚠️ WebSocket not connected, message will only be saved to DB');
-      }
-      
-      const requestBody = {
-        sender_id: adminData.id,
-        sender_type: adminType,
-        receiver_id: receiverId,
-        receiver_type: receiverType,
-        message: messageText
-      };
-      
-      console.log('💾 Saving to database:', requestBody);
-      
-      const response = await fetch(`${API_URL}/api/admin/messages/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      let data;
-      try {
-        data = await response.json();
-        console.log('📨 Server response:', data);
-      } catch (e) {
-        console.error('❌ Failed to parse response:', e);
-        setMessages(prev => prev.map(msg => 
-          msg.tempId === tempId ? { ...msg, delivered: true } : msg
-        ));
-        return true;
-      }
-      
-      if (response.ok && data.success) {
-        if (data.data?.id) {
-          console.log('🔄 Updating temp ID with real ID:', data.data.id);
-          setMessages(prev => prev.map(msg => 
-            msg.tempId === tempId ? { ...msg, id: data.data.id, delivered: true, tempId: undefined } : msg
-          ));
-        } else {
-          setMessages(prev => prev.map(msg => 
-            msg.tempId === tempId ? { ...msg, delivered: true, tempId: undefined } : msg
-          ));
-        }
-        
-        setUsers(prev => prev.map(user => {
-          if (user.id === receiverId && user.account_type === receiverType) {
-            return {
-              ...user,
-              message: messageText,
-              time: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
-            };
-          }
-          return user;
-        }));
-        
-        return true;
-      } else {
-        console.error('❌ Server error response:', data);
-        setMessages(prev => prev.map(msg => 
-          msg.tempId === tempId ? { ...msg, delivered: false, error: true } : msg
-        ));
-        return false;
-      }
-    } catch (error) {
-      console.error('❌ Network error sending message:', error);
+      data = await response.json();
+      console.log('📨 Server response:', data);
+    } catch (e) {
+      console.error('❌ Failed to parse response:', e);
+      // Still mark as delivered since we sent via WebSocket
       setMessages(prev => prev.map(msg => 
-        msg.tempId === tempId ? { ...msg, delivered: false, error: true } : msg
+        msg.id === tempId ? { ...msg, delivered: true } : msg
+      ));
+      return true;
+    }
+    
+    if (response.ok && data.success) {
+      // Update with real database ID
+      if (data.data?.id) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempId ? { ...msg, id: data.data.id, delivered: true } : msg
+        ));
+      } else {
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempId ? { ...msg, delivered: true } : msg
+        ));
+      }
+      
+      return true;
+    } else {
+      console.error('❌ Server error response:', data);
+      // Mark as failed
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
       ));
       return false;
     }
-  };
+  } catch (error) {
+    console.error('❌ Network error sending message:', error);
+    // Mark as failed
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempId ? { ...msg, delivered: false, error: true } : msg
+    ));
+    return false;
+  }
+};
 
   const markMessagesAsRead = async (contactId, contactType) => {
     try {
       const token = localStorage.getItem("token");
       
-      await fetch(`${API_URL}/api/admin/messages/mark-read`, {
+      const response = await fetch(`${API_URL}/api/admin/messages/mark-read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -767,17 +948,7 @@ function Messages() {
         })
       });
       
-      setUsers(prev => prev.map(user => {
-        if (user.id === contactId && user.account_type === contactType) {
-          return { ...user, unread: 0 };
-        }
-        return user;
-      }));
-      
-      setMessages(prev => prev.map(msg => 
-        msg.sender === 'other' ? { ...msg, read_status: true } : msg
-      ));
-      
+      // Send read status via WebSocket
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
           type: 'messages_read',
@@ -822,59 +993,26 @@ function Messages() {
     }
   };
 
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    setInput(value);
+ const handleSend = async () => {
+  if (input.trim() !== '' && selectedUser && adminData && adminType) {
+    // Save the message text
+    const messageText = input.trim();
     
-    if (!socket || socket.readyState !== WebSocket.OPEN || !selectedUser) return;
+    // Clear input immediately
+    setInput('');
     
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+    // Send the message
+    const success = await sendMessage(
+      selectedUser.id, 
+      selectedUser.account_type, 
+      messageText
+    );
+    
+    if (!success) {
+      alert('Failed to send message. Please try again.');
     }
-    
-    if (value.length > 0) {
-      const typingMessage = {
-        type: 'typing',
-        isTyping: true,
-        receiverId: selectedUser.id,
-        receiverType: selectedUser.account_type
-      };
-      
-      console.log('⌨️ Sending typing started:', typingMessage);
-      socket.send(JSON.stringify(typingMessage));
-    }
-    
-    typingTimeoutRef.current = setTimeout(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        const typingStopped = {
-          type: 'typing',
-          isTyping: false,
-          receiverId: selectedUser.id,
-          receiverType: selectedUser.account_type
-        };
-        
-        console.log('⌨️ Sending typing stopped:', typingStopped);
-        socket.send(JSON.stringify(typingStopped));
-      }
-    }, 1500);
-  };
-
-  const handleSend = async () => {
-    if (input.trim() !== '' && selectedUser && adminData && adminType) {
-      const messageText = input.trim();
-      setInput('');
-      
-      const success = await sendMessage(
-        selectedUser.id, 
-        selectedUser.account_type, 
-        messageText
-      );
-      
-      if (!success) {
-        alert('Failed to send message. Please try again.');
-      }
-    }
-  };
+  }
+};
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
@@ -886,6 +1024,7 @@ function Messages() {
     (user.department && user.department.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  // Get user initials for avatar
   const getUserInitials = (name) => {
     if (!name) return '?';
     return name
@@ -896,6 +1035,7 @@ function Messages() {
       .slice(0, 2);
   };
 
+  // Get avatar color based on user type
   const getAvatarColor = (accountType) => {
     switch(accountType) {
       case 'user': return '#4CAF50';
@@ -905,6 +1045,7 @@ function Messages() {
     }
   };
 
+  // Get account type badge
   const getAccountTypeBadge = (accountType) => {
     switch(accountType) {
       case 'user': return { text: 'User', color: '#4CAF50' };
@@ -914,13 +1055,13 @@ function Messages() {
     }
   };
 
-  const isUserOnline = (userId, userType) => {
-    return onlineStatus[`${userType}:${userId}`] || false;
-  };
-
   const getChatSidebarClass = () => {
     if (!isMobile) return '';
-    if (selectedUser) return 'hidden';
+    
+    if (selectedUser) {
+      return 'hidden'; // Hide sidebar when user is selected
+    }
+    
     return isUserListOpen ? 'open' : 'closed';
   };
 
@@ -929,88 +1070,93 @@ function Messages() {
     return selectedUser ? 'visible' : 'hidden';
   };
 
-  const refreshConversation = () => {
-    if (selectedUser) {
-      fetchConversation(selectedUser.id, selectedUser.account_type);
-    }
+  // Check if user is online
+  const isUserOnline = (userId, userType) => {
+    return onlineStatus[`${userType}:${userId}`] || false;
   };
 
   return (
     <div style={styles.dashboardContainer}>
-      <div className="mobile-header">
+
+    <div className="mobile-header">
+      <button 
+        className="hamburger"
+        onClick={() => setIsSidebarOpen(true)}
+      >
+        <FontAwesomeIcon icon={faBars} />
+      </button>
+      <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+      
+    </div>
+
+    {/* Mobile Sidebar Overlay */}
+    {isSidebarOpen && (
+      <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+    )}
+
+    {/* Sidebar - Updated with mobile classes */}
+    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+      <div className="sidebar-header">
         <button 
-          className="hamburger"
-          onClick={() => setIsSidebarOpen(true)}
+          className="sidebar-close-btn"
+          onClick={() => setIsSidebarOpen(false)}
         >
-          <FontAwesomeIcon icon={faBars} />
+          <FontAwesomeIcon icon={faTimes} />
         </button>
-        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
-      </div>
-
-      {isSidebarOpen && (
-        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
-      )}
-
-      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
-        <div className="sidebar-header">
-          <button 
-            className="sidebar-close-btn"
-            onClick={() => setIsSidebarOpen(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} />
-          </button>
-          <img 
-            className='logo-sidebar' 
-            src={require('./images/logo_ez.png')} 
-            alt="logo" 
-          />
-        </div>
-
         <img 
+          className='logo-sidebar' 
           src={require('./images/logo_ez.png')} 
           alt="logo" 
-          style={styles.logo} 
-          className='logo-desktop'
         />
+      </div>
 
-        <ul className='sidebar-menu-link' style={styles.sidebarList}>
-          {allowedMenus.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <li
-                key={item.name}
-                style={{
-                  ...(isActive ? styles.btnActive : {}),
-                }}
-              >
-                <Link
-                  style={{
-                    ...styles.sb,
-                    ...(isActive ? styles.btnActive : {}),
-                  }}
-                  to={item.to}
-                  onClick={closeMobileMenus}
-                >
-                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-                </Link>
-              </li>
-            );
-          })}
-          <li>
-            <Link
-              style={styles.sb}
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowLogoutModal(true);
-                closeMobileMenus();
+      {/* Desktop Logo */}
+      <img 
+        src={require('./images/logo_ez.png')} 
+        alt="logo" 
+        style={styles.logo} 
+        className='logo-desktop'
+      />
+
+      {/* Sidebar Menu - Updated with onClick to close on mobile */}
+      <ul className='sidebar-menu-link' style={styles.sidebarList}>
+        {allowedMenus.map((item) => {
+          const isActive = location.pathname === item.to;
+          return (
+            <li
+              key={item.name}
+              style={{
+                ...(isActive ? styles.btnActive : {}),
               }}
             >
-              <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
-            </Link>
-          </li>
-        </ul>
-      </div>
+              <Link
+                style={{
+                  ...styles.sb,
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+                to={item.to}
+                onClick={closeMobileMenus}
+              >
+                <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+              </Link>
+            </li>
+          );
+        })}
+        <li>
+          <Link
+            style={styles.sb}
+            to="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setShowLogoutModal(true);
+              closeMobileMenus();
+            }}
+          >
+            <FontAwesomeIcon icon={faSignOutAlt} style={styles.icon} /> Logout
+          </Link>
+        </li>
+      </ul>
+    </div>
 
       <div className='desktop-header' style={styles.header}>
         <input 
@@ -1028,6 +1174,7 @@ function Messages() {
         <ul style={styles.sidebarList}>
           {allowedMenus.map((item) => {
             const isActive = location.pathname === item.to;
+
             return (
               <li
                 key={item.name}
@@ -1173,10 +1320,11 @@ function Messages() {
           )}
         </div>
 
+        {/* Chat Area - Only show when a user is selected */}
         {selectedUser && (
           <div className={`chatArea ${getChatAreaClass()}`} style={styles.chatArea}>
             <>
-              {isMobile && (
+            {isMobile && (
                 <button 
                   style={{
                     position: 'absolute',
@@ -1197,20 +1345,6 @@ function Messages() {
                   <FontAwesomeIcon icon={faTimes} />
                 </button>
               )}
-
-              <div style={{
-                position: 'absolute',
-                top: '10px',
-                right: '10px',
-                fontSize: '10px',
-                backgroundColor: connectionStatus === 'Connected' ? '#4CAF50' : '#f44336',
-                color: 'white',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                zIndex: 100
-              }}>
-                {connectionStatus}
-              </div>
 
               <div className='chatHeader' style={styles.chatHeader}>
                 <div className='selectedUserInfo' style={styles.selectedUserInfo}>
@@ -1248,21 +1382,6 @@ function Messages() {
                       {isUserOnline(selectedUser.id, selectedUser.account_type) && (
                         <span className='onlineStatus' style={styles.onlineStatus}>• Online</span>
                       )}
-                      <button 
-                        onClick={refreshConversation}
-                        style={{
-                          marginLeft: '10px',
-                          padding: '2px 8px',
-                          fontSize: '10px',
-                          backgroundColor: '#009205',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faRefresh} />
-                      </button>
                     </div>
                     <div className='userDetails' style={styles.userDetails}>
                       {selectedUser.email && (
@@ -1338,6 +1457,15 @@ function Messages() {
                 )}
               </div>
 
+              {isMobile && !isUserListOpen && !selectedUser && (
+                <button 
+                  className="toggleUserListBtn"
+                  onClick={() => setIsUserListOpen(true)}
+                >
+                  <FontAwesomeIcon icon={faUsers} />
+                </button>
+              )}
+
               <div className='inputArea' style={styles.inputArea}>
                 <button style={styles.emojiButton}>
                   <FontAwesomeIcon icon={faSmile} />
@@ -1370,6 +1498,7 @@ function Messages() {
           </div>
         )}
 
+        {/* Show welcome screen when no user is selected on desktop */}
         {!selectedUser && !isMobile && (
           <div className='chatArea' style={styles.chatArea}>
             <div style={styles.noChatSelected}>
@@ -1378,22 +1507,6 @@ function Messages() {
               </div>
               <h3>Welcome to Messages</h3>
               <p>Select a contact to start messaging</p>
-              <div style={{
-                marginTop: '20px',
-                fontSize: '12px',
-                color: '#666',
-                backgroundColor: '#f5f5f5',
-                padding: '10px',
-                borderRadius: '5px'
-              }}>
-                <p>Connection Status: <span style={{
-                  color: connectionStatus === 'Connected' ? '#4CAF50' : '#f44336',
-                  fontWeight: 'bold'
-                }}>{connectionStatus}</span></p>
-                {lastMessageTime && (
-                  <p>Last message: {new Date(lastMessageTime).toLocaleTimeString()}</p>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -1649,7 +1762,6 @@ const styles = {
     backgroundColor: '#fff',
     borderRadius: '0 10px 10px 0',
     borderLeft: '1px solid #eee',
-    position: 'relative',
   },
   chatHeader: {
     padding: '15px 20px',
@@ -1714,6 +1826,12 @@ const styles = {
     backgroundColor: '#666',
     borderRadius: '50%',
     animation: 'typing 1.4s infinite',
+    '&:nth-child(2)': {
+      animationDelay: '0.2s',
+    },
+    '&:nth-child(3)': {
+      animationDelay: '0.4s',
+    },
   },
   typingText: {
     fontSize: '12px',
