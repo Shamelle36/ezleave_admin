@@ -91,6 +91,18 @@ function Messages() {
     }
   }, [selectedUser, isMobile]);
 
+  // Add this useEffect to force chat area refresh
+useEffect(() => {
+  const refreshInterval = setInterval(() => {
+    if (selectedUser) {
+      // Refresh conversation every 5 seconds to catch missed WebSocket messages
+      fetchConversation(selectedUser.id, selectedUser.account_type);
+    }
+  }, 5000); // Refresh every 5 seconds
+  
+  return () => clearInterval(refreshInterval);
+}, [selectedUser]);
+
 // REPLACE your existing useEffect for admin data with this:
 useEffect(() => {
   const checkAndConnect = async () => {
@@ -267,86 +279,96 @@ const initializeWebSocket = () => {
     }, 500);
   };
 
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      console.log('📩 WebSocket message received:', data);
+ ws.onmessage = (event) => {
+  try {
+    const data = JSON.parse(event.data);
+    console.log('📩 WebSocket message received:', data);
 
-      switch(data.type) {
-        case 'welcome':
-        case 'identification_accepted':
-          console.log('✅ Server accepted our identification');
-          break;
+    switch(data.type) {
+      case 'welcome':
+      case 'identification_accepted':
+        console.log('✅ Server accepted our identification');
+        break;
+        
+      case 'new_message':
+        console.log('💌 New message via WebSocket:', data);
+        // Process incoming message for BOTH sidebar AND chat area
+        if (data.message) {
+          handleIncomingMessage(data);
+        }
+        break;
+        
+      case 'message_sent':
+        console.log('✓ Message sent confirmation:', data);
+        if (data.message && data.message.messageId) {
+          // Update message delivery status
+          setMessages(prev => prev.map(msg => 
+            msg.id === data.message.messageId ? { ...msg, delivered: true } : msg
+          ));
+        }
+        break;
+        
+      case 'message_received':
+        console.log('✓ Message delivery confirmation:', data);
+        if (data.messageId) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === data.messageId ? { ...msg, delivered: true } : msg
+          ));
+        }
+        break;
+        
+      case 'typing':
+        console.log('⌨️ Typing indicator:', data);
+        if (data.isTyping && selectedUser && 
+            data.senderId == selectedUser.id && 
+            data.senderType === selectedUser.account_type) {
+          setIsTyping(true);
           
-        case 'new_message':
-          console.log('💌 New message via WebSocket:', data);
-          // Process incoming message
-          if (data.message) {
-            processIncomingMessage(data.message);
-          }
-          break;
-          
-        case 'message_received':
-          console.log('✓ Message delivery confirmation:', data);
-          if (data.messageId) {
-            setMessages(prev => prev.map(msg => 
-              msg.id === data.messageId ? { ...msg, delivered: true } : msg
-            ));
-          }
-          break;
-          
-        case 'typing':
-          console.log('⌨️ Typing indicator:', data);
-          if (data.isTyping && selectedUser && 
-              data.senderId == selectedUser.id && 
-              data.senderType === selectedUser.account_type) {
-            setIsTyping(true);
-            
-            // Clear typing indicator after 2 seconds
-            setTimeout(() => {
-              setIsTyping(false);
-            }, 2000);
-          } else if (!data.isTyping) {
+          // Clear typing indicator after 2 seconds
+          setTimeout(() => {
             setIsTyping(false);
-          }
-          break;
-          
-        case 'user_online':
-          console.log('🟢 User online:', data);
-          if (data.userId && data.userType) {
-            setOnlineStatus(prev => ({
-              ...prev,
-              [`${data.userType}:${data.userId}`]: true
-            }));
-          }
-          break;
-          
-        case 'user_offline':
-          console.log('🔴 User offline:', data);
-          if (data.userId && data.userType) {
-            setOnlineStatus(prev => ({
-              ...prev,
-              [`${data.userType}:${data.userId}`]: false
-            }));
-          }
-          break;
-          
-        case 'error':
-          console.error('❌ WebSocket error:', data.message);
-          break;
-          
-        case 'pong':
-          // Heartbeat response - ignore
-          break;
-          
-        default:
-          console.log('📨 Unknown message type:', data.type, data);
-      }
-    } catch (error) {
-      console.error('❌ Error parsing WebSocket message:', error);
-      console.log('📨 Raw message:', event.data);
+          }, 2000);
+        } else if (!data.isTyping) {
+          setIsTyping(false);
+        }
+        break;
+        
+      case 'user_online':
+        console.log('🟢 User online:', data);
+        if (data.userId && data.userType) {
+          setOnlineStatus(prev => ({
+            ...prev,
+            [`${data.userType}:${data.userId}`]: true
+          }));
+        }
+        break;
+        
+      case 'user_offline':
+        console.log('🔴 User offline:', data);
+        if (data.userId && data.userType) {
+          setOnlineStatus(prev => ({
+            ...prev,
+            [`${data.userType}:${data.userId}`]: false
+          }));
+        }
+        break;
+        
+      case 'error':
+        console.error('❌ WebSocket error:', data.message);
+        break;
+        
+      case 'pong':
+        // Heartbeat response - ignore
+        break;
+        
+      default:
+        console.log('📨 Unknown message type:', data.type, data);
     }
-  };
+  } catch (error) {
+    console.error('❌ Error parsing WebSocket message:', error);
+    console.log('📨 Raw message:', event.data);
+  }
+};
 
   ws.onerror = (error) => {
     clearTimeout(connectionTimeout);
@@ -475,22 +497,34 @@ const handleIncomingMessage = (data) => {
   const messageData = data.message;
   const myFullId = `${adminType}:${adminData.id}`;
   
-  // Determine if this message is for the current conversation
-  const isFromSelectedUser = selectedUser && 
-    `${messageData.sender_type}:${messageData.sender_id.split(':')[1]}` === 
-    `${selectedUser.account_type}:${selectedUser.id}`;
+  // Check if message is for me
+  if (messageData.receiver_id !== myFullId && messageData.sender_id !== myFullId) {
+    console.log('📨 Message not for me, ignoring');
+    return;
+  }
   
-  const isToMe = messageData.receiver_id === myFullId;
+  const isForMe = messageData.receiver_id === myFullId;
   const isFromMe = messageData.sender_id === myFullId;
   
-  // If it's not related to me at all, ignore it
-  if (!isToMe && !isFromMe) return;
+  console.log('📥 Processing incoming message:', {
+    isForMe,
+    isFromMe,
+    sender: messageData.sender_id,
+    receiver: messageData.receiver_id,
+    myId: myFullId
+  });
   
-  // Add to messages if in the right conversation
-  if ((isFromSelectedUser || isFromMe) && selectedUser) {
+  // Check if this message is from the currently selected user
+  const isFromSelectedUser = selectedUser && 
+    messageData.sender_id === `${selectedUser.account_type}:${selectedUser.id}`;
+  
+  // If it's a new message for me AND from the selected user, add to chat
+  if (isForMe && isFromSelectedUser) {
+    console.log('💬 Adding message to chat area:', messageData);
+    
     const newMessage = {
       id: messageData.id || Date.now(),
-      sender: isFromMe ? 'me' : 'other',
+      sender: 'other',
       text: messageData.message,
       time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
         hour: '2-digit',
@@ -501,50 +535,59 @@ const handleIncomingMessage = (data) => {
       delivered: true
     };
     
-    // Avoid duplicates
+    // Add to messages, avoiding duplicates
     setMessages(prev => {
-      if (prev.some(m => m.id === newMessage.id)) return prev;
+      if (prev.some(m => m.id === newMessage.id)) {
+        console.log('⚠️ Duplicate message detected, skipping');
+        return prev;
+      }
+      console.log('✅ Adding new message to state');
       return [...prev, newMessage];
     });
     
-    // Auto-scroll to bottom
+    // Auto-scroll to bottom after message is added
     setTimeout(() => {
       const el = document.getElementById('messagesArea');
-      if (el) el.scrollTop = el.scrollHeight;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
     }, 100);
+    
+    // Mark as read immediately
+    if (!messageData.read_status) {
+      markMessagesAsRead(selectedUser.id, selectedUser.account_type);
+    }
   }
   
-  // Update sidebar user list with latest message
+  // Always update the user list with latest message
   setUsers(prev => prev.map(user => {
     const userFullId = `${user.account_type}:${user.id}`;
     
-    // If this message is to/from this user, update their preview
-    if (userFullId === messageData.sender_id.split(':')[0] || 
-        userFullId === messageData.receiver_id.split(':')[0]) {
-      return {
+    // Check if this user is the sender or receiver of this message
+    const isInvolved = messageData.sender_id === userFullId || 
+                      messageData.receiver_id === userFullId;
+    
+    if (isInvolved) {
+      const updatedUser = {
         ...user,
         message: messageData.message,
         time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        // Increment unread count if message is for me and not read
-        unread: isToMe && !messageData.read_status ? (user.unread || 0) + 1 : user.unread
       };
+      
+      // If this message is for me and not read, increment unread count
+      // But only if I'm NOT viewing this conversation
+      if (isForMe && !messageData.read_status && !isFromSelectedUser) {
+        updatedUser.unread = (user.unread || 0) + 1;
+        console.log(`📱 Incremented unread count for ${user.name}: ${updatedUser.unread}`);
+      }
+      
+      return updatedUser;
     }
     return user;
   }));
-  
-  // If message is for me and I'm not viewing it, update unread count
-  if (isToMe && !isFromSelectedUser && !messageData.read_status) {
-    // You could trigger a notification here
-    console.log('📱 New message received while in another conversation');
-  }
-  
-  // Mark as read if I'm viewing this conversation
-  if (isToMe && isFromSelectedUser && !messageData.read_status) {
-    markMessagesAsRead(selectedUser.id, selectedUser.account_type);
-  }
 };
 
 
