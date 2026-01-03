@@ -46,6 +46,7 @@ function Messages() {
   const typingTimeoutRef = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const socketRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
@@ -84,6 +85,14 @@ function Messages() {
   });
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
+
+useEffect(() => {
+  scrollToBottom();
+}, [messages]);
+
+const scrollToBottom = () => {
+  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+};
 
   useEffect(() => {
     if (isMobile && selectedUser) {
@@ -420,7 +429,41 @@ const handleIncomingMessage = (data) => {
     senderType
   });
   
-  // If it's a new message for me AND from the selected user, add to chat
+  // **CRITICAL FIX**: Always update the user list FIRST
+  setUsers(prev => {
+    const updatedUsers = prev.map(user => {
+      const userFullId = `${user.account_type}:${user.id}`;
+      
+      // Check if this user is the sender of this message
+      if (messageData.sender_id === userFullId) {
+        console.log(`📱 Updating user ${user.name} with new message`);
+        
+        const updatedUser = {
+          ...user,
+          message: messageData.message,
+          time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+        };
+        
+        // If this message is for me and not read, increment unread count
+        // But only if I'm NOT viewing this conversation
+        if (isForMe && !messageData.read_status && !isFromSelectedUser) {
+          updatedUser.unread = (user.unread || 0) + 1;
+          console.log(`📱 Incremented unread count for ${user.name}: ${updatedUser.unread}`);
+        }
+        
+        return updatedUser;
+      }
+      return user;
+    });
+    
+    console.log('👥 Updated user list');
+    return updatedUsers;
+  });
+  
+  // **NEW**: If it's a new message for me AND from the selected user, add to chat
   if (isForMe && isFromSelectedUser) {
     console.log('💬 Adding message to chat area:', messageData);
     
@@ -456,55 +499,18 @@ const handleIncomingMessage = (data) => {
       return newMessages;
     });
     
-    // Auto-scroll to bottom after message is added
-    setTimeout(() => {
-      const el = document.getElementById('messagesArea');
-      if (el) {
-        console.log('⬇️ Auto-scrolling to bottom');
-        el.scrollTop = el.scrollHeight;
-      }
-    }, 100);
-    
     // Mark as read immediately
     if (!messageData.read_status) {
       console.log('📖 Marking message as read');
       markMessagesAsRead(selectedUser.id, selectedUser.account_type);
     }
-  }
-  
-  // Always update the user list with latest message
-  setUsers(prev => {
-    const updatedUsers = prev.map(user => {
-      const userFullId = `${user.account_type}:${user.id}`;
-      
-      // Check if this user is the sender of this message
-      if (messageData.sender_id === userFullId) {
-        console.log(`📱 Updating user ${user.name} with new message`);
-        
-        const updatedUser = {
-          ...user,
-          message: messageData.message,
-          time: new Date(messageData.time || Date.now()).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-        };
-        
-        // If this message is for me and not read, increment unread count
-        // But only if I'm NOT viewing this conversation
-        if (isForMe && !messageData.read_status && !isFromSelectedUser) {
-          updatedUser.unread = (user.unread || 0) + 1;
-          console.log(`📱 Incremented unread count for ${user.name}: ${updatedUser.unread}`);
-        }
-        
-        return updatedUser;
-      }
-      return user;
-    });
+  } else if (isForMe) {
+    // Message is for me but not from selected user
+    console.log(`📱 New message from ${senderType}:${senderId}, but not viewing this conversation`);
     
-    console.log('👥 Updated user list');
-    return updatedUsers;
-  });
+    // You could add a toast notification here
+    // Example: showNotification(`New message from ${senderName}`);
+  }
 };
 
 
@@ -1298,6 +1304,7 @@ const sendMessage = async (receiverId, receiverType, messageText) => {
                         </div>
                       </div>
                     ))}
+                    <div ref={messagesEndRef} />
                   </>
                 )}
               </div>
