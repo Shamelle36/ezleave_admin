@@ -622,18 +622,6 @@ function AuditLogs() {
               Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredLogs.length)} of {filteredLogs.length} records
               {showSuspiciousOnly && ' (Suspicious activities only)'}
             </div>
-            <div style={styles.tableHeaderActions}>
-              <select 
-                style={styles.timeRangeSelect}
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-              >
-                <option value="all">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-              </select>
-            </div>
           </div>
           
           <div style={styles.tableWrapper}>
@@ -726,10 +714,6 @@ function AuditLogs() {
                                 {log.isSuspicious ? (
                                   <div>
                                     <div style={styles.analysisRow}>
-                                      <span style={styles.analysisLabel}>Risk Score:</span>
-                                      <span style={styles.analysisValue}>{log.suspiciousScore}/20</span>
-                                    </div>
-                                    <div style={styles.analysisRow}>
                                       <span style={styles.analysisLabel}>Severity:</span>
                                       <span style={styles.analysisValue}>
                                         <span style={styles.severityBadgeInline(log.suspiciousSeverity)}>
@@ -737,18 +721,6 @@ function AuditLogs() {
                                         </span>
                                       </span>
                                     </div>
-                                    {log.suspiciousPatterns.length > 0 && (
-                                      <div style={styles.analysisRow}>
-                                        <span style={styles.analysisLabel}>Detected Patterns:</span>
-                                        <div style={styles.patternsList}>
-                                          {log.suspiciousPatterns.map((pattern, idx) => (
-                                            <span key={idx} style={styles.patternTag(pattern.severity)}>
-                                              {pattern.description} ({pattern.weight} pts)
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
                                     <div style={styles.analysisRow}>
                                       <span style={styles.analysisLabel}>IP Address:</span>
                                       <code style={styles.ipAddress}>{log.ip_address || 'N/A'}</code>

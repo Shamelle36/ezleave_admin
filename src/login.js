@@ -10,6 +10,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const navigate = useNavigate();
   
   const API_URL = "https://ezleave-admin-api.onrender.com";
@@ -30,52 +31,179 @@ function Login() {
     }
   }, [navigate]);
 
-const handleLogin = async (e) => {
-  e.preventDefault();
-  setMessage("");
-  setLoading(true);
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    setLoading(true);
 
-  try {
-    // First try the main admin login
-    let res = await axios.post(`${API_URL}/api/auth/login`, {
-      email,
-      password,
-    });
-
-    // ✅ Admin login success
-    if (res.status === 200) {
-      localStorage.setItem("admin", JSON.stringify(res.data.user));
-      localStorage.setItem("role", res.data.user.role);
-      navigate("/dashboard");
-      return;
-    }
-  } catch (err) {
-    // If admin login fails, try the department account login
     try {
-      const res = await axios.post(`${API_URL}/api/authAdmin/login`, {
+      // First try the main admin login
+      let res = await axios.post(`${API_URL}/api/auth/login`, {
         email,
         password,
       });
 
+      // ✅ Admin login success
       if (res.status === 200) {
         localStorage.setItem("admin", JSON.stringify(res.data.user));
-        localStorage.setItem("token", res.data.token);
         localStorage.setItem("role", res.data.user.role);
-        localStorage.setItem("department", res.data.user.department);
         navigate("/dashboard");
         return;
       }
-    } catch (err2) {
-      console.error(err2);
-      setMessage(err2.response?.data?.message || "Invalid credentials.");
-      setLoading(false);
-      return;
-    }
-  }
+    } catch (err) {
+      // If admin login fails, try the department account login
+      try {
+        const res = await axios.post(`${API_URL}/api/authAdmin/login`, {
+          email,
+          password,
+        });
 
-  setMessage("Invalid credentials.");
-  setLoading(false);
-};
+        if (res.status === 200) {
+          localStorage.setItem("admin", JSON.stringify(res.data.user));
+          localStorage.setItem("token", res.data.token);
+          localStorage.setItem("role", res.data.user.role);
+          localStorage.setItem("department", res.data.user.department);
+          navigate("/dashboard");
+          return;
+        }
+      } catch (err2) {
+        console.error(err2);
+        setMessage(err2.response?.data?.message || "Invalid credentials.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    setMessage("Invalid credentials.");
+    setLoading(false);
+  };
+
+  // Initialize Google Sign-In
+  useEffect(() => {
+    // Load Google Identity Services script
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
+
+  // Handle Google Login
+  const handleGoogleLogin = () => {
+    setGoogleLoading(true);
+    setMessage("");
+    
+    // Create Google Sign-In button
+    const googleSignInDiv = document.createElement('div');
+    googleSignInDiv.id = 'google-signin-btn';
+    document.body.appendChild(googleSignInDiv);
+
+    // Initialize Google Sign-In
+    if (window.google) {
+      window.google.accounts.id.initialize({
+        client_id: "182363231574-dv7l7sng49p1v71cf6rjoblng2a76al9.apps.googleusercontent.com",
+        callback: handleGoogleResponse,
+      });
+      
+      // Render the button
+      window.google.accounts.id.renderButton(
+        googleSignInDiv,
+        {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+        }
+      );
+      
+      // Programmatically click the button
+      const googleButton = googleSignInDiv.querySelector('div[role="button"]');
+      if (googleButton) {
+        googleButton.click();
+      } else {
+        setMessage("Google Sign-In button failed to load");
+        setGoogleLoading(false);
+      }
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(googleSignInDiv);
+      }, 1000);
+    } else {
+      setMessage("Google Sign-In is not available. Please try again later.");
+      setGoogleLoading(false);
+    }
+  };
+
+  // Handle Google OAuth response - Try both endpoints
+  const handleGoogleResponse = async (response) => {
+    setGoogleLoading(true);
+    setMessage("");
+    
+    try {
+      // First try main admin Google login (useradmin table)
+      let res = await axios.post(`${API_URL}/api/auth/google-login`, {
+        credential: response.credential,
+      });
+
+      if (res.status === 200) {
+        // Main admin login successful
+        localStorage.setItem("admin", JSON.stringify(res.data.user));
+        localStorage.setItem("role", res.data.user.role);
+        if (res.data.user.profile_picture) {
+          localStorage.setItem("profile_picture", res.data.user.profile_picture);
+        }
+        if (res.data.token) {
+          localStorage.setItem("token", res.data.token);
+        }
+        navigate("/dashboard");
+        return;
+      }
+    } catch (err) {
+      // If main admin Google login fails, try department admin Google login
+      try {
+        const res = await axios.post(`${API_URL}/api/authAdmin/google-login`, {
+          credential: response.credential,
+        });
+
+        if (res.status === 200) {
+          // Department admin login successful
+          localStorage.setItem("admin", JSON.stringify(res.data.user));
+          localStorage.setItem("token", res.data.token);
+          localStorage.setItem("role", res.data.user.role);
+          localStorage.setItem("department", res.data.user.department);
+          if (res.data.user.profile_picture) {
+            localStorage.setItem("profile_picture", res.data.user.profile_picture);
+          }
+          navigate("/dashboard");
+          return;
+        }
+      } catch (err2) {
+        console.error("Department admin Google login error:", err2);
+        
+        // Both Google logins failed
+        if (err2.response?.status === 401) {
+          setMessage("Google account not registered in any system. Please use email/password.");
+        } else if (err2.response?.status === 400) {
+          setMessage("Account not fully set up. Please check your email for setup link.");
+        } else {
+          setMessage(err2.response?.data?.message || "Google login failed for both account types.");
+        }
+        setGoogleLoading(false);
+        return;
+      }
+    }
+
+    // Generic error if we reach here
+    setMessage("Google authentication failed");
+    setGoogleLoading(false);
+  };
 
   return (
     <div className="container">
@@ -139,9 +267,14 @@ const handleLogin = async (e) => {
           </div>
 
           <div className="social-login">
-            <button className="google">
+            <button 
+              className="google" 
+              onClick={handleGoogleLogin}
+              disabled={googleLoading}
+              type="button"
+            >
               <FcGoogle style={{ marginRight: "10px", fontSize: "25px" }} />
-              Continue with Google
+              {googleLoading ? "Connecting to Google..." : "Continue with Google"}
             </button>
           </div>
 

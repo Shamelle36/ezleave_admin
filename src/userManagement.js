@@ -29,6 +29,7 @@ import {
   faSave,
   faInfoCircle
 } from "@fortawesome/free-solid-svg-icons";
+import ProfileDropdown from "./profileDropdown";
 
 function UserManagement() {
   const [showModal, setShowModal] = useState(false);
@@ -46,6 +47,15 @@ function UserManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [filteredAccounts, setFilteredAccounts] = useState([]);
+
+   const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [profileData, setProfileData] = useState({
+      full_name: "",
+      email: "",
+      role: "",
+      profile_picture: "",
+    });
 
   const departments = [
     "Office of the Municipal Mayor",
@@ -69,6 +79,73 @@ function UserManagement() {
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
 
+  useEffect(() => {
+      const storedUser = JSON.parse(localStorage.getItem("admin"));
+      if (storedUser) {
+        setAdmin(storedUser);
+        setProfileData({
+          full_name: storedUser.full_name || storedUser.name || "",
+          email: storedUser.email || "",
+          role: storedUser.role || "",
+          profile_picture: storedUser.profile_picture || ""
+        });
+      }
+    }, []);
+  
+    useEffect(() => {
+      const fetchInitialProfile = async () => {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem("admin"));
+          if (!storedUser) return;
+  
+          const url = storedUser.role === "office_head" 
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+  
+          const res = await fetch(url);
+          const data = await res.json();
+  
+          if (res.ok) {
+            setAdmin(data);
+            setProfileData(data);
+          } else {
+            console.error("Error loading initial profile:", data.message);
+          }
+        } catch (err) {
+          console.error("Error loading initial profile:", err);
+        }
+      };
+  
+      fetchInitialProfile();
+    }, []);
+  
+    useEffect(() => {
+      if (!showProfileModal) return;
+  
+      const fetchProfileData = async () => {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem("admin"));
+          if (!storedUser) return;
+  
+          const url = storedUser.role === "office_head" 
+            ? `${API_URL}/api/authAdmin/user/${storedUser.id}`
+            : `${API_URL}/api/auth/useradmin/${storedUser.id}`;
+  
+          const res = await fetch(url);
+          const data = await res.json();
+  
+          if (res.ok) {
+            setProfileData(data);
+          } else {
+            console.error("Error loading profile:", data.message);
+          }
+        } catch (err) {
+          console.error("Error loading profile:", err);
+        }
+      };
+  
+      fetchProfileData();
+    }, [showProfileModal]);
 
   // Fetch all user accounts
   const fetchAccounts = async () => {
@@ -195,9 +272,16 @@ function UserManagement() {
   return (
     <div style={styles.dashboardContainer}>
       {/* Header */}
-      <div style={styles.header}>
-        <input type="text" placeholder="Search..." style={styles.search} />
-        <FontAwesomeIcon icon={faBell} style={styles.iconBell} />
+       <div className="attendance-desktop-header" style={styles.header}>
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            isMobile={false}
+            profileData={profileData}
+            admin={admin}
+          />
+        </div>
       </div>
 
       {/* Sidebar */}
@@ -330,7 +414,6 @@ function UserManagement() {
           
           <div style={styles.filterControls}>
             <div style={styles.filterGroup}>
-              <FontAwesomeIcon icon={faFilter} style={styles.filterIcon} />
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -341,14 +424,6 @@ function UserManagement() {
                 <option value="office_head">Department Leadership</option>
               </select>
             </div>
-            
-            <button 
-              style={styles.clearFilterBtn}
-              onClick={clearFilters}
-              disabled={!searchTerm && roleFilter === "all"}
-            >
-              Reset Filters
-            </button>
           </div>
         </div>
 
@@ -514,8 +589,8 @@ function UserManagement() {
                     style={styles.formSelect}
                   >
                     <option value="">Select Access Privilege</option>
-                    <option value="Mayor">Executive Administration</option>
-                    <option value="Office Head">Department Leadership</option>
+                    <option value="Mayor">Mayor</option>
+                    <option value="Office Head">Department Head</option>
                   </select>
                 </div>
 
@@ -569,7 +644,6 @@ function UserManagement() {
                     </>
                   ) : (
                     <>
-                      <FontAwesomeIcon icon={faPlus} style={styles.saveIcon} />
                       Create User Account
                     </>
                   )}
@@ -746,11 +820,11 @@ const styles = {
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
   },
   mainContent: { 
-    marginLeft: "280px", 
-    padding: "30px", 
+    marginLeft: "300px", 
     flex: 1, 
-    marginTop: "70px",
-    maxWidth: "calc(100% - 280px)"
+    marginTop: "80px",
+    maxWidth: "calc(100% - 280px)",
+    marginRight: '20px'
   },
   
   // Page Header
@@ -1294,7 +1368,7 @@ const styles = {
     marginBottom: "8px"
   },
   labelIcon: {
-    color: "#009205",
+    color: "#000000ff",
     fontSize: "14px"
   },
   formInput: {
@@ -1343,7 +1417,7 @@ const styles = {
 
   // Information Panel
   modalInfo: {
-    backgroundColor: "#e8f5e9",
+    backgroundColor: "#ffffffff",
     padding: "15px",
     borderRadius: "8px",
     display: "flex",
@@ -1353,12 +1427,12 @@ const styles = {
     border: "1px solid #c8e6c9"
   },
   infoIcon: {
-    color: "#4CAF50",
+    color: "#000000ff",
     fontSize: "16px"
   },
   infoText: {
     fontSize: "14px",
-    color: "#2e7d32",
+    color: "#000000ff",
     margin: "0"
   },
 
