@@ -11,6 +11,8 @@ const ProfileDropdown = ({
   showProfileModal,
   setShowProfileModal,
   showLogoutModal,
+  showNotificationModal,
+  setShowNotificationModal,
   setShowLogoutModal,
   isMobile = false,
   profileData,
@@ -101,11 +103,6 @@ const ProfileDropdown = ({
 
   return (
     <div className="profile-container">
-      <div className="notification-badge-container">
-        <FontAwesomeIcon icon={faBell} className="icon-bell" />
-        {notifications.length > 0 && <span className="notification-badge">{notifications.length}</span>}
-      </div>
-
       <div className="profile-wrapper">
         <div className="profile-info" onClick={() => setShowProfileMenu(!showProfileMenu)}>
           <img

@@ -1,15 +1,13 @@
 /* attendance-responsive.css */
-
-/* Mobile Responsive Styles for Attendance */
 @media (max-width: 768px) {
   /* Global Mobile Reset */
   * {
     max-width: 100% !important;
     box-sizing: border-box;
   }
-
-  /* Mobile Header */
-  .attendance-mobile-header {
+  
+  /* Mobile Header - Match Dashboard */
+  .mobile-header {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
@@ -19,13 +17,13 @@
     top: 0;
     left: 0;
     width: 100%;
-    z-index: 1000;
     box-sizing: border-box;
     height: 60px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1001;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
   }
 
-  .attendance-hamburger {
+  .hamburger {
     background: none;
     border: none;
     color: #fff;
@@ -39,36 +37,36 @@
     justify-content: center;
   }
 
-  .attendance-mobile-logo {
+  .mobile-logo {
     display: none !important;
   }
 
-  .attendance-mobile-header-right {
+  .mobile-header-right {
     display: flex;
     align-items: center;
     gap: 16px;
   }
 
-  .attendance-mobile-icon-bell {
+  .mobile-icon-bell {
     color: #fff;
     font-size: 20px;
     padding: 8px;
   }
 
-  .attendance-mobile-profile {
+  .mobile-profile {
     cursor: pointer;
     padding: 4px;
   }
 
-  .attendance-mobile-profile-image {
+  .mobile-profile-image {
     width: 35px;
     height: 35px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(255,255,255,0.3);
   }
 
-  .attendance-mobile-profile-dropdown {
+  .mobile-profile-dropdown {
     position: fixed;
     top: 65px;
     right: 16px;
@@ -81,7 +79,7 @@
     border: 1px solid #e0e0e0;
   }
 
-  .attendance-mobile-overlay {
+  .mobile-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -92,32 +90,28 @@
     backdrop-filter: blur(2px);
   }
 
-  /* Hide desktop header on mobile */
-  .attendance-desktop-header {
-    display: none !important;
-  }
-
-  /* Hide desktop sidebar on mobile */
-  .attendance-desktop-sidebar {
+  /* Sidebar - Match Dashboard Design */
+  .sidebar {
     transform: translateX(-100%);
-  }
-
-  /* Mobile Sidebar */
-  .attendance-mobile-sidebar {
+    width: 280px !important;
+    z-index: 1004;
+    box-shadow: 2px 0 15px rgba(0,0,0,0.1);
     position: fixed;
     top: 0;
     left: 0;
-    width: 280px !important;
     height: 100vh;
-    background-color: #009205;
-    z-index: 1001;
-    transform: translateX(-100%);
+    background: #009205 !important;
     transition: transform 0.3s ease;
     padding: 0 !important;
-    box-shadow: 2px 0 15px rgba(0, 0, 0, 0.1);
   }
 
-  .attendance-sidebar-header {
+  .sidebar-menu-link {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Mobile Sidebar Header - Match Dashboard */
+  .sidebar-header {
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
@@ -125,10 +119,10 @@
     background: #009205 !important;
     height: 60px;
     box-sizing: border-box;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
   }
 
-  .attendance-sidebar-close-btn {
+  .sidebar-close-btn {
     background: none !important;
     border: none !important;
     font-size: 24px !important;
@@ -144,298 +138,682 @@
     transition: all 0.3s ease !important;
   }
 
-  .attendance-logo-desktop {
+  .sidebar-close-btn:active {
+    background: rgba(255, 255, 255, 0.2) !important;
+    transform: scale(0.9) !important;
+  }
+
+  .logo-desktop {
     display: none !important;
   }
 
-  .attendance-logo-sidebar {
+  /* Mobile Logo in Sidebar Header */
+  .logo-sidebar {
     width: 40px !important;
     height: auto !important;
     display: block !important;
     margin: 0 !important;
   }
 
-  .attendance-sidebar-open {
+  .sidebar-open {
     transform: translateX(0) !important;
   }
 
-  .attendance-sidebar-closed {
+  .sidebar-closed {
     transform: translateX(-100%) !important;
   }
 
-  .attendance-sidebar-menu-link {
-    padding: 10px !important;
+  /* Hide Desktop Header on Mobile */
+  .desktop-header {
+    display: none !important;
   }
 
-  /* Mobile Content Area */
-  .attendance-content {
+  /* Content Area Mobile */
+  .content {
     margin-left: 0 !important;
     width: 100% !important;
-    box-sizing: border-box;
-    overflow-x: hidden;
+    padding-top: 72px !important;
+    padding-bottom: 12px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
 
-  /* Header Section */
+  /* Attendance Page Specific Styles */
   .attendance-header-section {
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: center !important;
-
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    margin-bottom: 16px !important;
   }
 
   .attendance-title {
-    display: none !important;
-  }
-
-  .date-text {
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    text-align: center !important;
-    padding: 0 50px !important;
+    font-size: 20px !important;
+    margin: 0 !important;
   }
 
   .attendance-title-line {
-    display: none !important;
+    width: 60px !important;
+    height: 3px !important;
+    background: #009205 !important;
+    border-radius: 2px !important;
   }
 
   .attendance-date-nav {
+    width: 100% !important;
+    justify-content: space-between !important;
+    background: white !important;
+    padding: 10px 16px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+  }
+
+  .attendance-nav-button {
+    width: 36px !important;
+    height: 36px !important;
+    display: flex !important;
+    align-items: center !important;
     justify-content: center !important;
-    border: #e0e0e0 1px solid !important;
-    padding: 5px !important;
+    background: #f5f5f5 !important;
+    border: none !important;
     border-radius: 8px !important;
+    cursor: pointer !important;
   }
 
-  /* Summary Cards - Horizontal Scroll */
   .attendance-summary-cards {
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    padding: 12px 0 !important;
-    gap: 16px !important;
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-  }
-
-  .attendance-summary-cards::-webkit-scrollbar {
-    display: none !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    margin-bottom: 20px !important;
   }
 
   .attendance-card {
-    flex: 0 0 auto !important;
-    margin: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
     padding: 16px !important;
     border-radius: 12px !important;
-  }
-
-  .attendance-card-content {
-    margin-top: 0 !important;
-    display: flex !important;
-    flex-direction: row !important;
-    height: 100% !important;
-    justify-content: flex-start !important;
-  }
-
-  .attendance-card-data {
-    gap: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-start !important;
-    height: 100% !important;
-  }
-
-  .attendance-data1 {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    gap: 30px !important;
-    border: #e0e0e0 1px solid !important;
-    border-radius: 8px !important;
-    margin-bottom: 10px !important;
-    padding: 12px !important;
-  }
-
-  .divider {
-    display: none !important;
-  }
-
-  .attendance-txtSum {
-    font-size: 16px !important;
-    font-weight: 600 !important;
-    margin-bottom: 10px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+    background: white !important;
+    text-align: center !important;
   }
 
   .attendance-txtData {
-    font-size: 20px !important;
+    font-size: 24px !important;
     font-weight: 700 !important;
-    margin-top: auto !important;
-    line-height: 1.2 !important;
+    margin: 0 !important;
+    color: #1a1a1a !important;
   }
 
   .attendance-txtlabel {
-    font-size: 13px !important;
+    font-size: 12px !important;
     color: #666 !important;
-    text-align: center !important;
-    margin-top: 8px !important;
-    justify-content: center !important;
+    margin: 4px 0 0 0 !important;
   }
 
   /* Filters Section */
   .attendance-inputs-section {
     flex-direction: column !important;
     gap: 16px !important;
+    margin-bottom: 20px !important;
   }
 
   .attendance-row1 {
     flex-direction: column !important;
     gap: 12px !important;
-    width: 100% !important;
   }
 
-  .attendance-first-row {
-    flex-direction: column !important;
-    gap: 10px !important;
+  .attendance-firstRow {
     width: 100% !important;
   }
 
   .attendance-input1 {
     width: 100% !important;
-    padding: 12px 35px !important;
+    padding: 12px 16px 12px 40px !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 10px !important;
     font-size: 14px !important;
-  }
-
-  .attendance-iconSearch {
-    margin-top: 16px !important;
+    box-sizing: border-box !important;
   }
 
   .attendance-filter {
-    width: 100% !important;
+    flex: 1 !important;
     padding: 12px !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 10px !important;
     font-size: 14px !important;
+    background: white !important;
   }
 
   .attendance-row2 {
-    flex-wrap: wrap !important;
-    gap: 10px !important;
-    justify-content: flex-start !important;
+    width: 100% !important;
+    justify-content: space-between !important;
   }
 
   .attendance-btn1,
   .attendance-btn2,
   .attendance-btn3 {
-    padding: 10px 5px !important;
+    flex: 1 !important;
+    padding: 12px !important;
+    border-radius: 10px !important;
     font-size: 14px !important;
-    min-width: 100px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    border: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    margin: 0 !important;
+  }
+
+  .attendance-btn1 {
+    background: white !important;
+    color: #333 !important;
+    border: 1px solid #e0e0e0 !important;
+  }
+
+  .attendance-btn2 {
+    background: #46810390 !important;
+    color: white !important;
+  }
+
+  .attendance-btn3 {
+    background: #00B7FF !important;
+    color: white !important;
   }
 
   /* Table Container */
   .attendance-table-container {
-    width: 100% !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
-    margin-top: 10px !important;
+    margin-bottom: 20px !important;
+    background: white !important;
     border-radius: 12px !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+    padding: 16px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
   }
 
-  .attendance-table-wrapper {
+  .attendance-table {
     min-width: 800px !important;
-  }
-
-  .attendance-table th,
-  .attendance-table td {
-    padding: 12px 8px !important;
     font-size: 12px !important;
   }
 
   .attendance-th {
+    padding: 12px 8px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    background: #f8f9fa !important;
     white-space: nowrap !important;
-    font-size: 11px !important;
+  }
+
+  .attendance-td {
+    padding: 12px 8px !important;
+    font-size: 12px !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+    white-space: nowrap !important;
   }
 
   .attendance-timeTrack {
-    flex-direction: column !important;
-    gap: 4px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-width: 120px !important;
   }
 
   .attendance-trackLine {
-    margin: 4px 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
   }
 
   .attendance-lineTable {
     width: 30px !important;
+    height: 1px !important;
+    background: #666 !important;
   }
 
-  /* Modal Mobile */
-  .attendance-modal-content {
+  .attendance-status-badge {
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    display: inline-block !important;
+  }
+
+  /* Pagination - FIXED FOR MOBILE */
+  .attendance-pagination {
+    flex-direction: column !important;
+    gap: 16px !important;
+    padding: 16px !important;
+    background: white !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+    align-items: center !important;
+  }
+
+  .attendance-pagination-info {
+    text-align: center !important;
+    font-size: 13px !important;
+    color: #666 !important;
+    width: 100% !important;
+    padding-bottom: 12px !important;
+    border-bottom: 1px solid #eee !important;
+    margin-bottom: 8px !important;
+  }
+
+  .attendance-pagination-controls {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+
+  .attendance-pagination-numbers {
+    display: none !important; /* Hide number buttons on mobile */
+  }
+
+  /* Simplified mobile page display */
+  .attendance-pagination-current {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 10px 16px !important;
+    background-color: #f8f9fa !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    margin: 0 8px !important;
+  }
+
+  .attendance-pagination-page {
+    color: #009205 !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
+  }
+
+  .attendance-pagination-of {
+    color: #666 !important;
+  }
+
+  .attendance-pagination-total {
+    font-weight: 600 !important;
+  }
+
+  /* Pagination buttons for mobile */
+  .attendance-pagination-button {
+    min-width: 48px !important;
+    height: 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    border: 1px solid #e0e0e0 !important;
+    background: white !important;
+    border-radius: 10px !important;
+    cursor: pointer !important;
+    font-size: 16px !important;
+    color: #333 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .attendance-pagination-button:hover {
+    background-color: #f5f5f5 !important;
+  }
+
+  .attendance-pagination-button:active {
+    transform: scale(0.95) !important;
+    background-color: #f0f0f0 !important;
+  }
+
+  .attendance-pagination-button.disabled {
+    background-color: #fafafa !important;
+    color: #ccc !important;
+    border-color: #f0f0f0 !important;
+    cursor: not-allowed !important;
+  }
+
+  .attendance-pagination-button.disabled:active {
+    transform: none !important;
+  }
+
+  /* First/Last buttons for mobile */
+  .attendance-pagination-first,
+  .attendance-pagination-last {
+    font-size: 18px !important;
+  }
+
+  /* Prev/Next buttons for mobile */
+  .attendance-pagination-prev,
+  .attendance-pagination-next {
+    font-size: 18px !important;
+  }
+
+  .attendance-pagination-perpage {
+    display: none !important; /* Hide items per page on mobile */
+  }
+
+  /* Profile Modal - Match Dashboard */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+
+  .modal-content {
     width: 90% !important;
     max-width: 400px !important;
     padding: 20px !important;
     margin: 20px !important;
     border-radius: 16px !important;
+    background: white !important;
   }
 
-  /* Dropdown Positioning */
+  .profile-modal-overlay {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 10px;
+    overflow-y: auto;
+  }
+
+  .profile-modal-content {
+    width: 100% !important;
+    max-width: 90% !important;
+    margin-top: 40px;
+    border-radius: 12px;
+    overflow-y: auto;
+  }
+
+  .photo-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 20px auto;
+  }
+
+  .modal-profile-image {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .change-photo-btn {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.25s ease;
+    white-space: nowrap;
+  }
+
+  /* Sidebar Menu Items */
+  .sidebar-menu-link li {
+    margin: 4px 0 !important;
+  }
+
+  .sidebar-menu-link a {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 12px 16px !important;
+    color: white !important;
+    text-decoration: none !important;
+    font-size: 14px !important;
+    transition: background-color 0.2s ease !important;
+    border-radius: 8px !important;
+    margin: 2px 8px !important;
+  }
+
+  .sidebar-menu-link a:hover,
+  .sidebar-menu-link a.active {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Dropdown Export */
   .attendance-dropdown {
-    position: fixed !important;
-    top: auto !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 90% !important;
-    max-width: 300px !important;
-    margin-top: 10px !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    background: white !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+    z-index: 1000 !important;
+    min-width: 150px !important;
+    margin-top: 4px !important;
+  }
+
+  .attendance-dropdown div {
+    padding: 12px 16px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    transition: background-color 0.2s ease !important;
+  }
+
+  .attendance-dropdown div:active {
+    background-color: #f5f5f5 !important;
+  }
+
+  /* Utility Classes */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+  }
+
+  .mobile-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
 /* Desktop styles */
 @media (min-width: 769px) {
   /* Hide mobile elements on desktop */
-  .attendance-mobile-header,
-  .attendance-mobile-profile-dropdown,
-  .attendance-mobile-overlay,
-  .attendance-sidebar-header,
-  .attendance-sidebar-close-btn,
-  .attendance-logo-sidebar {
+  .mobile-header,
+  .mobile-profile-dropdown,
+  .mobile-overlay,
+  .sidebar-header,
+  .sidebar-close-btn,
+  .logo-sidebar {
+    display: none !important;
+  }
+  
+  /* Show desktop elements */
+  .desktop-header {
+    display: flex !important;
+  }
+  
+  .sidebar {
+    transform: translateX(0) !important;
+  }
+  
+  .logo-desktop {
+    display: block !important;
+  }
+
+  .attendance-pagination {
+    flex-direction: column !important;
+    gap: 16px !important;
+    padding: 16px !important;
+    background: white !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+    align-items: center !important;
+  }
+
+  .attendance-pagination-info {
+    text-align: center !important;
+    font-size: 13px !important;
+    color: #666 !important;
+    width: 100% !important;
+    padding-bottom: 12px !important;
+    border-bottom: 1px solid #eee !important;
+    margin-bottom: 8px !important;
+  }
+
+  .attendance-pagination-controls {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 6px !important;
+    width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+
+  /* Show only 3 page number buttons on mobile */
+  .attendance-pagination-numbers {
+    display: flex !important;
+    gap: 4px !important;
+    margin: 0 4px !important;
+  }
+
+  /* Hide page info display on mobile since we're showing numbers */
+  .attendance-pagination-current {
     display: none !important;
   }
 
-  /* Show desktop elements */
-  .attendance-desktop-sidebar {
-    display: block !important;
+  /* Pagination buttons for mobile - Only show 3 numbers */
+  .attendance-pagination-button {
+    min-width: 48px !important;
+    height: 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    border: 1px solid #e0e0e0 !important;
+    background: white !important;
+    border-radius: 10px !important;
+    cursor: pointer !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    transition: all 0.2s ease !important;
   }
 
-  .attendance-desktop-header {
+  .attendance-pagination-button:hover {
+    background-color: #f5f5f5 !important;
+  }
+
+  .attendance-pagination-button:active {
+    transform: scale(0.95) !important;
+    background-color: #f0f0f0 !important;
+  }
+
+  .attendance-pagination-button.disabled {
+    background-color: #fafafa !important;
+    color: #ccc !important;
+    border-color: #f0f0f0 !important;
+    cursor: not-allowed !important;
+  }
+
+  .attendance-pagination-button.disabled:active {
+    transform: none !important;
+  }
+
+  /* Active page button */
+  .attendance-pagination-button.active {
+    background-color: #009205 !important;
+    color: white !important;
+    border-color: #009205 !important;
+    font-weight: 600 !important;
+  }
+
+  /* First/Last buttons for mobile - slightly larger */
+  .attendance-pagination-first,
+  .attendance-pagination-last {
+    font-size: 18px !important;
+    min-width: 52px !important;
+  }
+
+  /* Prev/Next buttons for mobile */
+  .attendance-pagination-prev,
+  .attendance-pagination-next {
+    font-size: 18px !important;
+    min-width: 52px !important;
+  }
+
+  /* Hide specific page number buttons beyond 3 on mobile */
+  .attendance-pagination-number:nth-child(n+4) {
+    display: none !important;
+  }
+
+  /* Ensure only 3 number buttons show */
+  .attendance-pagination-number:first-child,
+  .attendance-pagination-number:nth-child(2),
+  .attendance-pagination-number:nth-child(3) {
     display: flex !important;
   }
 
-  .attendance-logo-desktop {
-    display: block !important;
+  .attendance-pagination-perpage {
+    display: none !important; /* Hide items per page on mobile */
   }
 }
 
-/* Additional utility classes */
-.attendance-mobile-scroll {
-  -webkit-overflow-scrolling: touch;
-  overflow-x: auto;
+/* Very small screens */
+@media (max-width: 380px) {
+  .attendance-summary-cards {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .attendance-row2 {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  
+  .attendance-btn1,
+  .attendance-btn2,
+  .attendance-btn3 {
+    flex: 0 0 calc(50% - 4px) !important;
+  }
+  
+  .attendance-table {
+    min-width: 700px !important;
+  }
+
+  /* Pagination for very small screens */
+  .attendance-pagination-controls {
+    gap: 6px !important;
+  }
+
+  .attendance-pagination-button {
+    min-width: 44px !important;
+    height: 44px !important;
+    font-size: 15px !important;
+  }
+
+  .attendance-pagination-current {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+
+  .attendance-pagination-page {
+    font-size: 15px !important;
+  }
 }
 
-.attendance-mobile-tap-highlight {
-  -webkit-tap-highlight-color: transparent;
-}
+/* Tablet adjustments */
+@media (min-width: 481px) and (max-width: 768px) {
+  .attendance-pagination-controls {
+    gap: 10px !important;
+  }
 
-.attendance-mobile-text-size {
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-/* Status badges mobile optimization */
-.attendance-status-badge {
-  display: inline-block !important;
-  padding: 4px 8px !important;
-  font-size: 11px !important;
-  min-width: 70px !important;
-  text-align: center !important;
+  .attendance-pagination-button {
+    min-width: 46px !important;
+    height: 46px !important;
+  }
 }

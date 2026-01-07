@@ -254,10 +254,6 @@ function Login() {
             </p>
           )}
 
-          <p className="forgot-password">
-            <Link to="/forgotPassword">Forgot password?</Link>
-          </p>
-
           <div className="lines">
             <div className="line"></div>
             <div className="or">

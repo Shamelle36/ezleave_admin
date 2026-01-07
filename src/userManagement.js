@@ -27,9 +27,12 @@ import {
   faEnvelopeOpen,
   faCalendar,
   faSave,
-  faInfoCircle
+  faInfoCircle,
+  faBars,
+  faTimes
 } from "@fortawesome/free-solid-svg-icons";
 import ProfileDropdown from "./profileDropdown";
+import './user-management-responsive.css'; 
 
 function UserManagement() {
   const [showModal, setShowModal] = useState(false);
@@ -57,6 +60,9 @@ function UserManagement() {
       profile_picture: "",
     });
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+const [isMobileView, setIsMobileView] = useState(false);
+
   const departments = [
     "Office of the Municipal Mayor",
     "Human Resource Management Division",
@@ -78,6 +84,15 @@ function UserManagement() {
   ];
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
+
+  useEffect(() => {
+  const checkMobile = () => {
+    if (typeof window !== 'undefined') setIsMobileView(window.innerWidth <= 768);
+  };
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  return () => window.removeEventListener('resize', checkMobile);
+}, []);
 
   useEffect(() => {
       const storedUser = JSON.parse(localStorage.getItem("admin"));
@@ -219,31 +234,52 @@ function UserManagement() {
     setEditModal(true);
   };
 
-  const handleSaveEdit = async () => {
-    if (!selectedAccount) return;
+ const handleSaveEdit = async () => {
+  if (!selectedAccount) return;
+  
+  setLoading(true);
+  try {
+    // Use the new endpoint
+    const res = await fetch(`${API_URL}/api/authAdmin/accounts/${selectedAccount.id}`, {
+      method: "PUT",
+      headers: { 
+        "Content-Type": "application/json",
+        // Add authorization if needed
+        "Authorization": `Bearer ${admin?.token || ""}`
+      },
+      body: JSON.stringify({
+        full_name: selectedAccount.full_name,
+        email: selectedAccount.email,
+        role: selectedAccount.role,
+        department: selectedAccount.department,
+      }),
+    });
     
-    try {
-      const res = await fetch(`${API_URL}/api/authAdmin/accounts/${selectedAccount.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectedAccount),
-      });
+    const data = await res.json();
+    
+    if (res.ok) {
+      setEditModal(false);
+      setMessage("✅ Account information successfully updated.");
       
-      if (res.ok) {
-        setEditModal(false);
-        setMessage("✅ Account information successfully updated.");
-        fetchAccounts();
-        
-        // Clear message after 5 seconds
-        setTimeout(() => setMessage(""), 5000);
-      } else {
-        setMessage("❌ Unable to update account. Please try again.");
-      }
-    } catch (err) {
-      console.error(err);
-      setMessage("❌ System error occurred. Please contact IT support.");
+      // Update the local state
+      setAccounts(prevAccounts => 
+        prevAccounts.map(acc => 
+          acc.id === selectedAccount.id ? { ...acc, ...selectedAccount } : acc
+        )
+      );
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setMessage(""), 5000);
+    } else {
+      setMessage(`❌ ${data.message || "Unable to update account. Please try again."}`);
     }
-  };
+  } catch (err) {
+    console.error(err);
+    setMessage("❌ System error occurred. Please contact IT support.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleResetPassword = async (accountId) => {
     if (window.confirm("Confirm password reset? The user will receive email instructions to create a new password.")) {
@@ -269,471 +305,554 @@ function UserManagement() {
     setRoleFilter("all");
   };
 
-  return (
-    <div style={styles.dashboardContainer}>
-      {/* Header */}
-       <div className="attendance-desktop-header" style={styles.header}>
-        <div style={styles.headerRight}>
-          <ProfileDropdown
-            showProfileModal={showProfileModal}
-            setShowProfileModal={setShowProfileModal}
-            isMobile={false}
-            profileData={profileData}
-            admin={admin}
+ return (
+  <div className="dashboard-container" style={styles.dashboardContainer}>
+    {/* Mobile Header */}
+    <div className="mobile-header">
+      <button 
+        className="hamburger"
+        onClick={() => setIsSidebarOpen(true)}
+      >
+        <FontAwesomeIcon icon={faBars} />
+      </button>
+      <img src={require("./images/logo_ez.png")} alt="logo" className="mobile-logo" />
+      <div className="mobile-header-right">
+        <ProfileDropdown
+          showProfileModal={showProfileModal}
+          setShowProfileModal={setShowProfileModal}
+          isMobile={true}
+          profileData={profileData}
+          admin={admin}
+        />
+      </div>
+    </div>
+
+    {/* Mobile Sidebar Overlay */}
+    {isSidebarOpen && (
+      <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+    )}
+
+    {/* Desktop Header */}
+    <div className="desktop-header attendance-desktop-header" style={styles.header}>
+      <div style={styles.headerRight}>
+        <ProfileDropdown
+          showProfileModal={showProfileModal}
+          setShowProfileModal={setShowProfileModal}
+          isMobile={false}
+          profileData={profileData}
+          admin={admin}
+        />
+      </div>
+    </div>
+
+    {/* Sidebar */}
+    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+      {/* Mobile Sidebar Header */}
+      <div className="sidebar-header">
+        <button 
+          className="sidebar-close-btn"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+        <img 
+          className='logo-sidebar' 
+          src={require("./images/logo_ez.png")} 
+          alt="logo" 
+        />
+      </div>
+
+      {/* Desktop Logo */}
+      <img 
+        src={require("./images/logo_ez.png")} 
+        alt="logo" 
+        style={styles.logo} 
+        className='logo-desktop'
+      />
+      
+      <ul className='sidebar-menu-link' style={styles.sidebarList}>
+        <li>
+          <Link 
+            style={styles.sb} 
+            to="/dashboard"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard
+          </Link>
+        </li>
+        <li>
+          <Link 
+            style={styles.sb} 
+            to="/employee"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees
+          </Link>
+        </li>
+        <li>
+          <Link 
+            style={styles.sb} 
+            to="/attendance"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance
+          </Link>
+        </li>
+        <li>
+          <Link 
+            style={styles.sb} 
+            to="/leaveManagement"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management
+          </Link>
+        </li>
+        <li>
+          <Link 
+            style={styles.sb} 
+            to="/announcement"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement
+          </Link>
+        </li>
+        <li>
+          <Link 
+            style={styles.sb} 
+            to="/audit_logs"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs
+          </Link>
+        </li>
+        <li style={styles.btnActive}>
+          <Link style={styles.sb} to="#">
+            <FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management
+          </Link>
+        </li>
+      </ul>
+    </div>
+
+    {/* Main Content */}
+    <div className="main-content" style={styles.mainContent}>
+      {/* Header Section */}
+      <div className="page-header" style={styles.pageHeader}>
+        <div>
+          <h2 className="page-title" style={styles.pageTitle}>User Account Management</h2>
+        </div>
+        <button className="add-btn" style={styles.addBtn} onClick={() => setShowModal(true)}>
+          <FontAwesomeIcon icon={faPlus} style={styles.btnIcon} />
+          Add New User
+        </button>
+      </div>
+
+      {/* Statistics Overview */}
+      <div className="stats-container" style={styles.statsContainer}>
+        <div className="stat-card" style={styles.statCard}>
+          <div className="stat-icon-container mayor" style={styles.statIconContainer}>
+            <FontAwesomeIcon icon={faUserShield} style={styles.statIcon} />
+          </div>
+          <div className="stat-content" style={styles.statContent}>
+            <h3 className="stat-number" style={styles.statNumber}>
+              {accounts.filter(a => a.role === "mayor").length}
+            </h3>
+            <p className="stat-label" style={styles.statLabel}>Municipal Mayor</p>
+          </div>
+        </div>
+        
+        <div className="stat-card" style={styles.statCard}>
+          <div className="stat-icon-container office-head" style={styles.statIconContainer}>
+            <FontAwesomeIcon icon={faBuilding} style={styles.statIcon} />
+          </div>
+          <div className="stat-content" style={styles.statContent}>
+            <h3 className="stat-number" style={styles.statNumber}>
+              {accounts.filter(a => a.role === "office_head").length}
+            </h3>
+            <p className="stat-label" style={styles.statLabel}>Department Heads</p>
+          </div>
+        </div>
+        
+        <div className="stat-card" style={styles.statCard}>
+          <div className="stat-icon-container total" style={styles.statIconContainer}>
+            <FontAwesomeIcon icon={faUsers} style={styles.statIcon} />
+          </div>
+          <div className="stat-content" style={styles.statContent}>
+            <h3 className="stat-number" style={styles.statNumber}>{accounts.length}</h3>
+            <p className="stat-label" style={styles.statLabel}>Total System Users</p>
+          </div>
+        </div>
+        
+        <div className="stat-card" style={styles.statCard}>
+          <div className="stat-icon-container active" style={styles.statIconContainer}>
+            <FontAwesomeIcon icon={faCheckCircle} style={styles.statIcon} />
+          </div>
+          <div className="stat-content" style={styles.statContent}>
+            <h3 className="stat-number" style={styles.statNumber}>{accounts.length}</h3>
+            <p className="stat-label" style={styles.statLabel}>Active Accounts</p>
+          </div>
+        </div>
+      </div>
+
+      {/* System Notification */}
+      {message && (
+        <div className={message.includes("✅") ? "success-message" : "error-message"} style={message.includes("✅") ? styles.successMessage : styles.errorMessage}>
+          <FontAwesomeIcon icon={message.includes("✅") ? faCheckCircle : faTimesCircle} style={styles.messageIcon} />
+          {message}
+        </div>
+      )}
+
+      {/* Search and Filter Controls */}
+      <div className="filter-bar" style={styles.filterBar}>
+        <div className="search-box" style={styles.searchBox}>
+          <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+          <input
+            type="text"
+            placeholder="Find users by name, email, or department..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+            style={styles.searchInput}
           />
         </div>
+        
+        <div className="filter-controls" style={styles.filterControls}>
+          <div className="filter-group" style={styles.filterGroup}>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="filter-select"
+              style={styles.filterSelect}
+            >
+              <option value="all">All Access Levels</option>
+              <option value="mayor">Executive Administration</option>
+              <option value="office_head">Department Leadership</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      {/* Sidebar */}
-      <div style={styles.sidebar}>
-        <img src={require("./images/logo_ez.png")} alt="logo" style={styles.logo} />
-        <ul style={styles.sidebarList}>
-          <li>
-            <Link style={styles.sb} to="/dashboard">
-              <FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="/employee">
-              <FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="/attendance">
-              <FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="/leaveManagement">
-              <FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="/messages">
-              <FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="/announcement">
-              <FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement
-            </Link>
-          </li>
-          <li>
-            <Link style={styles.sb} to="/audit_logs">
-              <FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs
-            </Link>
-          </li>
-          <li style={styles.btnActive}>
-            <Link style={styles.sb} to="#">
-              <FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management
-            </Link>
-          </li>
-        </ul>
-      </div>
-
-      {/* Main Content */}
-      <div style={styles.mainContent}>
-        {/* Header Section */}
-        <div style={styles.pageHeader}>
-          <div>
-            <h2 style={styles.pageTitle}>User Account Management</h2>
-          </div>
-          <button style={styles.addBtn} onClick={() => setShowModal(true)}>
-            <FontAwesomeIcon icon={faPlus} style={styles.btnIcon} />
-            Add New User
-          </button>
-        </div>
-
-        {/* Statistics Overview */}
-        <div style={styles.statsContainer}>
-          <div style={styles.statCard}>
-            <div style={styles.statIconContainer} className="mayor">
-              <FontAwesomeIcon icon={faUserShield} style={styles.statIcon} />
-            </div>
-            <div style={styles.statContent}>
-              <h3 style={styles.statNumber}>
-                {accounts.filter(a => a.role === "mayor").length}
-              </h3>
-              <p style={styles.statLabel}>Municipal Mayor</p>
-            </div>
-          </div>
-          
-          <div style={styles.statCard}>
-            <div style={styles.statIconContainer} className="office-head">
-              <FontAwesomeIcon icon={faBuilding} style={styles.statIcon} />
-            </div>
-            <div style={styles.statContent}>
-              <h3 style={styles.statNumber}>
-                {accounts.filter(a => a.role === "office_head").length}
-              </h3>
-              <p style={styles.statLabel}>Department Heads</p>
-            </div>
-          </div>
-          
-          <div style={styles.statCard}>
-            <div style={styles.statIconContainer} className="total">
-              <FontAwesomeIcon icon={faUsers} style={styles.statIcon} />
-            </div>
-            <div style={styles.statContent}>
-              <h3 style={styles.statNumber}>{accounts.length}</h3>
-              <p style={styles.statLabel}>Total System Users</p>
-            </div>
-          </div>
-          
-          <div style={styles.statCard}>
-            <div style={styles.statIconContainer} className="active">
-              <FontAwesomeIcon icon={faCheckCircle} style={styles.statIcon} />
-            </div>
-            <div style={styles.statContent}>
-              <h3 style={styles.statNumber}>{accounts.length}</h3>
-              <p style={styles.statLabel}>Active Accounts</p>
-            </div>
-          </div>
-        </div>
-
-        {/* System Notification */}
-        {message && (
-          <div style={message.includes("✅") ? styles.successMessage : styles.errorMessage}>
-            <FontAwesomeIcon icon={message.includes("✅") ? faCheckCircle : faTimesCircle} style={styles.messageIcon} />
-            {message}
-          </div>
-        )}
-
-        {/* Search and Filter Controls */}
-        <div style={styles.filterBar}>
-          <div style={styles.searchBox}>
-            <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
-            <input
-              type="text"
-              placeholder="Find users by name, email, or department..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={styles.searchInput}
-            />
-          </div>
-          
-          <div style={styles.filterControls}>
-            <div style={styles.filterGroup}>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                style={styles.filterSelect}
-              >
-                <option value="all">All Access Levels</option>
-                <option value="mayor">Executive Administration</option>
-                <option value="office_head">Department Leadership</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* User Accounts Directory */}
-        <div style={styles.tableContainer}>
-          
-          <div style={styles.tableWrapper}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>USER PROFILE</th>
-                  <th style={styles.th}>ACCESS LEVEL</th>
-                  <th style={styles.th}>DEPARTMENT</th>
-                  <th style={styles.th}>Email Address</th>
-                  <th style={styles.th}>STATUS</th>
-                  <th style={styles.th}>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAccounts.length > 0 ? (
-                  filteredAccounts.map((acc) => (
-                    <tr key={acc.id} style={styles.tableRow}>
-                      <td style={styles.td}>
-                        <div style={styles.userCell}>
-                          <div style={styles.userAvatar}>
-                            {acc.full_name.charAt(0).toUpperCase()}
-                          </div>
-                          <div style={styles.userInfo}>
-                            <div style={styles.userName}>{acc.full_name}</div>
-                            <div style={styles.userId}>Employee ID: {acc.id}</div>
-                          </div>
+      {/* User Accounts Directory */}
+      <div className="table-container" style={styles.tableContainer}>
+        
+        <div className="table-wrapper" style={styles.tableWrapper}>
+          <table className="table" style={styles.table}>
+            <thead>
+              <tr>
+                <th className="th" style={styles.th}>USER PROFILE</th>
+                <th className="th" style={styles.th}>ACCESS LEVEL</th>
+                <th className="th" style={styles.th}>DEPARTMENT</th>
+                <th className="th" style={styles.th}>Email Address</th>
+                <th className="th" style={styles.th}>STATUS</th>
+                <th className="th" style={styles.th}>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAccounts.length > 0 ? (
+                filteredAccounts.map((acc) => (
+                  <tr key={acc.id} className="table-row" style={styles.tableRow}>
+                    <td className="td" style={styles.td}>
+                      <div className="user-cell" style={styles.userCell}>
+                        <div className="user-avatar" style={styles.userAvatar}>
+                          {acc.full_name.charAt(0).toUpperCase()}
                         </div>
-                      </td>
-                      <td style={styles.td}>
-                        <span style={{
-                          ...styles.roleBadge,
-                          ...(acc.role === "Mayor" ? styles.roleMayor : styles.roleOfficeHead)
-                        }}>
-                          {acc.role}
-                        </span>
-                      </td>
-                      <td style={styles.td}>
-                        <div style={styles.deptCell}>
-                          <span style={styles.deptText}>{acc.department}</span>
+                        <div className="user-info" style={styles.userInfo}>
+                          <div className="user-name" style={styles.userName}>{acc.full_name}</div>
+                          <div className="user-id" style={styles.userId}>Employee ID: {acc.id}</div>
                         </div>
-                      </td>
-                      <td style={styles.td}>
-                        <div style={styles.emailCell}>
-                          <span style={styles.emailText}>{acc.email}</span>
-                        </div>
-                      </td>
-                      <td style={styles.td}>
-                        <span style={styles.statusBadge}>
-                          <FontAwesomeIcon icon={faCheckCircle} style={styles.statusIcon} />
-                          Active
-                        </span>
-                      </td>
-                      <td style={styles.td}>
-                        <div style={styles.actionButtons}>
-                          <button 
-                            style={styles.viewBtn}
-                            onClick={() => handleEditAccount(acc)}
-                            title="View User Details"
-                          >
-                            <FontAwesomeIcon icon={faEye} />
-                          </button>
-                          <button 
-                            style={styles.editBtn}
-                            onClick={() => handleEditAccount(acc)}
-                            title="Edit User Information"
-                          >
-                            <FontAwesomeIcon icon={faEdit} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" style={styles.noData}>
-                      <div style={styles.emptyState}>
-                        <FontAwesomeIcon icon={faUsers} style={styles.emptyIcon} />
-                        <p style={styles.emptyText}>No user accounts match your criteria</p>
-                        {searchTerm || roleFilter !== "all" ? (
-                          <p style={styles.emptySubtext}>
-                            Adjust your search parameters or reset filters
-                          </p>
-                        ) : (
-                          <button 
-                            style={styles.createFirstBtn}
-                            onClick={() => setShowModal(true)}
-                          >
-                            Create Initial User Account
-                          </button>
-                        )}
+                      </div>
+                    </td>
+                    <td className="td" style={styles.td}>
+                      <span style={{
+                        ...styles.roleBadge,
+                        ...(acc.role === "Mayor" ? styles.roleMayor : styles.roleOfficeHead)
+                      }}>
+                        {acc.role}
+                      </span>
+                    </td>
+                    <td className="td" style={styles.td}>
+                      <div className="dept-cell" style={styles.deptCell}>
+                        <span className="dept-text" style={styles.deptText}>{acc.department}</span>
+                      </div>
+                    </td>
+                    <td className="td" style={styles.td}>
+                      <div className="email-cell" style={styles.emailCell}>
+                        <span className="email-text" style={styles.emailText}>{acc.email}</span>
+                      </div>
+                    </td>
+                    <td className="td" style={styles.td}>
+                      <span className="status-badge" style={styles.statusBadge}>
+                        <FontAwesomeIcon icon={faCheckCircle} style={styles.statusIcon} />
+                        Active
+                      </span>
+                    </td>
+                    <td className="td" style={styles.td}>
+                      <div className="action-buttons" style={styles.actionButtons}>
+                        <button 
+                          className="view-btn"
+                          style={styles.viewBtn}
+                          onClick={() => handleEditAccount(acc)}
+                          title="View User Details"
+                        >
+                          <FontAwesomeIcon icon={faEye} />
+                        </button>
+                        <button 
+                          className="edit-btn"
+                          style={styles.editBtn}
+                          onClick={() => handleEditAccount(acc)}
+                          title="Edit User Information"
+                        >
+                          <FontAwesomeIcon icon={faEdit} />
+                        </button>
                       </div>
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="no-data" style={styles.noData}>
+                    <div className="empty-state" style={styles.emptyState}>
+                      <FontAwesomeIcon icon={faUsers} style={styles.emptyIcon} />
+                      <p className="empty-text" style={styles.emptyText}>No user accounts match your criteria</p>
+                      {searchTerm || roleFilter !== "all" ? (
+                        <p className="empty-subtext" style={styles.emptySubtext}>
+                          Adjust your search parameters or reset filters
+                        </p>
+                      ) : (
+                        <button 
+                          className="create-first-btn"
+                          style={styles.createFirstBtn}
+                          onClick={() => setShowModal(true)}
+                        >
+                          Create Initial User Account
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        {/* Create New Account Modal */}
-        {showModal && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.modal}>
-              <div style={styles.modalHeader}>
-                <h3 style={styles.modalTitle}>Register New System User</h3>
-                <button 
-                  style={styles.closeBtn}
-                  onClick={() => setShowModal(false)}
-                >
-                  ×
-                </button>
+      {/* Create New Account Modal */}
+      {showModal && (
+        <div style={styles.modalOverlay}>
+          <div className="modal" style={styles.modal}>
+            <div className="modal-header" style={styles.modalHeader}>
+              <h3 className="modal-title" style={styles.modalTitle}>Register New System User</h3>
+              <button 
+                className="close-btn"
+                style={styles.closeBtn}
+                onClick={() => setShowModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body" style={styles.modalBody}>
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>
+                  <FontAwesomeIcon icon={faUsers} style={styles.labelIcon} />
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={newAccount.full_name}
+                  onChange={(e) => setNewAccount({ ...newAccount, full_name: e.target.value })}
+                  className="form-input"
+                  style={styles.formInput}
+                  placeholder="Enter employee's full name"
+                />
               </div>
               
-              <div style={styles.modalBody}>
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>
-                    <FontAwesomeIcon icon={faUsers} style={styles.labelIcon} />
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newAccount.full_name}
-                    onChange={(e) => setNewAccount({ ...newAccount, full_name: e.target.value })}
-                    style={styles.formInput}
-                    placeholder="Enter employee's full name"
-                  />
-                </div>
-                
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>
-                    <FontAwesomeIcon icon={faEnvelope} style={styles.labelIcon} />
-                    Official Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={newAccount.email}
-                    onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
-                    style={styles.formInput}
-                    placeholder="Enter municipal email address"
-                  />
-                </div>
-                
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>
-                    <FontAwesomeIcon icon={faUserShield} style={styles.labelIcon} />
-                    System Access Level
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>
+                  <FontAwesomeIcon icon={faEnvelope} style={styles.labelIcon} />
+                  Official Email Address
+                </label>
+                <input
+                  type="email"
+                  value={newAccount.email}
+                  onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                  className="form-input"
+                  style={styles.formInput}
+                  placeholder="Enter municipal email address"
+                />
+              </div>
+              
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>
+                  <FontAwesomeIcon icon={faUserShield} style={styles.labelIcon} />
+                  System Access Level
+                </label>
+                <select
+                  value={newAccount.role}
+                  onChange={(e) => {
+                    const role = e.target.value;
+                    setNewAccount({
+                      ...newAccount,
+                      role,
+                      department: role === "Mayor" ? "Office of the Municipal Mayor" : "",
+                    });
+                  }}
+                  className="form-select"
+                  style={styles.formSelect}
+                >
+                  <option value="">Select Access Privilege</option>
+                  <option value="Mayor">Mayor</option>
+                  <option value="Office Head">Department Head</option>
+                </select>
+              </div>
+
+              {newAccount.role !== "Mayor" && newAccount.role !== "" && (
+                <div className="form-group" style={styles.formGroup}>
+                  <label className="form-label" style={styles.formLabel}>
+                    <FontAwesomeIcon icon={faBuilding} style={styles.labelIcon} />
+                    Assigned Department
                   </label>
                   <select
-                    value={newAccount.role}
-                    onChange={(e) => {
-                      const role = e.target.value;
-                      setNewAccount({
-                        ...newAccount,
-                        role,
-                        department: role === "Mayor" ? "Office of the Municipal Mayor" : "",
-                      });
-                    }}
+                    value={newAccount.department}
+                    onChange={(e) =>
+                      setNewAccount({ ...newAccount, department: e.target.value })
+                    }
+                    className="form-select"
                     style={styles.formSelect}
                   >
-                    <option value="">Select Access Privilege</option>
-                    <option value="Mayor">Mayor</option>
-                    <option value="Office Head">Department Head</option>
+                    <option value="">Select Municipal Department</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
+              )}
 
-                {newAccount.role !== "Mayor" && newAccount.role !== "" && (
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>
-                      <FontAwesomeIcon icon={faBuilding} style={styles.labelIcon} />
-                      Assigned Department
-                    </label>
-                    <select
-                      value={newAccount.department}
-                      onChange={(e) =>
-                        setNewAccount({ ...newAccount, department: e.target.value })
-                      }
-                      style={styles.formSelect}
-                    >
-                      <option value="">Select Municipal Department</option>
-                      {departments.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div style={styles.modalInfo}>
-                  <FontAwesomeIcon icon={faInfoCircle} style={styles.infoIcon} />
-                  <p style={styles.infoText}>
-                    Upon creation, the user will receive automated email instructions for password setup and system access.
-                  </p>
-                </div>
-              </div>
-
-              <div style={styles.modalFooter}>
-                <button 
-                  onClick={() => setShowModal(false)} 
-                  style={styles.modalCancelBtn}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleCreateAccount} 
-                  style={styles.modalSaveBtn}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <div style={styles.spinner}></div>
-                      Processing Registration...
-                    </>
-                  ) : (
-                    <>
-                      Create User Account
-                    </>
-                  )}
-                </button>
+              <div className="modal-info" style={styles.modalInfo}>
+                <FontAwesomeIcon icon={faInfoCircle} style={styles.infoIcon} />
+                <p className="info-text" style={styles.infoText}>
+                  Upon creation, the user will receive automated email instructions for password setup and system access.
+                </p>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Edit Account Details Modal */}
-        {editModal && selectedAccount && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.modal}>
-              <div style={styles.modalHeader}>
-                <h3 style={styles.modalTitle}>User Account Details</h3>
-                <button 
-                  style={styles.closeBtn}
-                  onClick={() => setEditModal(false)}
-                >
-                  ×
-                </button>
+            <div className="modal-footer" style={styles.modalFooter}>
+              <button 
+                onClick={() => setShowModal(false)} 
+                className="modal-cancel-btn"
+                style={styles.modalCancelBtn}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleCreateAccount} 
+                className="modal-save-btn"
+                style={styles.modalSaveBtn}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="spinner" style={styles.spinner}></div>
+                    Processing Registration...
+                  </>
+                ) : (
+                  <>
+                    Create User Account
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Account Details Modal */}
+      {editModal && selectedAccount && (
+        <div style={styles.modalOverlay}>
+          <div className="modal" style={styles.modal}>
+            <div className="modal-header" style={styles.modalHeader}>
+              <h3 className="modal-title" style={styles.modalTitle}>User Account Details</h3>
+              <button 
+                className="close-btn"
+                style={styles.closeBtn}
+                onClick={() => setEditModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body" style={styles.modalBody}>
+              <div className="user-preview" style={styles.userPreview}>
+                <div className="preview-avatar" style={styles.previewAvatar}>
+                  {selectedAccount.full_name.charAt(0).toUpperCase()}
+                </div>
+                <div className="preview-info" style={styles.previewInfo}>
+                  <h4 className="preview-name" style={styles.previewName}>{selectedAccount.full_name}</h4>
+                  <p className="preview-email" style={styles.previewEmail}>{selectedAccount.email}</p>
+                </div>
               </div>
               
-              <div style={styles.modalBody}>
-                <div style={styles.userPreview}>
-                  <div style={styles.previewAvatar}>
-                    {selectedAccount.full_name.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={styles.previewInfo}>
-                    <h4 style={styles.previewName}>{selectedAccount.full_name}</h4>
-                    <p style={styles.previewEmail}>{selectedAccount.email}</p>
-                  </div>
-                </div>
-                
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Full Name</label>
-                  <input
-                    type="text"
-                    value={selectedAccount.full_name}
-                    onChange={(e) => setSelectedAccount({ ...selectedAccount, full_name: e.target.value })}
-                    style={styles.formInput}
-                  />
-                </div>
-                
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Email Address</label>
-                  <input
-                    type="email"
-                    value={selectedAccount.email}
-                    onChange={(e) => setSelectedAccount({ ...selectedAccount, email: e.target.value })}
-                    style={styles.formInput}
-                  />
-                </div>
-                
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Access Level</label>
-                  <div style={styles.readOnlyField}>
-                    {selectedAccount.role}
-                  </div>
-                </div>
-                
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Department Assignment</label>
-                  <div style={styles.readOnlyField}>
-                    {selectedAccount.department}
-                  </div>
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>Full Name</label>
+                <input
+                  type="text"
+                  value={selectedAccount.full_name}
+                  onChange={(e) => setSelectedAccount({ ...selectedAccount, full_name: e.target.value })}
+                  className="form-input"
+                  style={styles.formInput}
+                />
+              </div>
+              
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>Email Address</label>
+                <input
+                  type="email"
+                  value={selectedAccount.email}
+                  onChange={(e) => setSelectedAccount({ ...selectedAccount, email: e.target.value })}
+                  className="form-input"
+                  style={styles.formInput}
+                />
+              </div>
+              
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>Access Level</label>
+                <div className="read-only-field" style={styles.readOnlyField}>
+                  {selectedAccount.role}
                 </div>
               </div>
-
-              <div style={styles.modalFooter}>
-                <button 
-                  onClick={() => setEditModal(false)} 
-                  style={styles.modalCancelBtn}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleSaveEdit} 
-                  style={styles.modalSaveBtn}
-                >
-                  <FontAwesomeIcon icon={faSave} style={styles.saveIcon} />
-                  Save Changes
-                </button>
+              
+              <div className="form-group" style={styles.formGroup}>
+                <label className="form-label" style={styles.formLabel}>Department Assignment</label>
+                <div className="read-only-field" style={styles.readOnlyField}>
+                  {selectedAccount.department}
+                </div>
               </div>
             </div>
+
+            <div className="modal-footer" style={styles.modalFooter}>
+              <button 
+                onClick={() => setEditModal(false)} 
+                className="modal-cancel-btn"
+                style={styles.modalCancelBtn}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveEdit} 
+                className="modal-save-btn"
+                style={styles.modalSaveBtn}
+              >
+                <FontAwesomeIcon icon={faSave} style={styles.saveIcon} />
+                Save Changes
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
 }
 
 // ----- Enhanced Styles -----

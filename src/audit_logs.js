@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTachometerAlt,
@@ -24,11 +24,21 @@ import {
   faShieldAlt,
   faHistory,
   faChartLine,
-  faNoteSticky
+  faNoteSticky,
+  faBars,
+  faTimes,
+  faAngleLeft,
+  faAngleRight,
+  faAnglesLeft,
+  faAnglesRight,
+  faChevronDown,
+  faUpload,
+  faPrint,
+  faRefresh
 } from '@fortawesome/free-solid-svg-icons';
-import 'react-calendar/dist/Calendar.css';
 import { useState, useEffect } from 'react';
 import './dashboardCalendar.css';
+import './audit-logs-responsive.css';
 import ProfileDropdown from './profileDropdown';
 
 function AuditLogs() {
@@ -62,7 +72,36 @@ function AuditLogs() {
   const [realTimeUpdates, setRealTimeUpdates] = useState(false);
   
   const navigate = useNavigate();
+  const location = useLocation();
   const API_URL = "https://ezleave-admin-api.onrender.com";
+  
+  // Mobile sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  const menuItems = [
+    { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
+    { name: "Employees", icon: faUsers, to: "/employee" },
+    { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
+    { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
+    { name: "Announcement", icon: faBullhorn, to: "/announcement" },
+    { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
+    { name: "User Management", icon: faUserCog, to: "/userManagement" },
+  ];
+
+  const allowedMenus = menuItems.filter((item) => {
+    if (role === "admin") return true;
+    if (role === "mayor" || role === "office_head") {
+      return [
+        "Dashboard",
+        "Employees",
+        "Leave Management",
+      ].includes(item.name);
+    }
+    return false;
+  });
 
   // Suspicious activity patterns to monitor
   const SUSPICIOUS_PATTERNS = [
@@ -480,13 +519,117 @@ function AuditLogs() {
     window.URL.revokeObjectURL(url);
   };
 
+  // Pagination handlers for mobile
+  const handlePaginationClick = (pageNumber) => {
+    setCurrentPage(pageNumber);
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      handlePaginationClick(currentPage + 1);
+    }
+  };
+
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      handlePaginationClick(currentPage - 1);
+    }
+  };
+
+  const goToFirstPage = () => handlePaginationClick(1);
+  const goToLastPage = () => handlePaginationClick(totalPages);
+
   return (
     <div style={styles.dashboardContainer}>
-      <div className="attendance-desktop-header" style={styles.header}>
-        <div style={styles.headerRight}>
+      {/* Mobile Header */}
+      <div className="mobile-header">
+        <button 
+          className="hamburger"
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <FontAwesomeIcon icon={faBars} />
+        </button>
+        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+        <div className="mobile-header-right">
           <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
             showProfileModal={showProfileModal}
             setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            isMobile={true}
+            profileData={profileData}
+            admin={admin}
+          />
+        </div>
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+        <div className="sidebar-header">
+          <button 
+            className="sidebar-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+          <img 
+            className='logo-sidebar' 
+            src={require('./images/logo_ez.png')} 
+            alt="logo" 
+          />
+        </div>
+
+        <img 
+          src={require('./images/logo_ez.png')} 
+          alt="logo" 
+          style={styles.logo} 
+          className='logo-desktop'
+        />
+
+        <ul className='sidebar-menu-link' style={styles.sidebarList}>
+          {allowedMenus.map((item) => {
+            const isActive = location.pathname === item.to;
+
+            return (
+              <li
+                key={item.name}
+                style={{
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+              >
+                <Link
+                  style={{
+                    ...styles.sb,
+                    ...(isActive ? styles.btnActive : {}),
+                  }}
+                  to={item.to}
+                  onClick={() => setIsSidebarOpen(false)}
+                >
+                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="desktop-header" style={styles.header}>
+        <div style={styles.headerRight}>
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
             isMobile={false}
             profileData={profileData}
             admin={admin}
@@ -494,51 +637,91 @@ function AuditLogs() {
         </div>
       </div>
 
-      <div style={styles.sidebar}>
-        <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-        <ul style={styles.sidebarList}>
-          <li><Link style={styles.sb} to="/dashboard"><FontAwesomeIcon icon={faTachometerAlt} style={styles.icon} /> Dashboard</Link></li>
-          <li><Link style={styles.sb} to="/employee"><FontAwesomeIcon icon={faUsers} style={styles.icon} /> Employees</Link></li>
-          <li><Link style={styles.sb} to="/attendance"><FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance</Link></li>
-          <li><Link style={styles.sb} to="/leaveManagement"><FontAwesomeIcon icon={faCalendarAlt} style={styles.icon} /> Leave Management</Link></li>
-          <li><Link style={styles.sb} to="/messages"><FontAwesomeIcon icon={faEnvelope} style={styles.icon} /> Message</Link></li>
-          <li><Link style={styles.sb} to="/announcement"><FontAwesomeIcon icon={faBullhorn} style={styles.icon} /> Announcement</Link></li>
-          <li style={styles.btnActive}><Link style={styles.sb} to="#"><FontAwesomeIcon icon={faClipboardList} style={styles.icon} /> Audit Logs</Link></li>
-          <li><Link style={styles.sb} to="/userManagement"><FontAwesomeIcon icon={faUserCog} style={styles.icon} /> User Management</Link></li>
-        </ul>
-      </div>
-
-      <div style={styles.content}>
-        {/* Header Section */}
-        <div style={styles.pageHeader}>
-          <div>
-            <h1>Audit Logs</h1>
+      {/* Main Content */}
+      <div className="content" style={styles.content}>
+        {showLogoutModal && (
+          <div style={styles.modalOverlay}>
+            <div style={styles.modalContent} className="modal-content">
+              <h3>Confirm Logout</h3>
+              <p>Are you sure you want to log out?</p>
+              <div style={styles.modalActions}>
+                <button
+                  style={styles.cancelBtn}
+                  onClick={() => setShowLogoutModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={styles.confirmBtn}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
           </div>
-          
+        )}
+
+        {/* Header Section */}
+        <div className="audit-header-section" style={styles.pageHeader}>
+          <h1 className="audit-title">Audit Logs</h1>
+          <div className="audit-title-line" style={styles.line}></div>
         </div>
 
-        {/* Monitoring Overview */}
-        <div style={styles.monitoringOverview}>
-          <div style={styles.overviewStats}>
-            <div style={styles.overviewStat}>
-              <div style={styles.overviewStatNumber}>{monitoringStats.totalLogs}</div>
-              <div style={styles.overviewStatLabel}>Total Activities</div>
+        {/* Monitoring Overview - Mobile Responsive Cards */}
+        <div className="audit-monitoring-overview" style={styles.monitoringOverview}>
+          <div className="audit-overview-card" style={styles.overviewStatCard}>
+            <div className="audit-card-content" style={styles.overviewStatCardContent}>
+              <div className="audit-card-data" style={styles.overviewStatData}>
+                <div className="audit-data1" style={styles.overviewStatNumberContainer}>
+                  <p className="audit-txtData" style={styles.overviewStatNumber}>{monitoringStats.totalLogs}</p>
+                  <p className="audit-txtlabel" style={styles.overviewStatLabel}>Total Activities</p>
+                </div>
+              </div>
             </div>
-            <div style={styles.overviewStat}>
-              <div style={styles.overviewStatNumber}>{monitoringStats.suspiciousAlerts}</div>
-              <div style={styles.overviewStatLabel}>Suspicious Activities</div>
+          </div>
+
+          <div className="audit-overview-card" style={styles.overviewStatCard}>
+            <div className="audit-card-content" style={styles.overviewStatCardContent}>
+              <div className="audit-card-data" style={styles.overviewStatData}>
+                <div className="audit-data1" style={styles.overviewStatNumberContainer}>
+                  <p className="audit-txtData" style={styles.overviewStatNumber}>{monitoringStats.suspiciousAlerts}</p>
+                  <p className="audit-txtlabel" style={styles.overviewStatLabel}>Suspicious Activities</p>
+                </div>
+              </div>
             </div>
-            <div style={styles.overviewStat}>
-              <div style={styles.overviewStatNumber}>{monitoringStats.highRisk}</div>
-              <div style={styles.overviewStatLabel}>High Risk</div>
+          </div>
+
+          <div className="audit-overview-card" style={styles.overviewStatCard}>
+            <div className="audit-card-content" style={styles.overviewStatCardContent}>
+              <div className="audit-card-data" style={styles.overviewStatData}>
+                <div className="audit-data1" style={styles.overviewStatNumberContainer}>
+                  <p className="audit-txtData" style={styles.overviewStatNumber}>{monitoringStats.highRisk}</p>
+                  <p className="audit-txtlabel" style={styles.overviewStatLabel}>High Risk</p>
+                </div>
+              </div>
             </div>
-            <div style={styles.overviewStat}>
-              <div style={styles.overviewStatNumber}>{monitoringStats.mediumRisk}</div>
-              <div style={styles.overviewStatLabel}>Medium Risk</div>
+          </div>
+
+          <div className="audit-overview-card" style={styles.overviewStatCard}>
+            <div className="audit-card-content" style={styles.overviewStatCardContent}>
+              <div className="audit-card-data" style={styles.overviewStatData}>
+                <div className="audit-data1" style={styles.overviewStatNumberContainer}>
+                  <p className="audit-txtData" style={styles.overviewStatNumber}>{monitoringStats.mediumRisk}</p>
+                  <p className="audit-txtlabel" style={styles.overviewStatLabel}>Medium Risk</p>
+                </div>
+              </div>
             </div>
-            <div style={styles.overviewStat}>
-              <div style={styles.overviewStatNumber}>{monitoringStats.lowRisk}</div>
-              <div style={styles.overviewStatLabel}>Low Risk</div>
+          </div>
+
+          <div className="audit-overview-card" style={styles.overviewStatCard}>
+            <div className="audit-card-content" style={styles.overviewStatCardContent}>
+              <div className="audit-card-data" style={styles.overviewStatData}>
+                <div className="audit-data1" style={styles.overviewStatNumberContainer}>
+                  <p className="audit-txtData" style={styles.overviewStatNumber}>{monitoringStats.lowRisk}</p>
+                  <p className="audit-txtlabel" style={styles.overviewStatLabel}>Low Risk</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -550,7 +733,7 @@ function AuditLogs() {
               <FontAwesomeIcon icon={faExclamationTriangle} style={styles.patternsIcon} />
               <h4 style={styles.patternsTitle}>Detected Suspicious Patterns</h4>
             </div>
-            <div style={styles.patternsGrid}>
+            <div className="audit-patterns-grid" style={styles.patternsGrid}>
               {suspiciousPatterns.map((pattern, index) => (
                 <div key={index} style={styles.patternCard}>
                   <div style={styles.patternDescription}>{pattern.description}</div>
@@ -567,56 +750,77 @@ function AuditLogs() {
         )}
 
         {/* Filters Section */}
-        <div style={styles.filtersContainer}>
-          <div style={styles.searchContainer}>
-            <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
-            <input
-              type="text"
-              placeholder="Search logs, patterns, or details..."
-              style={styles.searchInput}
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-          </div>
-          
+        <div className="attendance-inputs-section" style={styles.filtersContainer}>
+          <div className="attendance-row1" style={styles.filterRow}>
+            <div className="attendance-firstRow" style={styles.searchContainer}>
+              <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+              <input
+                type="text"
+                className="attendance-input1"
+                style={styles.searchInput}
+                placeholder="Search logs, patterns, or details..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
 
-          <div style={styles.filterGroup}>
-            <select 
-              style={styles.roleFilter}
-              value={selectedSeverity}
-              onChange={(e) => {
-                setSelectedSeverity(e.target.value);
+            <div className="attendance-firstRow" style={styles.filterGroup}>
+              <select 
+                className="attendance-filter"
+                style={styles.roleFilter}
+                value={selectedSeverity}
+                onChange={(e) => {
+                  setSelectedSeverity(e.target.value);
+                  setCurrentPage(1);
+                }}
+              >
+                {uniqueSeverities.map(severity => (
+                  <option key={severity} value={severity}>
+                    {getSeverityLabel(severity)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="attendance-row2" style={styles.actionRow}>
+            <button
+              style={{
+                ...styles.suspiciousToggle,
+                ...(showSuspiciousOnly ? styles.suspiciousToggleActive : {})
+              }}
+              className="attendance-btn1"
+              onClick={() => {
+                setShowSuspiciousOnly(!showSuspiciousOnly);
                 setCurrentPage(1);
               }}
             >
-              {uniqueSeverities.map(severity => (
-                <option key={severity} value={severity}>
-                  {getSeverityLabel(severity)}
-                </option>
-              ))}
-            </select>
-          </div>
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              {showSuspiciousOnly ? 'Show All Logs' : 'Show Suspicious Only'}
+            </button>
 
-          <button
-            style={{
-              ...styles.suspiciousToggle,
-              ...(showSuspiciousOnly ? styles.suspiciousToggleActive : {})
-            }}
-            onClick={() => {
-              setShowSuspiciousOnly(!showSuspiciousOnly);
-              setCurrentPage(1);
-            }}
-          >
-            <FontAwesomeIcon icon={faExclamationTriangle} />
-            {showSuspiciousOnly ? 'Show All Logs' : 'Show Suspicious Only'}
-          </button>
+            <button
+              onClick={exportSuspiciousLogs}
+              className="attendance-btn2"
+              style={styles.exportButton}
+              disabled={auditLogs.length === 0}
+            >
+              <FontAwesomeIcon icon={faDownload} style={styles.iconBtn1} />
+              Export CSV
+            </button>
+
+            <button onClick={() => window.location.reload()} className="attendance-btn3" style={styles.btn3}>
+              <FontAwesomeIcon icon={faRefresh} style={styles.iconBtn1} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Table Section */}
-        <div style={styles.tableContainer}>
+        <div className="attendance-table-container" style={styles.tableContainer}>
           <div style={styles.tableHeader}>
             <div>
               Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredLogs.length)} of {filteredLogs.length} records
@@ -624,8 +828,8 @@ function AuditLogs() {
             </div>
           </div>
           
-          <div style={styles.tableWrapper}>
-            <table style={styles.table}>
+          <div className="attendance-table-wrapper" style={styles.tableWrapper}>
+            <table className="attendance-table" style={styles.table}>
               <thead>
                 <tr>
                   <th style={styles.tableHeaderCell}>Date & Time</th>
@@ -763,17 +967,34 @@ function AuditLogs() {
 
           {/* Pagination */}
           {filteredLogs.length > 0 && (
-            <div style={styles.paginationContainer}>
-              <div style={styles.paginationInfo}>
+            <div className="attendance-pagination" style={styles.paginationContainer}>
+              <div className="attendance-pagination-info" style={styles.paginationInfo}>
                 Page {currentPage} of {totalPages} • {filteredLogs.length} total logs
               </div>
-              <div style={styles.paginationControls}>
+              
+              <div className="attendance-pagination-controls" style={styles.paginationControls}>
                 <button 
-                  style={styles.paginationButton}
-                  onClick={prevPage}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goToFirstPage();
+                  }}
                   disabled={currentPage === 1}
+                  style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
+                  className="attendance-pagination-first"
                 >
-                  <FontAwesomeIcon icon={faChevronLeft} />
+                  <FontAwesomeIcon icon={faAnglesLeft} />
+                </button>
+                
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goToPrevPage();
+                  }}
+                  disabled={currentPage === 1}
+                  style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
+                  className="attendance-pagination-prev"
+                >
+                  <FontAwesomeIcon icon={faAngleLeft} />
                 </button>
                 
                 {getPageNumbers().map((number, index) => (
@@ -782,11 +1003,15 @@ function AuditLogs() {
                   ) : (
                     <button
                       key={number}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        paginate(number);
+                      }}
                       style={{
                         ...styles.paginationButton,
                         ...(currentPage === number ? styles.activePageButton : {})
                       }}
-                      onClick={() => paginate(number)}
+                      className="attendance-pagination-number"
                     >
                       {number}
                     </button>
@@ -794,17 +1019,48 @@ function AuditLogs() {
                 ))}
                 
                 <button 
-                  style={styles.paginationButton}
-                  onClick={nextPage}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goToNextPage();
+                  }}
                   disabled={currentPage === totalPages}
+                  style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
+                  className="attendance-pagination-next"
                 >
-                  <FontAwesomeIcon icon={faChevronRight} />
+                  <FontAwesomeIcon icon={faAngleRight} />
                 </button>
+                
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goToLastPage();
+                  }}
+                  disabled={currentPage === totalPages}
+                  style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
+                  className="attendance-pagination-last"
+                >
+                  <FontAwesomeIcon icon={faAnglesRight} />
+                </button>
+              </div>
+              
+              <div className="attendance-pagination-perpage" style={styles.paginationPerPage}>
+                <span>Items per page:</span>
+                <select 
+                  value={recordsPerPage} 
+                  onChange={(e) => {
+                    // You can add functionality to change items per page if needed
+                  }}
+                  style={styles.paginationSelect}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
               </div>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
@@ -812,6 +1068,7 @@ function AuditLogs() {
 
 const styles = {
   dashboardContainer: {
+    display: 'flex',
     minHeight: '100vh',
     backgroundColor: '#F8F8F8',
   },
@@ -822,7 +1079,7 @@ const styles = {
     margin: '0',
     position: 'fixed',
     padding: '20px',
-    boxSizing: 'border-box',
+    boxSizing: 'border-box', 
   },
   logo: {
     width: '100px',
@@ -843,7 +1100,7 @@ const styles = {
     alignItems: 'center',
     fontSize: '16px',
     gap: '10px',
-    transition: 'background-color 0.2s ease',
+    transition: 'background-color 0.2s ease', 
   },
   icon: {
     color: '#fff',
@@ -853,135 +1110,95 @@ const styles = {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end', 
     padding: '10px',
     backgroundColor: '#009205',
     position: 'fixed',
     top: '0',
-    left: '280px',
-    width: 'calc(100% - 280px)',
-    zIndex: 1000,
+    left: '280px', 
+    width: 'calc(100% - 280px)', 
+    zIndex: 1000, 
     boxSizing: 'border-box',
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "20px",
+    position: "relative",
+    marginLeft: 'auto',
+    justifyContent: 'flex-end'
   },
   content: {
     marginLeft: '300px',
-    minHeight: '100vh',
+    padding: '20px',
     backgroundColor: '#F8F8F8',
+    marginTop: '60px', 
+    overflow: 'hidden',
+    minHeight: 'calc(100vh - 60px)',
     boxSizing: 'border-box',
-    maxWidth: 'calc(100% - 280px)',
-    paddingTop: '80px',
-    paddingRight: '20px'
   },
-  btnActive: {
-    backgroundColor: '#A8FC0080',
-    borderRadius: '5px',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-  },
-
-  
-  pageTitle: {
-    fontSize: '32px',
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: '8px',
-  },
-  pageSubtitle: {
-    fontSize: '14px',
-    color: '#666',
-  },
-  headerActions: {
+  pageHeader: {
     display: 'flex',
-    gap: '16px',
+    flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: '20px',
+    gap: '20px',
+    justifyContent: 'flex-start',
   },
-  exportButton: {
-    padding: '10px 20px',
-    backgroundColor: '#009205',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontWeight: '500',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    transition: 'all 0.2s ease',
-    ':hover': {
-      backgroundColor: '#007A04',
-    },
-    ':disabled': {
-      backgroundColor: '#94A3B8',
-      cursor: 'not-allowed',
-    },
+  line: {
+    width: '2px',
+    height: '40px',
+    backgroundColor: 'black',
+    marginTop: '10px',
   },
-  realTimeToggle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    color: '#666',
-    cursor: 'pointer',
-  },
-
-  // Monitoring Overview
+  // Monitoring Overview Styles
   monitoringOverview: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '24px',
-    margin: '0 0 32px 0',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-    border: '1px solid #E5E7EB',
-  },
-  overviewHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px',
     marginBottom: '24px',
   },
-  overviewIcon: {
-    color: '#009205',
-    fontSize: '24px',
-  },
-  overviewTitle: {
-    fontSize: '20px',
-    fontWeight: '600',
-    color: '#1F2937',
-    margin: 0,
-  },
-  overviewStats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '20px',
-  },
-  overviewStat: {
-    textAlign: 'center',
-    padding: '20px',
-    backgroundColor: '#F9FAFB',
-    borderRadius: '8px',
+  overviewStatCard: {
+    backgroundColor: '#fff',
+    padding: '16px',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
     border: '1px solid #E5E7EB',
-    transition: 'all 0.3s ease',
-    ':hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
-    },
+    transition: 'transform 0.2s',
+    textAlign: 'center',
+  },
+  overviewStatCardContent: {
+    marginTop: '0',
+  },
+  overviewStatData: {
+    gap: '0',
+  },
+  overviewStatNumberContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   overviewStatNumber: {
-    fontSize: '36px',
+    fontSize: '28px',
     fontWeight: '700',
-    marginBottom: '8px',
+    color: '#111827',
+    margin: '0',
+    lineHeight: '1.2',
   },
   overviewStatLabel: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#6B7280',
-    fontWeight: '500',
+    margin: '8px 0 0 0',
+    textAlign: 'center',
   },
-
-  // Suspicious Patterns
+  // Patterns Container
   patternsContainer: {
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
     borderRadius: '12px',
-    padding: '24px',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    padding: '20px',
+    marginBottom: '24px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
     border: '1px solid #E5E7EB',
   },
   patternsHeader: {
@@ -992,27 +1209,27 @@ const styles = {
   },
   patternsIcon: {
     color: '#DC2626',
-    fontSize: '20px',
+    fontSize: '18px',
   },
   patternsTitle: {
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: '600',
     color: '#1F2937',
     margin: 0,
   },
   patternsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: '16px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+    gap: '12px',
   },
   patternCard: {
-    padding: '16px',
+    padding: '14px',
     backgroundColor: '#FEF2F2',
     borderRadius: '8px',
     border: '1px solid #DC2626',
   },
   patternDescription: {
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: '500',
     color: '#1F2937',
     marginBottom: '8px',
@@ -1023,9 +1240,9 @@ const styles = {
     alignItems: 'center',
   },
   patternSeverity: (severity) => ({
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '11px',
+    padding: '3px 10px',
+    borderRadius: '10px',
+    fontSize: '10px',
     fontWeight: '600',
     backgroundColor: 
       severity === 'high' ? '#FEE2E2' :
@@ -1037,70 +1254,64 @@ const styles = {
       severity === 'low' ? '#065F46' : '#374151',
   }),
   patternCount: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#6B7280',
   },
-
-  // Filters
+  // Filters Section
   filtersContainer: {
+    marginTop: '20px',
     display: 'flex',
+    flexDirection: 'column',
     gap: '16px',
-    margin: '24px 0 24px 0',
+    marginBottom: '24px',
+  },
+  filterRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '12px',
     flexWrap: 'wrap',
-    alignItems: 'center',
   },
   searchContainer: {
     flex: '1',
-    minWidth: '300px',
+    minWidth: '250px',
     position: 'relative',
   },
   searchIcon: {
     position: 'absolute',
-    left: '14px',
+    left: '12px',
     top: '50%',
     transform: 'translateY(-50%)',
     color: '#999',
-    fontSize: '16px',
+    fontSize: '14px',
   },
   searchInput: {
     width: '100%',
-    padding: '12px 20px 12px 40px',
+    padding: '10px 15px 10px 35px',
     border: '1px solid #E0E0E0',
     borderRadius: '8px',
     fontSize: '14px',
     backgroundColor: 'white',
     transition: 'all 0.2s ease',
-    ':focus': {
-      outline: 'none',
-      borderColor: '#009205',
-      boxShadow: '0 0 0 3px rgba(0, 146, 5, 0.1)',
-    },
   },
   filterGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
     minWidth: '200px',
   },
-  filterIcon: {
-    color: '#666',
-    fontSize: '14px',
-  },
   roleFilter: {
-    flex: '1',
-    padding: '12px 16px',
+    width: '100%',
+    padding: '10px 15px',
     border: '1px solid #E0E0E0',
     borderRadius: '8px',
     fontSize: '14px',
     backgroundColor: 'white',
     cursor: 'pointer',
-    ':focus': {
-      outline: 'none',
-      borderColor: '#009205',
-    },
+  },
+  actionRow: {
+    display: 'flex',
+    gap: '10px',
+    flexWrap: 'wrap',
   },
   suspiciousToggle: {
-    padding: '12px 24px',
+    padding: '10px 16px',
     backgroundColor: 'white',
     color: '#DC2626',
     border: '1px solid #DC2626',
@@ -1110,48 +1321,42 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    fontSize: '14px',
     transition: 'all 0.2s ease',
-    ':hover': {
-      backgroundColor: '#FEF2F2',
-    },
   },
   suspiciousToggleActive: {
     backgroundColor: '#DC2626',
     color: 'white',
-    ':hover': {
-      backgroundColor: '#B91C1C',
-    },
   },
-
+  exportButton: {
+    padding: '10px 16px',
+    backgroundColor: '#46810390',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '500',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    transition: 'all 0.2s ease',
+  },
   // Table Container
   tableContainer: {
     backgroundColor: 'white',
     borderRadius: '12px',
-    margin: '0 0 32px 0',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
     border: '1px solid #E5E7EB',
     overflow: 'hidden',
+    marginBottom: '32px',
   },
   tableHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px 24px',
+    padding: '16px 20px',
     borderBottom: '1px solid #E5E7EB',
     backgroundColor: '#F9FAFB',
-  },
-  tableHeaderActions: {
-    display: 'flex',
-    gap: '12px',
-    alignItems: 'center',
-  },
-  timeRangeSelect: {
-    padding: '8px 16px',
-    border: '1px solid #D1D5DB',
-    borderRadius: '6px',
     fontSize: '14px',
-    backgroundColor: 'white',
-    cursor: 'pointer',
+    color: '#6B7280',
   },
   tableWrapper: {
     overflowX: 'auto',
@@ -1159,15 +1364,15 @@ const styles = {
   table: {
     width: '100%',
     borderCollapse: 'collapse',
-    minWidth: '1200px',
+    minWidth: '1000px',
   },
   tableHeaderCell: {
-    padding: '16px 24px',
+    padding: '14px 20px',
     textAlign: 'left',
     backgroundColor: '#F9FAFB',
     color: '#374151',
     fontWeight: '600',
-    fontSize: '13px',
+    fontSize: '12px',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     borderBottom: '2px solid #E5E7EB',
@@ -1180,16 +1385,17 @@ const styles = {
     backgroundColor: '#F9FAFB',
   },
   tableCell: {
-    padding: '20px 24px',
-    fontSize: '14px',
+    padding: '16px 20px',
+    fontSize: '13px',
     color: '#374151',
     verticalAlign: 'middle',
     borderBottom: '1px solid #E5E7EB',
   },
   dateTimeCell: {
-    fontSize: '13px',
+    fontSize: '12px',
     color: '#6B7280',
     fontWeight: '500',
+    whiteSpace: 'nowrap',
   },
   userCell: {
     display: 'flex',
@@ -1199,16 +1405,17 @@ const styles = {
   userName: {
     fontWeight: '500',
     color: '#1F2937',
+    fontSize: '13px',
   },
   userEmail: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#6B7280',
   },
   roleBadge: (role) => ({
     display: 'inline-block',
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
     fontWeight: '600',
     backgroundColor: role === 'Admin' ? '#E8F5E9' : 
                     role === 'HR' ? '#E3F2FD' : 
@@ -1219,133 +1426,115 @@ const styles = {
   }),
   activityCell: {
     fontWeight: '500',
-    maxWidth: '250px',
+    maxWidth: '200px',
     lineHeight: '1.4',
     display: 'flex',
     alignItems: 'center',
+    fontSize: '13px',
   },
   severityBadge: (severity) => ({
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
+    gap: '6px',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
     fontWeight: '600',
     backgroundColor: 
       severity === 'high' ? '#FEE2E2' :
       severity === 'medium' ? '#FEF3C7' :
       severity === 'low' ? '#D1FAE5' : '#F3F4F6',
-    
+    width: 'fit-content',
   }),
   severityDot: {
-    width: '8px',
-    height: '8px',
+    width: '6px',
+    height: '6px',
     borderRadius: '50%',
     backgroundColor: 'currentColor',
   },
   scoreBadge: {
     backgroundColor: 'white',
     color: 'inherit',
-    width: '20px',
-    height: '20px',
+    width: '18px',
+    height: '18px',
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '10px',
+    fontSize: '9px',
     fontWeight: '700',
   },
   normalBadge: {
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
     fontWeight: '600',
     backgroundColor: '#F3F4F6',
     color: '#6B7280',
   },
   detailsCell: {
-    maxWidth: '300px',
+    maxWidth: '250px',
     lineHeight: '1.5',
     color: '#4B5563',
+    fontSize: '12px',
   },
   viewDetailsButton: {
-    padding: '8px 16px',
+    padding: '6px 12px',
     backgroundColor: '#F3F4F6',
     color: '#374151',
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: '500',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     transition: 'all 0.2s ease',
-    ':hover': {
-      backgroundColor: '#E5E7EB',
-    },
   },
   expandedDetails: {
     backgroundColor: '#F9FAFB',
     borderBottom: '1px solid #E5E7EB',
   },
   expandedContent: {
-    padding: '24px',
+    padding: '16px',
   },
   expandedSection: {
     backgroundColor: 'white',
     borderRadius: '8px',
-    padding: '20px',
+    padding: '16px',
     border: '1px solid #E5E7EB',
   },
   expandedTitle: {
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: '16px',
+    marginBottom: '12px',
   },
   analysisRow: {
     display: 'flex',
     alignItems: 'flex-start',
-    marginBottom: '12px',
-    gap: '12px',
+    marginBottom: '10px',
+    gap: '10px',
+    fontSize: '13px',
   },
   analysisLabel: {
-    minWidth: '140px',
-    fontSize: '14px',
+    minWidth: '100px',
+    fontSize: '13px',
     fontWeight: '500',
     color: '#6B7280',
   },
   analysisValue: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#1F2937',
     flex: 1,
   },
   severityBadgeInline: (severity) => ({
     display: 'inline-block',
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
+    padding: '3px 10px',
+    borderRadius: '10px',
+    fontSize: '11px',
     fontWeight: '600',
-    backgroundColor: 
-      severity === 'high' ? '#FEE2E2' :
-      severity === 'medium' ? '#FEF3C7' :
-      severity === 'low' ? '#D1FAE5' : '#F3F4F6',
-    color: 
-      severity === 'high' ? '#991B1B' :
-      severity === 'medium' ? '#92400E' :
-      severity === 'low' ? '#065F46' : '#374151',
-  }),
-  patternsList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  patternTag: (severity) => ({
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
     backgroundColor: 
       severity === 'high' ? '#FEE2E2' :
       severity === 'medium' ? '#FEF3C7' :
@@ -1357,150 +1546,198 @@ const styles = {
   }),
   ipAddress: {
     fontFamily: 'monospace',
-    fontSize: '13px',
+    fontSize: '12px',
     color: '#6B7280',
     backgroundColor: '#F3F4F6',
-    padding: '4px 8px',
+    padding: '3px 6px',
     borderRadius: '4px',
     border: '1px solid #E5E7EB',
   },
   noSuspiciousActivity: {
-    padding: '16px',
+    padding: '12px',
     backgroundColor: '#F0FDF4',
     borderRadius: '6px',
     color: '#065F46',
     textAlign: 'center',
+    fontSize: '13px',
   },
   noDataCell: {
-    padding: '60px 20px',
+    padding: '40px 20px',
     textAlign: 'center',
   },
   noData: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '12px',
+    gap: '8px',
     color: '#9CA3AF',
   },
   noDataIcon: {
-    fontSize: '48px',
-    marginBottom: '12px',
+    fontSize: '32px',
+    marginBottom: '8px',
   },
   noDataHint: {
-    fontSize: '13px',
+    fontSize: '12px',
     color: '#D1D5DB',
     marginTop: '4px',
   },
+  // Pagination Styles
   paginationContainer: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '20px 24px',
+    padding: '16px 20px',
     borderTop: '1px solid #E5E7EB',
     backgroundColor: '#F9FAFB',
+    flexWrap: 'wrap',
+    gap: '15px',
   },
   paginationInfo: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#6B7280',
     fontWeight: '500',
   },
   paginationControls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '5px',
   },
   paginationButton: {
+    padding: '6px 10px',
+    border: '1px solid #ddd',
+    backgroundColor: '#fff',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#333',
+    transition: 'all 0.2s',
+    minWidth: '32px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '40px',
-    height: '40px',
-    border: '1px solid #D1D5DB',
-    backgroundColor: 'white',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#374151',
-    transition: 'all 0.2s ease',
-    ':hover': {
-      backgroundColor: '#F3F4F6',
-      borderColor: '#009205',
-    },
-    ':disabled': {
-      opacity: 0.5,
-      cursor: 'not-allowed',
-      backgroundColor: '#F9FAFB',
-    },
+  },
+  paginationButtonDisabled: {
+    padding: '6px 10px',
+    border: '1px solid #e0e0e0',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
+    cursor: 'not-allowed',
+    fontSize: '13px',
+    color: '#999',
+    minWidth: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activePageButton: {
     backgroundColor: '#009205',
-    color: 'white',
+    color: '#fff',
     borderColor: '#009205',
-    ':hover': {
-      backgroundColor: '#007A04',
-    },
   },
   paginationEllipsis: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '40px',
-    height: '40px',
-    fontSize: '14px',
-    color: '#9CA3AF',
-  },
-
-  // Tips Section
-  tipsContainer: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '24px',
-    margin: '0 24px',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-    border: '1px solid #E5E7EB',
-  },
-  tipsHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '24px',
-  },
-  tipsIcon: {
-    color: '#009205',
-    fontSize: '20px',
-  },
-  tipsTitle: {
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#1F2937',
-    margin: 0,
-  },
-  tipsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-    gap: '20px',
-  },
-  tipCard: {
-    display: 'flex',
-    gap: '16px',
-    alignItems: 'flex-start',
-  },
-  tipNumber: {
     width: '32px',
     height: '32px',
-    backgroundColor: '#009205',
-    color: 'white',
-    borderRadius: '50%',
+    fontSize: '13px',
+    color: '#9CA3AF',
+  },
+  paginationPerPage: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '14px',
-    fontWeight: '600',
-    flexShrink: 0,
+    gap: '8px',
+    fontSize: '13px',
+    color: '#666',
   },
-  tipContent: {
-    flex: 1,
+  paginationSelect: {
+    padding: '5px 8px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    backgroundColor: '#fff',
+    fontSize: '13px',
+    cursor: 'pointer',
+  },
+  // Modal Styles
+  modalOverlay: {
+    position: "fixed",
+    top: 0, left: 0,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  },
+  modalContent: {
+    backgroundColor: "white",
+    padding: "20px",
+    borderRadius: "8px",
+    width: "400px",
+    textAlign: "center",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+  },
+  modalActions: {
+    marginTop: "20px",
+    display: "flex",
+    justifyContent: "space-around",
+  },
+  cancelBtn: {
+    backgroundColor: "#ccc",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+  confirmBtn: {
+    backgroundColor: "#e74c3c",
+    color: "white",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+  // Button Styles from Attendance
+  btn1: {
+    padding: '10px 10px',
+    borderRadius: '10px',
+    fontWeight: '600',
+    backgroundColor: 'white',
+    border: 'none',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  btn2: {
+    padding: '5px 10px',
+    backgroundColor: '#46810390',
+    border: 'none',
+    borderRadius: '10px',
+    color: 'white',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  btn3: {
+    padding: '5px 10px',
+    border: 'none',
+    borderRadius: '10px',
+    backgroundColor: '#00B7FF',
+    color: 'white',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  iconBtn1: {
+    color: 'white',
+    fontSize: '12px',
+    margin: '5px 5px 0'
+  },
+  btnActive: {
+    backgroundColor: '#A8FC0080',
+    borderRadius: '5px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
   },
 };
 

@@ -6,7 +6,6 @@ import Dashboard from './dashboard';
 import Employees from './employee';
 import Attendance from './attendance';
 import LeaveManagement from './leaveManagement';
-import Messages from './messages';
 import Announcement from './announcement';
 import ForgotPassword from './forgotPassword';
 import AuditLogs from './audit_logs';
@@ -25,7 +24,6 @@ function App() {
         <Route path="/employee" element={<Employees />} />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/leaveManagement" element={<LeaveManagement />} />
-        <Route path="/messages" element={<Messages />} />
         <Route path="/announcement" element={<Announcement />} />
         <Route path='/forgotPassword' element={<ForgotPassword/>} />
         <Route path='/audit_logs' element={<AuditLogs/>} />

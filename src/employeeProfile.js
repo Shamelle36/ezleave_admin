@@ -38,7 +38,10 @@ import {
   faEdit,
   faSave,
   faTimesCircle,
-  faCalculator
+  faCalculator,
+  faLock,
+  faArchive,
+  faRedo
 } from "@fortawesome/free-solid-svg-icons";
 import "react-calendar/dist/Calendar.css";
 import "./dashboardCalendar.css";
@@ -62,6 +65,9 @@ function EmployeeProfile() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const role = localStorage.getItem("role") || "admin";
+  
+  // Add this state
+  const [isEmployeeInactive, setIsEmployeeInactive] = useState(false);
 
   // UI states for leave card
   const [page, setPage] = useState(1);
@@ -95,13 +101,12 @@ function EmployeeProfile() {
     { name: "Employees", icon: faUsers, to: "/employee" },
     { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-    { name: "Message", icon: faEnvelope, to: "/messages" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
 
-  const API_URL = "https://ezleave-admin-api.onrender.com";
+  const API_URL = "http://localhost:5000";
 
 
    useEffect(() => {
@@ -140,10 +145,7 @@ function EmployeeProfile() {
       return [
         "Dashboard",
         "Employees",
-        "Attendance",
         "Leave Management",
-        "Message",
-        "Announcement",
       ].includes(item.name);
     }
     return false;
@@ -223,8 +225,61 @@ function EmployeeProfile() {
     }
   }, [employee]);
 
-  // Start editing leave balance
+  // Update the employee fetch useEffect to check status
+  useEffect(() => {
+    fetch(`${API_URL}/api/leave-cards/employeeLeave/${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setEmployee(data.employee || null);
+        setLeaveCards(data.leaveCards || []);
+        setAttendanceLogs(data.attendanceLogs || []);
+        
+        // Check if employee is inactive
+        if (data.employee && data.employee.status === 'inactive') {
+          setIsEmployeeInactive(true);
+        } else {
+          setIsEmployeeInactive(false);
+        }
+      })
+      .catch((err) => console.error("❌ Error fetching employee:", err));
+  }, [id]);
+
+  // Add reactivate function
+  const handleReactivateEmployee = async () => {
+    if (!employee(`Reactivate ${employee.first_name} ${employee.last_name}?`)) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/employees/${employee.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          ...employee, 
+          status: "active",
+          inactive_reason: ""
+        })
+      });
+
+      if (response.ok) {
+        setIsEmployeeInactive(false);
+        alert("Employee reactivated successfully!");
+        // Refresh employee data
+        const res = await fetch(`${API_URL}/api/leave-cards/employeeLeave/${id}`);
+        const data = await res.json();
+        setEmployee(data.employee || null);
+      }
+    } catch (error) {
+      console.error("Error reactivating employee:", error);
+      alert("Failed to reactivate employee");
+    }
+  };
+
+  // Start editing leave balance with inactive check
   const handleEditLeave = (leave) => {
+    if (isEmployeeInactive) {
+      alert('Cannot edit leave balances for inactive employees');
+      return;
+    }
+    
     setModalLeave(leave);
     setEditedLeave({
       total_days: leave.total_days || 0,
@@ -234,9 +289,15 @@ function EmployeeProfile() {
     setShowEditModal(true);
   };
 
-  // Save edited leave balance
+  // Save edited leave balance with inactive check
   const handleSaveLeave = async () => {
     if (!modalLeave || !editedLeave.total_days || !employee) return;
+
+    // Prevent saving for inactive employees
+    if (isEmployeeInactive) {
+      alert('Cannot edit leave balances for inactive employees');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -536,6 +597,7 @@ function EmployeeProfile() {
   };
 
   const handleSort = (key) => {
+    if (isEmployeeInactive && role !== "admin") return;
     setSortConfig(current => ({
       key,
       direction: current.key === key && current.direction === 'ascending' ? 'descending' : 'ascending'
@@ -555,46 +617,100 @@ function EmployeeProfile() {
     navigate("/");
   };
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/leave-cards/employeeLeave/${id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setEmployee(data.employee || null);
-        setLeaveCards(data.leaveCards || []);
-        setAttendanceLogs(data.attendanceLogs || []);
-      })
-      .catch((err) => console.error("❌ Error fetching employee:", err));
-  }, [id]);
+ const exportToPDF = async () => {
+  if (!employee || leaveCards.length === 0) {
+    alert("No employee data or leave cards available for export.");
+    return;
+  }
 
-  const exportToPDF = async () => {
-    if (!employee || leaveCards.length === 0) return;
+  // Prevent export for inactive employees
+  if (isEmployeeInactive && role !== "admin") {
+    alert("Cannot export data for inactive employees");
+    return;
+  }
 
-    try {
-      const response = await fetch(`${API_URL}/api/exportPdf/export-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employee, leaveCards }),
-      });
-
-      if (!response.ok) throw new Error("Export failed");
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      const middleInitial = employee.middle_name ? `${employee.middle_name.charAt(0)}.` : "";
-      link.href = url;
-      link.download = `${employee.last_name}, ${employee.first_name} ${middleInitial}.pdf`;
-      link.click();
-
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("❌ Error exporting PDF:", err);
+  try {
+    // Show loading state
+    const exportBtn = document.querySelector('.exportBtn');
+    if (exportBtn) {
+      exportBtn.disabled = true;
+      exportBtn.innerHTML = '<span>Exporting...</span>';
     }
-  };
+
+    // Call your server endpoint
+    const response = await fetch(`${API_URL}/api/exportPdf/export-pdf`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/pdf"
+      },
+      body: JSON.stringify({ 
+        employee: {
+          ...employee,
+          middle_name: employee.middle_name || "",
+          first_name: employee.first_name || "",
+          last_name: employee.last_name || ""
+        }, 
+        leaveCards 
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Server response:", errorText);
+      throw new Error(`Export failed with status: ${response.status}`);
+    }
+
+    // Get the PDF blob
+    const blob = await response.blob();
+    
+    // Check if it's actually a PDF
+    if (blob.type !== 'application/pdf') {
+      console.warn("Response is not a PDF, type:", blob.type);
+      // Try to parse as text to see error
+      const text = await blob.text();
+      throw new Error(`Server returned non-PDF: ${text.substring(0, 100)}`);
+    }
+
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    
+    // Create filename
+    const middleInitial = employee.middle_name ? `${employee.middle_name.charAt(0)}.` : "";
+    link.href = url;
+    link.download = `${employee.last_name}, ${employee.first_name} ${middleInitial} - Leave Card.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    
+  } catch (err) {
+    console.error("❌ Error exporting PDF:", err);
+    
+    // Show user-friendly error message
+    alert(`Failed to export PDF: ${err.message}\n\nPlease try again or contact support if the issue persists.`);
+    
+  } finally {
+    // Reset button state
+    const exportBtn = document.querySelector('.exportBtn');
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = '<FontAwesomeIcon icon={faFilePdf} /> PDF';
+    }
+  }
+};
 
   const exportToExcelAll = () => {
     if (!employee || leaveCards.length === 0) return;
+
+    // Prevent export for inactive employees
+    if (isEmployeeInactive && role !== "admin") {
+      alert("Cannot export data for inactive employees");
+      return;
+    }
 
     const wb = XLSX.utils.book_new();
     const excelData = [];
@@ -657,6 +773,7 @@ function EmployeeProfile() {
   };
 
   const onRowsPerPageChange = (n) => {
+    if (isEmployeeInactive && role !== "admin") return;
     setRowsPerPage(n);
     setPage(1);
   };
@@ -672,6 +789,7 @@ function EmployeeProfile() {
           <button 
             style={styles.calendarNavButton}
             onClick={() => navigateMonth('prev')}
+            disabled={isEmployeeInactive && role !== "admin"}
           >
             <FontAwesomeIcon icon={faChevronLeft} />
           </button>
@@ -681,6 +799,7 @@ function EmployeeProfile() {
           <button 
             style={styles.calendarNavButton}
             onClick={() => navigateMonth('next')}
+            disabled={isEmployeeInactive && role !== "admin"}
           >
             <FontAwesomeIcon icon={faChevronRight} />
           </button>
@@ -701,7 +820,7 @@ function EmployeeProfile() {
                 ...styles.calendarDay,
                 backgroundColor: date ? getDayColor(date) : 'transparent',
                 borderColor: date ? getDayBorderColor(date) : 'transparent',
-                cursor: date ? 'pointer' : 'default'
+                cursor: date ? (isEmployeeInactive && role !== "admin" ? 'default' : 'pointer') : 'default'
               }}
               title={date ? getDayTooltip(date) : ''}
             >
@@ -749,11 +868,12 @@ function EmployeeProfile() {
               {leave.year}
             </div>
           </div>
-          {role === "admin" && (
+          {role === "admin" && !isEmployeeInactive && (
             <button 
               style={styles.editLeaveBtn}
               onClick={() => handleEditLeave(leave)}
               title="Edit leave balance"
+              disabled={isEmployeeInactive}
             >
               <FontAwesomeIcon icon={faEdit} />
             </button>
@@ -843,6 +963,7 @@ function EmployeeProfile() {
                   style={styles.editInput}
                   min="0"
                   step="0.5"
+                  disabled={isEmployeeInactive}
                 />
               </label>
               
@@ -856,6 +977,7 @@ function EmployeeProfile() {
                   min="0"
                   max={editedLeave.total_days || 0}
                   step="0.5"
+                  disabled={isEmployeeInactive}
                 />
               </label>
               
@@ -898,7 +1020,7 @@ function EmployeeProfile() {
             <button 
               onClick={handleSaveLeave} 
               style={styles.saveEditBtn}
-              disabled={isSaving || editedLeave.total_days < 0 || editedLeave.used_days < 0}
+              disabled={isSaving || editedLeave.total_days < 0 || editedLeave.used_days < 0 || isEmployeeInactive}
             >
               {isSaving ? (
                 <>
@@ -916,11 +1038,90 @@ function EmployeeProfile() {
     );
   };
 
+  // Inactive Employee Lock Component
+  const InactiveEmployeeLock = () => {
+    if (!isEmployeeInactive) return null;
+
+    return (
+      <div style={styles.inactiveOverlay}>
+        <div style={styles.inactiveLockCard}>
+          <FontAwesomeIcon 
+            icon={faArchive} 
+            style={{ fontSize: '48px', color: '#dc3545', marginBottom: '20px' }}
+          />
+          <h3 style={{ color: '#dc3545', marginBottom: '10px' }}>
+            Employee Inactive
+          </h3>
+          <p style={{ textAlign: 'center', marginBottom: '20px', color: '#666' }}>
+            This employee profile is currently inactive. 
+            {employee?.inactive_reason && ` Reason: ${employee.inactive_reason}`}
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            {role === "admin" && (
+              <button 
+                style={styles.reactivateBtn}
+                onClick={handleReactivateEmployee}
+              >
+                <FontAwesomeIcon icon={faRedo} /> Reactivate
+              </button>
+            )}
+            <button 
+              style={styles.backToListBtn}
+              onClick={() => navigate('/employee')}
+            >
+              Back to Employee List
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper functions for styling
+  const getStatusStyle = (status) => {
+    const styles = {
+      'Present': { backgroundColor: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' },
+      'Absent': { backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' },
+      'On-Leave': { backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' },
+      'Late': { backgroundColor: '#fffbeb', color: '#d97706', border: '1px solid #fed7aa' }
+    };
+    return styles[status] || styles['Absent'];
+  };
+
+  const getTimeStyle = (time, period) => ({
+    padding: '3px 6px',
+    borderRadius: '4px',
+    fontSize: '11px',
+    fontWeight: '500',
+    backgroundColor: time ? '#f8fafc' : '#f1f5f9',
+    color: time ? '#334155' : '#94a3b8',
+    border: `1px solid ${time ? '#e2e8f0' : '#f1f5f9'}`,
+    fontFamily: 'monospace',
+    textAlign: 'center'
+  });
+
+  const tabButtonStyle = (active, disabled = false) => ({
+    backgroundColor: disabled ? '#f0f0f0' : (active ? '#5ab049ff' : '#fff'),
+    color: disabled ? '#999' : (active ? '#fff' : '#333'),
+    border: 'none',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontWeight: active ? '600' : '500',
+    borderRadius: '6px',
+    padding: '10px 20px',
+    fontSize: '14px',
+    boxShadow: active ? 'inset 1px 1px 2px rgba(0,0,0,0.3)' : '0 2px 5px rgba(0,0,0,0.1)',
+    transition: '0.2s',
+    opacity: disabled ? 0.6 : 1,
+  });
+
 
   return (
     <div style={styles.dashboardContainer}>
       {/* Edit Leave Balance Modal */}
       <EditLeaveModal />
+      
+      {/* Inactive Employee Lock Overlay */}
+      <InactiveEmployeeLock />
 
       <div className="desktop-header" style={styles.header}>
       <button onClick={() => navigate(-1)} style={styles.backBtn}>
@@ -1004,432 +1205,451 @@ function EmployeeProfile() {
           </div>
         )}
 
-        {!employee ? (
-          <p>Employee not found.</p>
-        ) : (
-          <>
-            {/* Tabs */}
-            <div className="tabContainer" style={styles.tabContainer}>
-              <button  style={tabButtonStyle(activeTab === "overview")} onClick={() => setActiveTab("overview")}>Overview</button>
-              <button style={tabButtonStyle(activeTab === "attendance")} onClick={() => setActiveTab("attendance")}>Attendance</button>
-              <button style={tabButtonStyle(activeTab === "leave-balances")} onClick={() => setActiveTab("leave-balances")}>
-                Leave Balances
-              </button>
+        {/* Show lock overlay if employee is inactive */}
+        {isEmployeeInactive && (
+          <div style={styles.disabledContent}>
+            <div style={styles.disabledMessage}>
+              <FontAwesomeIcon icon={faLock} size="3x" color="#999" />
+              <h3>Profile Locked</h3>
+              <p>This employee profile is inactive and cannot be modified.</p>
             </div>
+          </div>
+        )}
 
-            {/* Overview */}
-            {activeTab === "overview" && (
-              <div className="overviewCon" style={styles.overviewCon}>
-                <div className="profileCard" style={styles.profileCard}>
-                  <div className="profileHeader" style={styles.profileHeader}>
-                    <div className="profileImageWrapper" style={styles.profileImageWrapper}>
-                      {employee.profile_picture ? (
-                        <img src={employee.profile_picture} alt="Profile" style={styles.profileImage} className="profileImage"/>
-                      ) : (
-                        <div style={styles.initialsCircle}>
-                          {employee.full_name?.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="profileHeaderText" style={styles.profileHeaderText}>
-                      <h2 className="employeeName" style={styles.employeeName}>{employee.first_name} {employee.last_name}</h2>
-                      <p className="employeePosition" style={styles.employeePosition}>{employee.position || "No position listed"}</p>
-                      <p className="employeeDepartment" style={styles.employeeDepartment}>{employee.department || "-"}</p>
-
-                      <div className="badgesContainer" style={styles.badgesContainer}>
-                        <div className="smallBadge" style={styles.smallBadge}><strong>ID:</strong> {employee.id_number}</div>
-                        <div className="smallBadge" style={styles.smallBadge}><strong>Hired:</strong> {employee.date_hired ? new Date(employee.date_hired).toLocaleDateString() : "-"}</div>
-                        <div className="smallBadge" style={styles.smallBadge}><strong>Status:</strong> {employee.employment_status}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="infoGrid" style={styles.infoGrid}>
-                    <div className="infoItem" style={styles.infoItem}><strong>Gender</strong><div style={styles.infoValue}>{employee.gender || "-"}</div></div>
-                    <div className="infoItem" style={styles.infoItem}><strong>Civil Status</strong><div style={styles.infoValue}>{employee.civil_status || "-"}</div></div>
-                    <div className="infoItem" style={styles.infoItem}><strong>Email</strong><div style={styles.infoValue}>{employee.email || "-"}</div></div>
-                    <div className="infoItem" style={styles.infoItem}><strong>Contact</strong><div style={styles.infoValue}>{employee.contact_number || "-"}</div></div>
-                  </div>
-                </div>
-
-
-                {/* Leave Card */}
-                <div className="leaveCardWrapper" style={styles.leaveCardWrapper}>
-                  <div className="leaveTopBar" style={styles.leaveTopBar}>
-                    <div className="leaveTitleGroup" style={styles.leaveTitleGroup}>
-                      <h3 style={styles.leaveCardTitle}>Leave Card</h3>
-                    </div>
-
-                    <div className="leaveControls" style={styles.leaveControls}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <div className="exportGroup" style={styles.exportGroup}>
-                          <button className="exportBtn" style={styles.exportBtn} title="Export to PDF" onClick={exportToPDF}>
-                            <FontAwesomeIcon icon={faFilePdf} /> PDF
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Table */}
-                  <div style={{ overflowX: "auto", maxHeight: compactView ? 380 : 560 }}>
-                    <table className="leaveCardTable" style={{ ...styles.leaveCardTable, fontSize: compactView ? 12 : 13 }}>
-                      <thead>
-                        <tr>
-                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>#</th>
-                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Period</th>
-                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Particulars</th>
-                          <th className="leaveCardTableTh" colSpan="4" style={styles.leaveCardTableTh}>Vacation Leave</th>
-                          <th className="leaveCardTableTh" colSpan="4" style={styles.leaveCardTableTh}>Sick Leave</th>
-                          <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Remarks</th>
-                        </tr>
-                        <tr>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Earned</th>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Balance</th>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Earned</th>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
-                          <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Balance</th>
-                          <th style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {visibleLeave.length ? (
-                          visibleLeave.map((row, idx) => (
-                            <tr
-                              key={idx}
-                              style={{
-                                backgroundColor:
-                                  ((page - 1) * rowsPerPage + idx) % 2 === 0 ? "#fff" : "#fbfbfb",
-                              }}
-                            >
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{(page - 1) * rowsPerPage + idx + 1}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.period || "-"}</td>
-                              <td className="leaveCardTableTd" style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>{row.particulars || "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_earned ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_used ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_balance ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_abs_wop ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_earned ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_used ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_balance ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_abs_wop ?? "-"}</td>
-                              <td className="leaveCardTableTd" style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>
-                                {row.remarks || "-"}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={12} style={{ padding: 18, textAlign: "center", color: "#666" }}>
-                              No matching leave entries.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Pagination */}
-                  <div className="pagination" style={styles.pagination}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <button className="pageBtn" style={styles.pageBtn} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                        <FontAwesomeIcon icon={faChevronLeft} />
-                      </button>
-                      <div style={{ fontSize: 13 }}>Page</div>
-                      <div style={styles.pageInput}>{page}</div>
-                      <div style={{ fontSize: 13 }}>of {totalPages}</div>
-                      <button style={styles.pageBtn} onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                        <FontAwesomeIcon icon={faChevronRight} />
-                      </button>
-                    </div>
-
-                    <div style={{ color: "#666", fontSize: 13 }}>
-                      Showing {(page - 1) * rowsPerPage + 1} - {Math.min(filteredLeave.length, page * rowsPerPage)} of {filteredLeave.length}
-                    </div>
-                  </div>
-                </div>
+        {/* Wrap your existing content in a div with conditional opacity/pointer-events */}
+        <div style={{
+          opacity: isEmployeeInactive ? 0.5 : 1,
+          pointerEvents: isEmployeeInactive && role !== "admin" ? 'none' : 'auto',
+          filter: isEmployeeInactive ? 'grayscale(50%)' : 'none'
+        }}>
+          {!employee ? (
+            <p>Employee not found.</p>
+          ) : (
+            <>
+              {/* Tabs */}
+              <div className="tabContainer" style={styles.tabContainer}>
+                <button style={tabButtonStyle(activeTab === "overview", isEmployeeInactive && role !== "admin")} 
+                  onClick={() => setActiveTab("overview")}
+                  disabled={isEmployeeInactive && role !== "admin"}
+                >
+                  Overview
+                </button>
+                <button style={tabButtonStyle(activeTab === "attendance", isEmployeeInactive && role !== "admin")} 
+                  onClick={() => setActiveTab("attendance")}
+                  disabled={isEmployeeInactive && role !== "admin"}
+                >
+                  Attendance
+                </button>
+                <button style={tabButtonStyle(activeTab === "leave-balances", isEmployeeInactive && role !== "admin")} 
+                  onClick={() => setActiveTab("leave-balances")}
+                  disabled={isEmployeeInactive && role !== "admin"}
+                >
+                  Leave Balances
+                </button>
               </div>
-            )}
 
-            {/* Attendance */}
-            {activeTab === "attendance" && (
-              <div className="attendanceContainer" style={styles.attendanceContainer}>
-                {loadingAttendance ? (
-                  <div style={styles.loadingMessage}>
-                    <div style={styles.loadingSpinner}></div>
-                    Loading attendance data...
-                  </div>
-                ) : attendanceLogs.length > 0 ? (
-                  <>
-                    {/* Enhanced Statistics Cards */}
-                    <div className="cardsRow" style={styles.cardsRow}>
-                      <div className="statCard" style={styles.statCard}>
-                        <div className="cardIconContainer" style={styles.cardIconContainer}>
-                          <FontAwesomeIcon icon={faCalendarDay} style={styles.cardIcon} />
-                        </div>
-                        <div className="cardContent" style={styles.cardContent}>
-                          <h4 style={styles.cardTitle}>Present</h4>
-                          <p style={styles.cardValue}>{attendanceStats?.present || 0}</p>
-                          <small style={styles.cardSubtext}>
-                            {attendanceStats ? Math.round((attendanceStats.present / attendanceStats.total) * 100) : 0}%
-                          </small>
-                        </div>
+              {/* Overview */}
+              {activeTab === "overview" && (
+                <div className="overviewCon" style={styles.overviewCon}>
+                  <div className="profileCard" style={styles.profileCard}>
+                    <div className="profileHeader" style={styles.profileHeader}>
+                      <div className="profileImageWrapper" style={styles.profileImageWrapper}>
+                        {employee.profile_picture ? (
+                          <img src={employee.profile_picture} alt="Profile" style={styles.profileImage} className="profileImage"/>
+                        ) : (
+                          <div style={styles.initialsCircle}>
+                            {employee.full_name?.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                       </div>
-                      <div className="statCard" style={styles.statCard}>
-                        <div className="cardIconContainer" style={styles.cardIconContainer}>
-                          <FontAwesomeIcon icon={faUserClock} style={styles.cardIcon} />
-                        </div>
-                        <div className="cardContent" style={styles.cardContent}>
-                          <h4 style={styles.cardTitle}>Absent</h4>
-                          <p style={styles.cardValue}>{attendanceStats?.absent || 0}</p>
-                          <small style={styles.cardSubtext}>
-                            {attendanceStats ? Math.round((attendanceStats.absent / attendanceStats.total) * 100) : 0}%
-                          </small>
-                        </div>
-                      </div>
-                      <div className="statCard" style={styles.statCard}>
-                        <div className="cardIconContainer" style={styles.cardIconContainer}>
-                          <FontAwesomeIcon icon={faClock} style={styles.cardIcon} />
-                        </div>
-                        <div className="cardContent" style={styles.cardContent}>
-                          <h4 style={styles.cardTitle}>Late</h4>
-                          <p style={styles.cardValue}>{attendanceStats?.late || 0}</p>
-                          <small style={styles.cardSubtext}>
-                            {attendanceStats ? Math.round((attendanceStats.late / attendanceStats.total) * 100) : 0}%
-                          </small>
-                        </div>
-                      </div>
-                      <div className="statCard" style={styles.statCard}>
-                        <div className="cardIconContainer" style={styles.cardIconContainer}>
-                          <FontAwesomeIcon icon={faCalendarAlt} style={styles.cardIcon} />
-                        </div>
-                        <div className="cardContent" style={styles.cardContent}>
-                          <h4 style={styles.cardTitle}>On Leave</h4>
-                          <p style={styles.cardValue}>{attendanceStats?.onLeave || 0}</p>
-                          <small style={styles.cardSubtext}>
-                            {attendanceStats ? Math.round((attendanceStats.onLeave / attendanceStats.total) * 100) : 0}%
-                          </small>
+                      <div className="profileHeaderText" style={styles.profileHeaderText}>
+                        <h2 className="employeeName" style={styles.employeeName}>{employee.first_name} {employee.last_name}</h2>
+                        <p className="employeePosition" style={styles.employeePosition}>{employee.position || "No position listed"}</p>
+                        <p className="employeeDepartment" style={styles.employeeDepartment}>{employee.department || "-"}</p>
+
+                        <div className="badgesContainer" style={styles.badgesContainer}>
+                          <div className="smallBadge" style={styles.smallBadge}><strong>ID:</strong> {employee.id_number}</div>
+                          <div className="smallBadge" style={styles.smallBadge}><strong>Hired:</strong> {employee.date_hired ? new Date(employee.date_hired).toLocaleDateString() : "-"}</div>
+                          <div className="smallBadge" style={styles.smallBadge}><strong>Status:</strong> {employee.employment_status}</div>
+                          {isEmployeeInactive && (
+                            <div className="smallBadge" style={{...styles.smallBadge, backgroundColor: '#f8d7da', color: '#721c24'}}>
+                              <strong>Account:</strong> Inactive
+                              {employee.inactive_reason && ` (${employee.inactive_reason})`}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Combined Calendar and Table Layout */}
-                    <div className="combinedLayout" style={styles.combinedLayout}>
-                      {/* Calendar Section */}
-                      <div className="calendarSection" style={styles.calendarSection}>
-                        <CalendarView />
+                    <div className="infoGrid" style={styles.infoGrid}>
+                      <div className="infoItem" style={styles.infoItem}><strong>Gender</strong><div style={styles.infoValue}>{employee.gender || "-"}</div></div>
+                      <div className="infoItem" style={styles.infoItem}><strong>Civil Status</strong><div style={styles.infoValue}>{employee.civil_status || "-"}</div></div>
+                      <div className="infoItem" style={styles.infoItem}><strong>Email</strong><div style={styles.infoValue}>{employee.email || "-"}</div></div>
+                      <div className="infoItem" style={styles.infoItem}><strong>Contact</strong><div style={styles.infoValue}>{employee.contact_number || "-"}</div></div>
+                    </div>
+                  </div>
+
+
+                  {/* Leave Card */}
+                  <div className="leaveCardWrapper" style={styles.leaveCardWrapper}>
+                    <div className="leaveTopBar" style={styles.leaveTopBar}>
+                      <div className="leaveTitleGroup" style={styles.leaveTitleGroup}>
+                        <h3 style={styles.leaveCardTitle}>Leave Card</h3>
                       </div>
 
-                      {/* Table Section */}
-                      <div style={styles.tableSection}>
-                        {/* Filter Controls */}
-                        <div className="filterGroup" style={styles.filterGroup}>
-                          <FontAwesomeIcon icon={faFilter} style={styles.filterIcon} />
-                          <select 
-                            value={attendanceFilter} 
-                            onChange={(e) => setAttendanceFilter(e.target.value)}
-                            style={styles.filterSelect}
-                            className="filterSelect"
-                          >
-                            <option value="all">All Records</option>
-                            <option value="present">Present Only</option>
-                            <option value="absent">Absent Only</option>
-                            <option value="late">Late Arrivals</option>
-                            <option value="on-leave">On Leave</option>
-                          </select>
-                          <div style={styles.recordCount}>
-                            {filteredAndSortedAttendance.length} of {attendanceLogs.length} records
-                          </div>
-                        </div>
-
-                        {/* Enhanced Attendance Table */}
-                        <div className="tableWrapper" style={styles.tableWrapper}>
-                          <table className="table" style={styles.table}>
-                            <thead>
-                              <tr>
-                                <th 
-                                  className="th"
-                                  style={styles.th} 
-                                  onClick={() => handleSort('attendance_date')}
-                                >
-                                  Date
-                                  <FontAwesomeIcon icon={faSort} style={styles.sortIcon} />
-                                </th>
-                                <th className="th" style={styles.th}>Day</th>
-                                <th className="th" style={styles.th}>Status</th>
-                                <th className="th" style={styles.th}>AM In</th>
-                                <th className="th" style={styles.th}>AM Out</th>
-                                <th className="th" style={styles.th}>PM In</th>
-                                <th className="th" style={styles.th}>PM Out</th>
-                                <th className="th" style={styles.th}>Leave Type</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredAndSortedAttendance.map((log, idx) => (
-                                <tr key={idx} style={styles.tableRow}>
-                                  <td className="td" style={styles.td}>
-                                    {new Date(log.attendance_date).toLocaleDateString('en-PH', {
-                                      month: 'short',
-                                      day: 'numeric'
-                                    })}
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    {new Date(log.attendance_date).toLocaleDateString('en-PH', {
-                                      weekday: 'short'
-                                    })}
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    <div style={{
-                                      ...styles.statusBadge,
-                                      ...getStatusStyle(log.status || 'Absent')
-                                    }}>
-                                      {log.status || 'Absent'}
-                                    </div>
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    <div style={getTimeStyle(log.am_checkin, 'AM')}>
-                                      {log.am_checkin ? log.am_checkin.substring(0, 5) : "-"}
-                                    </div>
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    <div style={getTimeStyle(log.am_checkout, 'AM')}>
-                                      {log.am_checkout ? log.am_checkout.substring(0, 5) : "-"}
-                                    </div>
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    <div style={getTimeStyle(log.pm_checkin, 'PM')}>
-                                      {log.pm_checkin ? log.pm_checkin.substring(0, 5) : "-"}
-                                    </div>
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    <div style={getTimeStyle(log.pm_checkout, 'PM')}>
-                                      {log.pm_checkout ? log.pm_checkout.substring(0, 5) : "-"}
-                                    </div>
-                                  </td>
-                                  <td className="td" style={styles.td}>
-                                    {log.leave_type ? (
-                                      <div style={styles.leaveType}>
-                                        {log.leave_type}
-                                      </div>
-                                    ) : "-"}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {filteredAndSortedAttendance.length === 0 && (
-                          <div style={styles.noResults}>
-                            <p>No attendance records match the current filter.</p>
+                      <div className="leaveControls" style={styles.leaveControls}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <div className="exportGroup" style={styles.exportGroup}>
                             <button 
-                              style={styles.clearFilterBtn}
-                              onClick={() => setAttendanceFilter('all')}
+                              className="exportBtn" 
+                              style={styles.exportBtn} 
+                              title="Export to PDF" 
+                              onClick={exportToPDF}
+                              disabled={isEmployeeInactive && role !== "admin"}
                             >
-                              Clear Filter
+                              <FontAwesomeIcon icon={faFilePdf} /> PDF
                             </button>
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <div style={styles.noRecords}>
-                    <FontAwesomeIcon icon={faCalendarDay} style={styles.noRecordsIcon} />
-                    <h3>No Attendance Records</h3>
-                    <p>No attendance data found for this employee.</p>
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* Leave Balances Tab */}
-            {activeTab === "leave-balances" && (
-              <div className="leaveBalancesContainer" style={styles.leaveBalancesContainer}>
+                    {/* Table */}
+                    <div style={{ overflowX: "auto", maxHeight: compactView ? 380 : 560 }}>
+                      <table className="leaveCardTable" style={{ ...styles.leaveCardTable, fontSize: compactView ? 12 : 13 }}>
+                        <thead>
+                          <tr>
+                            <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>#</th>
+                            <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Period</th>
+                            <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Particulars</th>
+                            <th className="leaveCardTableTh" colSpan="4" style={styles.leaveCardTableTh}>Vacation Leave</th>
+                            <th className="leaveCardTableTh" colSpan="4" style={styles.leaveCardTableTh}>Sick Leave</th>
+                            <th className="leaveCardTableTh" rowSpan="2" style={styles.leaveCardTableTh}>Remarks</th>
+                          </tr>
+                          <tr>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Earned</th>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Balance</th>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Earned</th>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>ABS. UND. W/P</th>
+                            <th className="leaveCardTableTh" style={styles.leaveCardTableTh}>Balance</th>
+                            <th style={styles.leaveCardTableTh}>ABS. UND. WOP</th>
+                          </tr>
+                        </thead>
 
-                {loadingLeaveBalances ? (
-                  <div style={styles.loadingMessage}>
-                    <div style={styles.loadingSpinner}></div>
-                    Loading leave balances...
-                  </div>
-                ) : leaveEntitlements.length > 0 ? (
-                  <>
-                    {/* Leave Balance Cards Grid */}
-                    <div className="balancesGrid" style={styles.balancesGrid}>
-                      {leaveEntitlements
-                        .sort((a, b) => {
-                          // Sort by remaining days (descending)
-                          return (b.remaining || 0) - (a.remaining || 0);
-                        })
-                        .map((leave, index) => (
-                          <LeaveBalanceCard key={`${leave.leave_type}-${leave.year}-${index}`} leave={leave} />
-                        ))}
+                        <tbody>
+                          {visibleLeave.length ? (
+                            visibleLeave.map((row, idx) => (
+                              <tr
+                                key={idx}
+                                style={{
+                                  backgroundColor:
+                                    ((page - 1) * rowsPerPage + idx) % 2 === 0 ? "#fff" : "#fbfbfb",
+                                }}
+                              >
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{(page - 1) * rowsPerPage + idx + 1}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.period || "-"}</td>
+                                <td className="leaveCardTableTd" style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>{row.particulars || "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_earned ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_used ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_balance ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.vl_abs_wop ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_earned ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_used ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_balance ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={styles.leaveCardTableTd}>{row.sl_abs_wop ?? "-"}</td>
+                                <td className="leaveCardTableTd" style={{ ...styles.leaveCardTableTd, textAlign: "left" }}>
+                                  {row.remarks || "-"}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={12} style={{ padding: 18, textAlign: "center", color: "#666" }}>
+                                No matching leave entries.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
 
-                  </>
-                ) : (
-                  <div style={styles.noLeaveBalances}>
-                    <FontAwesomeIcon icon={faBalanceScale} style={styles.noBalancesIcon} />
-                    <h3>No Leave Entitlements</h3>
-                    <p>This employee doesn't have any leave entitlements recorded yet.</p>
-                    <p style={styles.noBalancesNote}>
-                      Note: Leave entitlements are automatically created for eligible employees (Temporary, Permanent, Contractual, Casual, or Coterminous).
-                    </p>
+                    {/* Pagination */}
+                    <div className="pagination" style={styles.pagination}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button 
+                          className="pageBtn" 
+                          style={styles.pageBtn} 
+                          onClick={() => setPage(p => Math.max(1, p - 1))} 
+                          disabled={page === 1 || (isEmployeeInactive && role !== "admin")}
+                        >
+                          <FontAwesomeIcon icon={faChevronLeft} />
+                        </button>
+                        <div style={{ fontSize: 13 }}>Page</div>
+                        <div style={styles.pageInput}>{page}</div>
+                        <div style={{ fontSize: 13 }}>of {totalPages}</div>
+                        <button 
+                          style={styles.pageBtn} 
+                          onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
+                          disabled={page === totalPages || (isEmployeeInactive && role !== "admin")}
+                        >
+                          <FontAwesomeIcon icon={faChevronRight} />
+                        </button>
+                      </div>
+
+                      <div style={{ color: "#666", fontSize: 13 }}>
+                        Showing {(page - 1) * rowsPerPage + 1} - {Math.min(filteredLeave.length, page * rowsPerPage)} of {filteredLeave.length}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+                </div>
+              )}
+
+              {/* Attendance */}
+              {activeTab === "attendance" && (
+                <div className="attendanceContainer" style={styles.attendanceContainer}>
+                  {loadingAttendance ? (
+                    <div style={styles.loadingMessage}>
+                      <div style={styles.loadingSpinner}></div>
+                      Loading attendance data...
+                    </div>
+                  ) : attendanceLogs.length > 0 ? (
+                    <>
+                      {/* Enhanced Statistics Cards */}
+                      <div className="cardsRow" style={styles.cardsRow}>
+                        <div className="statCard" style={styles.statCard}>
+                          <div className="cardIconContainer" style={styles.cardIconContainer}>
+                            <FontAwesomeIcon icon={faCalendarDay} style={styles.cardIcon} />
+                          </div>
+                          <div className="cardContent" style={styles.cardContent}>
+                            <h4 style={styles.cardTitle}>Present</h4>
+                            <p style={styles.cardValue}>{attendanceStats?.present || 0}</p>
+                            <small style={styles.cardSubtext}>
+                              {attendanceStats ? Math.round((attendanceStats.present / attendanceStats.total) * 100) : 0}%
+                            </small>
+                          </div>
+                        </div>
+                        <div className="statCard" style={styles.statCard}>
+                          <div className="cardIconContainer" style={styles.cardIconContainer}>
+                            <FontAwesomeIcon icon={faUserClock} style={styles.cardIcon} />
+                          </div>
+                          <div className="cardContent" style={styles.cardContent}>
+                            <h4 style={styles.cardTitle}>Absent</h4>
+                            <p style={styles.cardValue}>{attendanceStats?.absent || 0}</p>
+                            <small style={styles.cardSubtext}>
+                              {attendanceStats ? Math.round((attendanceStats.absent / attendanceStats.total) * 100) : 0}%
+                            </small>
+                          </div>
+                        </div>
+                        <div className="statCard" style={styles.statCard}>
+                          <div className="cardIconContainer" style={styles.cardIconContainer}>
+                            <FontAwesomeIcon icon={faClock} style={styles.cardIcon} />
+                          </div>
+                          <div className="cardContent" style={styles.cardContent}>
+                            <h4 style={styles.cardTitle}>Late</h4>
+                            <p style={styles.cardValue}>{attendanceStats?.late || 0}</p>
+                            <small style={styles.cardSubtext}>
+                              {attendanceStats ? Math.round((attendanceStats.late / attendanceStats.total) * 100) : 0}%
+                            </small>
+                          </div>
+                        </div>
+                        <div className="statCard" style={styles.statCard}>
+                          <div className="cardIconContainer" style={styles.cardIconContainer}>
+                            <FontAwesomeIcon icon={faCalendarAlt} style={styles.cardIcon} />
+                          </div>
+                          <div className="cardContent" style={styles.cardContent}>
+                            <h4 style={styles.cardTitle}>On Leave</h4>
+                            <p style={styles.cardValue}>{attendanceStats?.onLeave || 0}</p>
+                            <small style={styles.cardSubtext}>
+                              {attendanceStats ? Math.round((attendanceStats.onLeave / attendanceStats.total) * 100) : 0}%
+                            </small>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Combined Calendar and Table Layout */}
+                      <div className="combinedLayout" style={styles.combinedLayout}>
+                        {/* Calendar Section */}
+                        <div className="calendarSection" style={styles.calendarSection}>
+                          <CalendarView />
+                        </div>
+
+                        {/* Table Section */}
+                        <div style={styles.tableSection}>
+                          {/* Filter Controls */}
+                          <div className="filterGroup" style={styles.filterGroup}>
+                            <FontAwesomeIcon icon={faFilter} style={styles.filterIcon} />
+                            <select 
+                              value={attendanceFilter} 
+                              onChange={(e) => setAttendanceFilter(e.target.value)}
+                              style={styles.filterSelect}
+                              className="filterSelect"
+                              disabled={isEmployeeInactive && role !== "admin"}
+                            >
+                              <option value="all">All Records</option>
+                              <option value="present">Present Only</option>
+                              <option value="absent">Absent Only</option>
+                              <option value="late">Late Arrivals</option>
+                              <option value="on-leave">On Leave</option>
+                            </select>
+                            <div style={styles.recordCount}>
+                              {filteredAndSortedAttendance.length} of {attendanceLogs.length} records
+                            </div>
+                          </div>
+
+                          {/* Enhanced Attendance Table */}
+                          <div className="tableWrapper" style={styles.tableWrapper}>
+                            <table className="table" style={styles.table}>
+                              <thead>
+                                <tr>
+                                  <th 
+                                    className="th"
+                                    style={styles.th} 
+                                    onClick={() => handleSort('attendance_date')}
+                                  >
+                                    Date
+                                    <FontAwesomeIcon icon={faSort} style={styles.sortIcon} />
+                                  </th>
+                                  <th className="th" style={styles.th}>Day</th>
+                                  <th className="th" style={styles.th}>Status</th>
+                                  <th className="th" style={styles.th}>AM In</th>
+                                  <th className="th" style={styles.th}>AM Out</th>
+                                  <th className="th" style={styles.th}>PM In</th>
+                                  <th className="th" style={styles.th}>PM Out</th>
+                                  <th className="th" style={styles.th}>Leave Type</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredAndSortedAttendance.map((log, idx) => (
+                                  <tr key={idx} style={styles.tableRow}>
+                                    <td className="td" style={styles.td}>
+                                      {new Date(log.attendance_date).toLocaleDateString('en-PH', {
+                                        month: 'short',
+                                        day: 'numeric'
+                                      })}
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      {new Date(log.attendance_date).toLocaleDateString('en-PH', {
+                                        weekday: 'short'
+                                      })}
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      <div style={{
+                                        ...styles.statusBadge,
+                                        ...getStatusStyle(log.status || 'Absent')
+                                      }}>
+                                        {log.status || 'Absent'}
+                                      </div>
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      <div style={getTimeStyle(log.am_checkin, 'AM')}>
+                                        {log.am_checkin ? log.am_checkin.substring(0, 5) : "-"}
+                                      </div>
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      <div style={getTimeStyle(log.am_checkout, 'AM')}>
+                                        {log.am_checkout ? log.am_checkout.substring(0, 5) : "-"}
+                                      </div>
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      <div style={getTimeStyle(log.pm_checkin, 'PM')}>
+                                        {log.pm_checkin ? log.pm_checkin.substring(0, 5) : "-"}
+                                      </div>
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      <div style={getTimeStyle(log.pm_checkout, 'PM')}>
+                                        {log.pm_checkout ? log.pm_checkout.substring(0, 5) : "-"}
+                                      </div>
+                                    </td>
+                                    <td className="td" style={styles.td}>
+                                      {log.leave_type ? (
+                                        <div style={styles.leaveType}>
+                                          {log.leave_type}
+                                        </div>
+                                      ) : "-"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {filteredAndSortedAttendance.length === 0 && (
+                            <div style={styles.noResults}>
+                              <p>No attendance records match the current filter.</p>
+                              <button 
+                                style={styles.clearFilterBtn}
+                                onClick={() => setAttendanceFilter('all')}
+                                disabled={isEmployeeInactive && role !== "admin"}
+                              >
+                                Clear Filter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={styles.noRecords}>
+                      <FontAwesomeIcon icon={faCalendarDay} style={styles.noRecordsIcon} />
+                      <h3>No Attendance Records</h3>
+                      <p>No attendance data found for this employee.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Leave Balances Tab */}
+              {activeTab === "leave-balances" && (
+                <div className="leaveBalancesContainer" style={styles.leaveBalancesContainer}>
+
+                  {loadingLeaveBalances ? (
+                    <div style={styles.loadingMessage}>
+                      <div style={styles.loadingSpinner}></div>
+                      Loading leave balances...
+                    </div>
+                  ) : leaveEntitlements.length > 0 ? (
+                    <>
+                      {/* Leave Balance Cards Grid */}
+                      <div className="balancesGrid" style={styles.balancesGrid}>
+                        {leaveEntitlements
+                          .sort((a, b) => {
+                            // Sort by remaining days (descending)
+                            return (b.remaining || 0) - (a.remaining || 0);
+                          })
+                          .map((leave, index) => (
+                            <LeaveBalanceCard key={`${leave.leave_type}-${leave.year}-${index}`} leave={leave} />
+                          ))}
+                      </div>
+
+                    </>
+                  ) : (
+                    <div style={styles.noLeaveBalances}>
+                      <FontAwesomeIcon icon={faBalanceScale} style={styles.noBalancesIcon} />
+                      <h3>No Leave Entitlements</h3>
+                      <p>This employee doesn't have any leave entitlements recorded yet.</p>
+                      <p style={styles.noBalancesNote}>
+                        Note: Leave entitlements are automatically created for eligible employees (Temporary, Permanent, Contractual, Casual, or Coterminous).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </main>
     </div>
   );
 }
-
-// Helper functions for styling
-const getStatusStyle = (status) => {
-  const styles = {
-    'Present': { backgroundColor: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' },
-    'Absent': { backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' },
-    'On-Leave': { backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' },
-    'Late': { backgroundColor: '#fffbeb', color: '#d97706', border: '1px solid #fed7aa' }
-  };
-  return styles[status] || styles['Absent'];
-};
-
-const getTimeStyle = (time, period) => ({
-  padding: '3px 6px',
-  borderRadius: '4px',
-  fontSize: '11px',
-  fontWeight: '500',
-  backgroundColor: time ? '#f8fafc' : '#f1f5f9',
-  color: time ? '#334155' : '#94a3b8',
-  border: `1px solid ${time ? '#e2e8f0' : '#f1f5f9'}`,
-  fontFamily: 'monospace',
-  textAlign: 'center'
-});
-
-const tabButtonStyle = (active) => ({
-  backgroundColor: active ? '#5ab049ff' : '#fff',
-  color: active ? '#fff' : '#333',
-  border: 'none',
-  cursor: 'pointer',
-  fontWeight: active? '600': '500',
-  borderRadius: '6px',
-  padding: '10px 20px',
-  fontSize: '14px',
-  boxShadow: active ? 'inset 1px 1px 2px rgba(0,0,0,0.3)' : '0 2px 5px rgba(0,0,0,0.1)',
-  transition: '0.2s',
-});
 
 const styles = {
   dashboardContainer: {
     display: 'flex',
     minHeight: '100vh',
     backgroundColor: '#F8F8F8',
+    position: 'relative',
   },
   sidebar: {
     backgroundColor: '#009205',
@@ -1475,10 +1695,79 @@ const styles = {
   search: { padding: '8px 12px', borderRadius: '6px', border: 'none', fontSize: '14px' },
   iconBell: { fontSize: '22px', color: '#fff', cursor: 'pointer' },
   backBtn: { backgroundColor: '#fff', color: '#009205', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '16px' },
-  content1: { marginLeft: '280px', padding: '100px 25px 25px 25px', flex: 1 },
+  content1: { marginLeft: '280px', padding: '100px 25px 25px 25px', flex: 1, position: 'relative' },
   tabContainer: { display: 'flex', gap: '15px', marginBottom: '25px' },
   overviewCon: { display: 'flex', flexDirection: 'column', gap: '20px', flexWrap: 'wrap' },
   profileInfo: { display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' },
+
+  // New styles for inactive employee lock
+  inactiveOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+    backdropFilter: 'blur(5px)',
+  },
+
+  inactiveLockCard: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '40px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+    textAlign: 'center',
+    maxWidth: '400px',
+    border: '2px solid #dc3545',
+  },
+
+  reactivateBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#28a745',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+
+  backToListBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#6c757d',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '600',
+  },
+
+  disabledContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+
+  disabledMessage: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: '30px',
+    borderRadius: '10px',
+    textAlign: 'center',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+    border: '2px solid #ffc107',
+  },
 
   /* PROFILE */
   profileCard: {
@@ -1689,6 +1978,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    '&:disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    }
   },
 
   // Balances Summary
@@ -1899,6 +2192,10 @@ const styles = {
     fontWeight: '500',
     color: '#111',
     transition: 'all 0.2s ease',
+    '&:disabled': {
+      backgroundColor: '#f1f5f9',
+      cursor: 'not-allowed',
+    }
   },
   calculationRow: {
     display: 'flex',
@@ -1982,6 +2279,10 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     transition: 'all 0.2s ease',
+    '&:disabled': {
+      backgroundColor: '#ccc',
+      cursor: 'not-allowed',
+    }
   },
   savingSpinner: {
     width: '16px',
@@ -2067,7 +2368,21 @@ const styles = {
   iconBtn: { padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" },
 
   exportGroup: { display: "flex", gap: 8, flexWrap: "wrap" },
-  exportBtn: { padding: "7px 10px", borderRadius: 6, border: "1px solid #d0d0d0", background: "#fff", cursor: "pointer", display: "flex", gap: 8, alignItems: "center", fontSize: 13 },
+  exportBtn: { 
+    padding: "7px 10px", 
+    borderRadius: 6, 
+    border: "1px solid #d0d0d0", 
+    background: "#fff", 
+    cursor: "pointer", 
+    display: "flex", 
+    gap: 8, 
+    alignItems: "center", 
+    fontSize: 13,
+    '&:disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    }
+  },
 
   leaveCardTable: {
   width: "100%",
@@ -2104,7 +2419,17 @@ leaveCardTableTd: {
 
   /* Pagination */
   pagination: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
-  pageBtn: { padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" },
+  pageBtn: { 
+    padding: "8px 10px", 
+    borderRadius: 6, 
+    border: "1px solid #ddd", 
+    background: "#fff", 
+    cursor: "pointer",
+    '&:disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    }
+  },
   pageInput: { minWidth: 28, textAlign: "center", padding: "6px 8px", borderRadius: 6, border: "1px solid #eee", background: "#fafafa" },
 
   /* Enhanced Attendance Styles */
@@ -2205,7 +2530,11 @@ leaveCardTableTd: {
     fontSize: '12px',
     fontWeight: '500',
     color: '#334155',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    '&:disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    }
   },
   recordCount: {
     fontSize: '11px',
@@ -2237,7 +2566,11 @@ leaveCardTableTd: {
     cursor: 'pointer',
     color: '#64748b',
     fontSize: '10px',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    '&:disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    }
   },
   calendarTitle: {
     fontSize: '14px',
@@ -2409,7 +2742,11 @@ leaveCardTableTd: {
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: '500',
-    marginTop: '8px'
+    marginTop: '8px',
+    '&:disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    }
   },
 
   // Modal

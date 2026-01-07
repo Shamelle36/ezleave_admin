@@ -54,7 +54,7 @@ function Employees() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
-  const [employeesToEdit, setEmployeesToEdit] = useState([]);
+  const [employeesToEdit, setEmployeesToEdit] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [view, setView] = useState(() => {
     const savedView = localStorage.getItem('employeesView');
@@ -124,7 +124,22 @@ function Employees() {
   const [showReactivateModal, setShowReactivateModal] = useState(false);
   const [employeeToReactivate, setEmployeeToReactivate] = useState(null);
   
-  const [inputType, setInputType] = useState('text');
+  // Add state for inactive modal
+  const [showInactiveModal, setShowInactiveModal] = useState(false);
+  const [inactiveReason, setInactiveReason] = useState('');
+  const [employeeToInactivate, setEmployeeToInactivate] = useState(null);
+
+  // Reasons for making employee inactive
+  const inactiveReasons = [
+    "Resigned",
+    "Terminated",
+    "End of Contract",
+    "AWOL",
+    "Leave of Absence",
+    "Suspended",
+    "Retired",
+    "Other"
+  ];
 
   useEffect(() => {
     if (showTermsModal) {
@@ -141,11 +156,20 @@ function Employees() {
     { name: "Employees", icon: faUsers, to: "/employee" },
     { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-    { name: "Message", icon: faEnvelope, to: "/messages" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
+
+  const canViewAllDepartments = () => {
+    const role = localStorage.getItem("role") || "admin";
+    return role === "admin" || role === "mayor";
+  };
+
+  const canFilterAllDepartments = () => {
+    const role = localStorage.getItem("role") || "admin";
+    return role !== "office_head";
+  };
 
   const allowedMenus = menuItems.filter((item) => {
     if (role === "admin") return true;
@@ -153,10 +177,7 @@ function Employees() {
       return [
         "Dashboard",
         "Employees",
-        "Attendance",
         "Leave Management",
-        "Message",
-        "Announcement",
       ].includes(item.name);
     }
     return false;
@@ -221,7 +242,6 @@ function Employees() {
       const role = localStorage.getItem("role") || "admin";
       const department = localStorage.getItem("department") || "";
 
-      // For mayor: fetch all employees without department filter
       const params = role === "mayor" 
         ? new URLSearchParams({ role }).toString()
         : new URLSearchParams({ role, department }).toString();
@@ -241,7 +261,7 @@ function Employees() {
     const role = localStorage.getItem("role") || "admin";
     
     if (role === "admin") return true;
-    if (role === "mayor") return false; // Mayor cannot edit/delete any employees
+    if (role === "mayor") return false;
     if (role === "office_head") {
       const userDept = localStorage.getItem("department") || "";
       return employeeDepartment === userDept;
@@ -251,12 +271,12 @@ function Employees() {
 
   const canAddEmployees = () => {
     const role = localStorage.getItem("role") || "admin";
-    return role !== "mayor"; // Mayor cannot add employees
+    return role !== "mayor";
   };
 
   const canImportCSV = () => {
     const role = localStorage.getItem("role") || "admin";
-    return role !== "mayor"; // Mayor cannot import CSV
+    return role !== "mayor";
   };
 
   const handleButtonClick = () => {
@@ -277,25 +297,21 @@ function Employees() {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         
-        // Skip first 3 rows (index 0, 1, 2)
         const rows = json.slice(3);
-
-        // Filter out empty rows (no first/last name or position)
         const validRows = rows.filter(
           (row) => row.some(cell => cell && String(cell).trim() !== "")
         );
 
         const employees = validRows.map((row) => {
-          // Helper function to normalize civil status
           const normalizeCivilStatus = (status) => {
-            if (!status) return "Single"; // default
+            if (!status) return "Single";
             const lowerStatus = status.toLowerCase().trim();
             if (lowerStatus.includes('single')) return "Single";
             if (lowerStatus.includes('married')) return "Married";
             if (lowerStatus.includes('widowed')) return "Widowed";
             if (lowerStatus.includes('separated')) return "Separated";
             if (lowerStatus.includes('annulled')) return "Annulled";
-            return "Single"; // default fallback
+            return "Single";
           };
 
           const civilStatus = row[12]?.toString().trim() || "";
@@ -316,7 +332,7 @@ function Employees() {
             contact_number: String(row[9] || "").trim(),
             date_hired: row[10] ? new Date(row[10]).toISOString().split("T")[0] : "",
             gender: row[11]?.toString().toLowerCase().includes("female") ? "Female" : "Male",
-            civil_status: normalizeCivilStatus(civilStatus), // Use normalized value
+            civil_status: normalizeCivilStatus(civilStatus),
             status: "active",
           };
         });
@@ -326,7 +342,6 @@ function Employees() {
       };
       reader.readAsArrayBuffer(file);
     } else {
-      // fallback for CSV (existing Papa.parse)
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
@@ -334,7 +349,6 @@ function Employees() {
           const employeesRaw = results.data
             .filter(row => Object.values(row).some(cell => cell && cell.trim() !== ""))
             .map((row, index) => {
-              // Helper function to normalize civil status for CSV too
               const normalizeCivilStatus = (status) => {
                 if (!status) return "Single";
                 const lowerStatus = status.toLowerCase().trim();
@@ -356,7 +370,7 @@ function Employees() {
                 department: row.department?.trim() || "",
                 gender: row.gender?.trim() || "",
                 date_hired: row.date_hired?.trim() || "",
-                civil_status: normalizeCivilStatus(row.civil_status), // Use normalized value
+                civil_status: normalizeCivilStatus(row.civil_status),
                 contact_number: row.contact_number?.trim() || "",
                 id_number: row.id_number?.trim() || "",
                 status: row.status?.trim() || "active",
@@ -373,15 +387,11 @@ function Employees() {
   const confirmUpload = async () => {
     if (employeesToUpload.length === 0) return;
 
-    // Hide the modal immediately
     setShowConfirmModal(false);
-
-    // Show loading overlay
     setIsDeleting(true);
-    await new Promise((resolve) => setTimeout(resolve, 50)); // allow render
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
-      // Only filter out completely empty entries
       const validEmployees = employeesToUpload.filter(
         (emp) => Object.values(emp).some(value => value && String(value).trim() !== "")
       );
@@ -390,7 +400,6 @@ function Employees() {
 
       for (const emp of validEmployees) {
         try {
-          // Remove id_number if empty
           const payload = { ...emp };
           if (!payload.id_number) delete payload.id_number;
 
@@ -409,7 +418,6 @@ function Employees() {
           setEmployeeRecords((prev) => [savedEmployee, ...prev]);
 
           importedCount++;
-          console.log(`✅ Imported ${importedCount} / ${validEmployees.length}: ${emp.full_name}`);
         } catch (err) {
           console.warn(`⚠️ Skipped due to error: ${emp.full_name}`, err);
         }
@@ -420,35 +428,93 @@ function Employees() {
       console.error("Error importing employees:", error);
     } finally {
       setEmployeesToUpload([]);
-      setTimeout(() => setIsDeleting(false), 400); // smooth fade
+      setTimeout(() => setIsDeleting(false), 400);
     }
   };
 
+  // Updated delete function to set as inactive
   const handleDeleteClick = (employee) => {
-    setEmployeeToDelete(employee);
-    setShowDeleteModal(true);
+    setEmployeeToInactivate(employee);
+    setShowInactiveModal(true);
   };
 
-  const confirmDelete = async () => {
-    setIsDeleting(true);
-    await new Promise((resolve) => setTimeout(resolve, 50)); // let loader render
+  // New function to handle setting employee to inactive
+  const confirmSetInactive = async () => {
+    if (!employeeToInactivate || !inactiveReason) {
+      alert("Please select a reason for making employee inactive");
+      return;
+    }
 
+    setIsDeleting(true);
+    
     try {
-      const res = await fetch(`${API_URL}/api/employees/${employeeToDelete.id}`, {
-        method: "DELETE",
+      const res = await fetch(`${API_URL}/api/employees/${employeeToInactivate.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          ...employeeToInactivate, 
+          status: "inactive",
+          inactive_reason: inactiveReason,
+          inactive_date: new Date().toISOString().split('T')[0]
+        })
       });
 
-      if (!res.ok) throw new Error("Failed to delete employee");
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to set employee as inactive");
+      }
 
       setEmployeeRecords((prev) =>
-        prev.filter((emp) => emp.id !== employeeToDelete.id)
+        prev.map(emp => 
+          emp.id === employeeToInactivate.id 
+            ? { ...emp, status: "inactive", inactive_reason: inactiveReason }
+            : emp
+        )
       );
 
-      setShowDeleteModal(false);
+      setShowInactiveModal(false);
+      setEmployeeToInactivate(null);
+      setInactiveReason('');
+      
+      alert(`Employee ${employeeToInactivate.first_name} ${employeeToInactivate.last_name} has been set to inactive. Reason: ${inactiveReason}`);
+    } catch (error) {
+      console.error("Set inactive error:", error);
+      alert(error.message || "Failed to set employee as inactive");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Function to delete inactive employee permanently
+  const handleDeleteInactive = async (employee) => {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to PERMANENTLY delete ${employee.first_name} ${employee.last_name}? This action cannot be undone.`
+    );
+    
+    if (!confirmDelete) return;
+    
+    setIsDeleting(true);
+    
+    try {
+      const res = await fetch(`${API_URL}/api/employees/${employee.id}`, {
+        method: "DELETE"
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to delete employee");
+      }
+
+      setEmployeeRecords((prev) =>
+        prev.filter((emp) => emp.id !== employee.id)
+      );
+
+      alert("Employee permanently deleted!");
     } catch (error) {
       console.error("Delete error:", error);
+      alert("Failed to delete employee");
     } finally {
-      setTimeout(() => setIsDeleting(false), 400); // small delay for smooth fade
+      setIsDeleting(false);
     }
   };
 
@@ -462,7 +528,7 @@ function Employees() {
     if (!confirmBulk) return;
 
     setIsDeleting(true);
-    await new Promise((resolve) => setTimeout(resolve, 50)); // render loader
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
       for (const id of selectedEmployees) {
@@ -497,15 +563,20 @@ function Employees() {
       const response = await fetch(`${API_URL}/api/employees/${employeeToReactivate.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...employeeToReactivate, status: "active" })
+        body: JSON.stringify({ 
+          ...employeeToReactivate, 
+          status: "active",
+          inactive_reason: ""
+        })
       });
 
       if (!response.ok) throw new Error("Failed to reactivate employee");
 
-      // Update local state
       setEmployeeRecords((prev) =>
         prev.map((emp) =>
-          emp.id === employeeToReactivate.id ? { ...emp, status: "active" } : emp
+          emp.id === employeeToReactivate.id 
+            ? { ...emp, status: "active", inactive_reason: "" } 
+            : emp
         )
       );
 
@@ -521,7 +592,7 @@ function Employees() {
   };
 
   const handleLogout = async () => {
-    const user = JSON.parse(localStorage.getItem("admin")); // get current session
+    const user = JSON.parse(localStorage.getItem("admin"));
 
     if (user) {
       await fetch(`${API_URL}/api/auth/logout`, {
@@ -531,8 +602,8 @@ function Employees() {
       });
     }
 
-    localStorage.removeItem("admin"); // clear session
-    navigate("/"); // redirect to login
+    localStorage.removeItem("admin");
+    navigate("/");
   };
 
   const handleAddEmployee = async () => {
@@ -551,13 +622,11 @@ function Employees() {
 
       const savedEmployee = await response.json();
 
-      // Update UI
       setEmployeeRecords((prev) => [savedEmployee, ...prev]);
 
       setShowAddModal(false);
       alert("Employee added successfully!");
       
-      // reset form
       setNewEmployee({
         full_name: "",
         email: "",
@@ -583,38 +652,68 @@ function Employees() {
   };
 
   const handleEditClick = (employee) => {
-    setEmployeesToEdit(employee);
-    setShowEditModal(true);
-  };
+  // Only allow editing active employees
+  if (employee.status === 'inactive') {
+    alert('Inactive employees cannot be edited. Please reactivate them first.');
+    return;
+  }
+  
+  // Remove status from editable fields
+  const { status, inactive_reason, ...editableFields } = employee;
+  setEmployeesToEdit(editableFields);
+  setShowEditModal(true);
+};
 
-  const handleEditSave = async () => {
-    await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
+const handleEditSave = async () => {
+  try {
+    // Get current employee data to preserve status
+    const currentEmployee = employeeRecord.find(emp => emp.id === employeesToEdit.id);
+    
+    // Prepare data for update - preserve the original status
+    const updateData = {
+      ...employeesToEdit,
+      status: currentEmployee?.status || 'active', // Preserve original status
+      // Don't include inactive_reason in edit
+    };
+
+    const response = await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(employeesToEdit),
+      body: JSON.stringify(updateData),
     });
+
+    if (!response.ok) {
+      throw new Error("Failed to update employee");
+    }
+
+    const updatedEmployee = await response.json();
 
     setEmployeeRecords((prev) =>
       prev.map((emp) =>
-        emp.id === employeesToEdit.id ? employeesToEdit : emp
+        emp.id === employeesToEdit.id ? updatedEmployee : emp
       )
     );
+    
     setShowEditModal(false);
-  };
+    alert("Employee updated successfully!");
+  } catch (error) {
+    console.error("Error updating employee:", error);
+    alert("Failed to update employee");
+  }
+};
 
   const handleSelectAll = (e) => {
     const checked = e.target.checked;
     setSelectAll(checked);
     if (checked) {
-      setSelectedEmployees(employeeRecord.map((emp) => emp.id));
+      setSelectedEmployees(employeeRecord.filter(emp => emp.status === 'active').map((emp) => emp.id));
     } else {
       setSelectedEmployees([]);
     }
   };
 
   useEffect(() => {
-    // Keep "Select All" in sync with row selections
-    if (selectedEmployees.length === employeeRecord.length && employeeRecord.length > 0) {
+    if (selectedEmployees.length === employeeRecord.filter(emp => emp.status === 'active').length && employeeRecord.filter(emp => emp.status === 'active').length > 0) {
       setSelectAll(true);
     } else {
       setSelectAll(false);
@@ -640,14 +739,12 @@ function Employees() {
 
   // Filter active employees for list view
   const filteredEmployees = employeeRecord
-    .filter(emp => emp.status === 'active') // Only show active employees in list view
+    .filter(emp => emp.status === 'active')
     .filter(emp => {
       const search = searchTerm.toLowerCase();
-
       const fullName = `${emp.first_name || ""} ${emp.last_name || ""}`.toLowerCase();
       const email = (emp.email || "").toLowerCase();
       const position = (emp.position || "").toLowerCase();
-
       return fullName.includes(search) || email.includes(search) || position.includes(search);
     })
     .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
@@ -671,7 +768,7 @@ function Employees() {
 
   // Helper function to generate pagination range
   const getPaginationRange = (currentPage, totalPages) => {
-    const maxVisible = 3; // show up to 5 page numbers
+    const maxVisible = 3;
     let start = Math.max(currentPage - Math.floor(maxVisible / 2), 1);
     let end = start + maxVisible - 1;
 
@@ -689,7 +786,7 @@ function Employees() {
 
   const canUploadBalances = () => {
     const role = localStorage.getItem("role") || "admin";
-    return role !== "mayor"; // Mayor cannot upload balances
+    return role !== "mayor";
   };
 
   const handleBalancesUpload = async () => {
@@ -706,7 +803,6 @@ function Employees() {
       const formData = new FormData();
       formData.append("file", selectedBalancesFile);
 
-      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setUploadBalancesProgress(prev => {
           if (prev >= 90) {
@@ -733,7 +829,6 @@ function Employees() {
       const data = await res.json();
       setUploadBalancesResult(data);
       
-      // Auto-close on success after delay
       if (data.inserted > 0) {
         setTimeout(() => {
           setShowUploadBalancesModal(false);
@@ -819,7 +914,6 @@ function Employees() {
           setAttendanceTimeSettings(data);
         } else {
           console.warn('Failed to fetch time settings from server');
-          // Don't set any defaults - let the modal handle empty state
           setAttendanceTimeSettings({});
         }
       } catch (error) {
@@ -835,11 +929,9 @@ function Employees() {
   
   const fetchTermsAndConditions = async () => {
     try {
-      // Fetch active terms
       const response = await fetch(`${API_URL}/api/terms/active`);
       const data = await response.json();
       
-      // Check if response is valid
       if (data && data.content) {
         setTermsContent(data.content);
         setActiveTermsVersion(data);
@@ -848,22 +940,17 @@ function Employees() {
         setActiveTermsVersion(null);
       }
       
-      // Fetch all versions - handle potential errors
       try {
         const versionsRes = await fetch(`${API_URL}/api/terms`);
         const versionsData = await versionsRes.json();
         
-        // Ensure versionsData is an array
         if (Array.isArray(versionsData)) {
           setTermsVersions(versionsData);
         } else if (versionsData && Array.isArray(versionsData.data)) {
-          // Some APIs wrap arrays in a data property
           setTermsVersions(versionsData.data);
         } else if (versionsData && versionsData.versions) {
-          // Some APIs use a versions property
           setTermsVersions(versionsData.versions);
         } else {
-          // Default to empty array
           setTermsVersions([]);
           console.warn('API returned non-array data:', versionsData);
         }
@@ -885,7 +972,6 @@ function Employees() {
       return;
     }
 
-    // Safely calculate next version number
     const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
     const version = newTermsVersion || `v${versionCount + 1}.0`;
     
@@ -973,14 +1059,14 @@ function Employees() {
         <img src={require('./images/logo_ez.png')} alt="logo" className="desktop-logo" style={styles.logo} />
         <ul className="sidebar-list" style={styles.sidebarList}>
           {allowedMenus.map((item) => {
-            const isActive = location.pathname === item.to; // Check if current route matches
+            const isActive = location.pathname === item.to;
 
             return (
               <li
                 key={item.name}
                 className={`sidebar-item ${isActive ? 'active' : ''}`}
                 style={{
-                  ...(isActive ? styles.btnActive : {}), // Apply active tab background
+                  ...(isActive ? styles.btnActive : {}),
                 }}
               >
                 <Link
@@ -1267,7 +1353,6 @@ function Employees() {
               ) : (
                 <>
                   <div style={styles.timeSettingsGrid}>
-                    {/* Define all days of the week */}
                     {[
                       { key: 'monday', label: 'Monday (Early Start)' },
                       { key: 'tuesday', label: 'Tuesday' },
@@ -1277,17 +1362,10 @@ function Employees() {
                       { key: 'saturday', label: 'Saturday' },
                       { key: 'sunday', label: 'Sunday' }
                     ].map(({ key, label }) => {
-                      // Get config or use default empty structure
                       const config = attendanceTimeSettings[key] || {};
-                      
-                      // Determine if day is active (default to true if not set)
                       const isActive = config.is_active !== undefined ? config.is_active : true;
-                      
-                      // Get start/end times or use empty strings
                       const startTime = config.start || '';
                       const endTime = config.end || '';
-                      
-                      // Check if time is set
                       const isTimeSet = startTime && endTime;
                       
                       return (
@@ -1401,7 +1479,6 @@ function Employees() {
                       style={styles.saveAllButton}
                       onClick={async () => {
                         try {
-                          // Prepare data for saving - only include days with times
                           const settingsToSave = {};
                           const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
                           
@@ -1411,7 +1488,7 @@ function Employees() {
                               settingsToSave[day] = {
                                 start: config.start,
                                 end: config.end,
-                                is_active: config.is_active !== false // Default to true if not set
+                                is_active: config.is_active !== false
                               };
                             }
                           });
@@ -1420,8 +1497,6 @@ function Employees() {
                             alert('Please add at least one time setting');
                             return;
                           }
-                          
-                          console.log('Saving settings:', settingsToSave);
                           
                           const response = await fetch(`${API_URL}/api/attendance/settings/time`, {
                             method: 'POST',
@@ -1436,7 +1511,6 @@ function Employees() {
                             setShowTimeSettingsModal(false);
                             setEditingDay(null);
                             
-                            // Refresh settings from server
                             const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
                             if (refreshResponse.ok) {
                               const data = await refreshResponse.json();
@@ -1465,7 +1539,6 @@ function Employees() {
       
                             if (response.ok) {
                               alert('Settings reset to default successfully!');
-                              // Refresh settings
                               const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
                               if (refreshResponse.ok) {
                                 const data = await refreshResponse.json();
@@ -1512,10 +1585,8 @@ function Employees() {
           />
         </div>
 
-        {/* Desktop Logo - hidden on mobile */}
         <img src={require('./images/logo_ez.png')} alt="logo" className="desktop-logo" style={styles.logo} />
         
-        {/* Rest of your sidebar content remains the same */}
         <ul className='sidebar-menu-link' style={styles.sidebarList}>
           {allowedMenus.map((item) => {
             const isActive = location.pathname === item.to;
@@ -1569,13 +1640,111 @@ function Employees() {
           </div>
         )}
 
+        {/* Inactive Modal (for Manage Employees tab) */}
+        {showInactiveModal && employeeToInactivate && (
+          <div className="delete-modal-overlay" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}>
+            <div className="delete-modal-content" style={{
+              background: '#fff',
+              padding: '30px 20px',
+              width: '400px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              textAlign: 'center'
+            }}>
+              <h3 style={{ marginBottom: '15px', color: '#d35400' }}>
+                Set Employee as Inactive
+              </h3>
+              
+              <p style={{ marginBottom: '15px', fontSize: '16px' }}>
+                Set <strong>{employeeToInactivate?.full_name}</strong> as inactive?
+              </p>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', textAlign: 'left' }}>
+                  Reason for Inactive Status:
+                </label>
+                <select
+                  value={inactiveReason}
+                  onChange={(e) => setInactiveReason(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid #ccc',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="">Select a reason</option>
+                  {inactiveReasons.map((reason, index) => (
+                    <option key={index} value={reason}>{reason}</option>
+                  ))}
+                </select>
+                {!inactiveReason && (
+                  <p style={{ color: '#e74c3c', fontSize: '12px', textAlign: 'left', marginTop: '5px' }}>
+                    Please select a reason
+                  </p>
+                )}
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
+                <button 
+                  className="confirm-inactive-btn"
+                  onClick={confirmSetInactive} 
+                  disabled={!inactiveReason}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: inactiveReason ? '#d35400' : '#ccc',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: inactiveReason ? 'pointer' : 'not-allowed',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Set as Inactive
+                </button>
+                <button 
+                  className="cancel-inactive-btn"
+                  onClick={() => {
+                    setShowInactiveModal(false);
+                    setEmployeeToInactivate(null);
+                    setInactiveReason('');
+                  }} 
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#ccc',
+                    color: '#333',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Reactivate Modal */}
         {showReactivateModal && employeeToReactivate && (
           <div className="modal-overlay" style={styles.modalOverlay}>
-            <div className="modal-content" style={styles.modalContent}>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px'}}>
               <h3>Reactivate Employee</h3>
               <p>
-                Are you sure you want to reactivate <strong>{employeeToReactivate.full_name}</strong>? 
+                Are you sure you want to reactivate <strong>{employeeToReactivate.first_name} {employeeToReactivate.last_name}</strong>? 
                 This will restore their access to the system.
               </p>
               <div className="modal-actions" style={styles.modalActions}>
@@ -1591,7 +1760,7 @@ function Employees() {
                 </button>
                 <button
                   className="confirm-btn"
-                  style={styles.confirmBtn}
+                  style={{...styles.confirmBtn, backgroundColor: '#009205', border: 'none', borderRadius: '8px', padding: '10px', color: '#fff'}}
                   onClick={confirmReactivate}
                 >
                   Reactivate
@@ -1640,18 +1809,37 @@ function Employees() {
                     style={{ ...styles.searchInput, width: '300px' }}
                   />
 
-                  {/* Department Filter */}
-                  <select
-                    value={filterDepartment}
-                    onChange={(e) => setFilterDepartment(e.target.value)}
-                    className="department-filter"
-                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
-                  >
-                    <option value="">All Departments</option>
-                    {departments.map((dept, idx) => (
-                      <option key={idx} value={dept}>{dept}</option>
-                    ))}
-                  </select>
+                  {/* Department Filter - only show if user has permission */}
+                  {canFilterAllDepartments() && (
+                    <select
+                      value={filterDepartment}
+                      onChange={(e) => setFilterDepartment(e.target.value)}
+                      className="department-filter"
+                      style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
+                    >
+                      <option value="">All Departments</option>
+                      {departments.map((dept, idx) => (
+                        <option key={idx} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* For department heads, show their department as fixed (no dropdown) */}
+                  {role === "office_head" && (
+                    <div style={{
+                       padding: '6px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #ccc',
+                        backgroundColor: '#ffffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '500',
+                        fontSize: '12px',
+                    }}>
+                      {userDepartment || 'My Department'}
+                    </div>
+                  )}
 
                   {/* Employment Status Filter */}
                   <select
@@ -1837,106 +2025,116 @@ function Employees() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredEmployees
-                      .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
-                      .map((record, index) => (
-                        <tr key={record.id} className="employee-row">
-                          {role !== "mayor" && (
-                            <td className="row-checkbox" style={styles.rowName}>
-                              <input
-                                type="checkbox"
-                                checked={selectedEmployees.includes(record.id)}
-                                onChange={() => handleSelectEmployee(record.id)}
-                                className="employee-checkbox"
-                                style={styles.checkbox}
-                              />
-                            </td>
-                          )}
-                          <td className="row-number" style={styles.rowName}>{index + 1 + (currentPage - 1) * listEmployeePerPage}</td>
-                          <td className="row-id" style={styles.rowName}>{record.id_number || '—'}</td>
-                          <td className="row-name" style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
-                          <td className="row-position" style={styles.rowName}>{record.position}</td>
-                          <td className="row-department" style={{ 
-                            ...styles.rowName, 
-                            maxWidth: '220px',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {record.department || '—'}
-                          </td>
-                          <td className="row-employment-status" style={styles.rowName}>{record.employment_status}</td>
-                          <td className="row-actions" style={styles.rowName}>
-                            <button className="view-btn" style={styles.viewBtn} onClick={() => handleViewClick(record)}>
-                              <FontAwesomeIcon icon={faEye} />
-                            </button>
-                            {canPerformActions(record.department) && (
-                              <>
-                                <button className="edit-btn" style={styles.editBtn} onClick={() => handleEditClick(record)}>
-                                  <FontAwesomeIcon icon={faPenToSquare} />
-                                </button>
-                                <button className="delete-btn" style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
-                                  <FontAwesomeIcon icon={faTrash} />
-                                </button>
-                              </>
+                    {filteredEmployees.length > 0 ? (
+                      filteredEmployees
+                        .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
+                        .map((record, index) => (
+                          <tr key={record.id} className="employee-row">
+                            {role !== "mayor" && (
+                              <td className="row-checkbox" style={styles.rowName}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedEmployees.includes(record.id)}
+                                  onChange={() => handleSelectEmployee(record.id)}
+                                  className="employee-checkbox"
+                                  style={styles.checkbox}
+                                />
+                              </td>
                             )}
-                          </td>
-                        </tr>
-                    ))}
+                            <td className="row-number" style={styles.rowName}>{index + 1 + (currentPage - 1) * listEmployeePerPage}</td>
+                            <td className="row-id" style={styles.rowName}>{record.id_number || '—'}</td>
+                            <td className="row-name" style={styles.rowName}>{`${record.first_name || ''} ${record.last_name || ''}`.trim()}</td>
+                            <td className="row-position" style={styles.rowName}>{record.position}</td>
+                            <td className="row-department" style={{ 
+                              ...styles.rowName, 
+                              maxWidth: '220px',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {record.department || '—'}
+                            </td>
+                            <td className="row-employment-status" style={styles.rowName}>{record.employment_status}</td>
+                            <td className="row-actions" style={styles.rowName}>
+                              <button className="view-btn" style={styles.viewBtn} onClick={() => handleViewClick(record)}>
+                                <FontAwesomeIcon icon={faEye} />
+                              </button>
+                              {canPerformActions(record.department) && (
+                                <>
+                                  <button className="edit-btn" style={styles.editBtn} onClick={() => handleEditClick(record)}>
+                                    <FontAwesomeIcon icon={faPenToSquare} />
+                                  </button>
+                                  <button className="delete-btn" style={styles.delBtn} onClick={() => handleDeleteClick(record)}>
+                                    <FontAwesomeIcon icon={faTrash} />
+                                  </button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                    ) : (
+                      <tr>
+                        <td colSpan={role !== "mayor" ? "8" : "7"} style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                          No active employees found.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
 
                 {/* Pagination */}
-                <div className="pagination-container" style={styles.paginationContainer}>
-                  {/* Previous Button */}
-                  <button
-                    className="page-btn prev-btn"
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    style={styles.pageBtn}
-                  >
-                    {'<'}
-                  </button>
-
-                  {/* First page + ellipsis if needed */}
-                  {getPaginationRange(currentPage, totalPages)[0] > 1 && (
-                    <>
-                      <button className="page-btn" onClick={() => setCurrentPage(1)} style={styles.pageBtn}>1</button>
-                      {getPaginationRange(currentPage, totalPages)[0] > 2 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
-                    </>
-                  )}
-
-                  {/* Visible page numbers */}
-                  {getPaginationRange(currentPage, totalPages).map((page) => (
+                {filteredEmployees.length > 0 && (
+                  <div className="pagination-container" style={styles.paginationContainer}>
+                    {/* Previous Button */}
                     <button
-                      key={page}
-                      className={`page-btn ${currentPage === page ? 'active' : ''}`}
-                      onClick={() => setCurrentPage(page)}
-                      style={{
-                        ...styles.pageBtn,
-                        ...(currentPage === page ? styles.activePageBtn : {}),
-                      }}
+                      className="page-btn prev-btn"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      style={styles.pageBtn}
                     >
-                      {page}
+                      {'<'}
                     </button>
-                  ))}
 
-                  {/* Last page + ellipsis if needed */}
-                  {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
-                    <>
-                      {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
-                      <button className="page-btn" onClick={() => setCurrentPage(totalPages)} style={styles.pageBtn}>{totalPages}</button>
-                    </>
-                  )}
+                    {/* First page + ellipsis if needed */}
+                    {getPaginationRange(currentPage, totalPages)[0] > 1 && (
+                      <>
+                        <button className="page-btn" onClick={() => setCurrentPage(1)} style={styles.pageBtn}>1</button>
+                        {getPaginationRange(currentPage, totalPages)[0] > 2 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
+                      </>
+                    )}
 
-                  {/* Next Button */}
-                  <button
-                    className="page-btn next-btn"
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    style={styles.pageBtn}
-                  >
-                    {'>'}
-                  </button>
-                </div>
+                    {/* Visible page numbers */}
+                    {getPaginationRange(currentPage, totalPages).map((page) => (
+                      <button
+                        key={page}
+                        className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                        onClick={() => setCurrentPage(page)}
+                        style={{
+                          ...styles.pageBtn,
+                          ...(currentPage === page ? styles.activePageBtn : {}),
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    {/* Last page + ellipsis if needed */}
+                    {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
+                      <>
+                        {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
+                        <button className="page-btn" onClick={() => setCurrentPage(totalPages)} style={styles.pageBtn}>{totalPages}</button>
+                      </>
+                    )}
+
+                    {/* Next Button */}
+                    <button
+                      className="page-btn next-btn"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      style={styles.pageBtn}
+                    >
+                      {'>'}
+                    </button>
+                  </div>
+                )}
                 
               </div>
             </div>
@@ -2266,7 +2464,7 @@ function Employees() {
                       placeholder="First Name"
                       className="modal-input"
                       style={styles.modalInput}
-                      value={employeesToEdit.first_name}
+                      value={employeesToEdit.first_name || ''}
                       onChange={(e) =>
                         setEmployeesToEdit({ ...employeesToEdit, first_name: e.target.value.replace(/[0-9]/g, "") })
                       }
@@ -2277,7 +2475,7 @@ function Employees() {
                       placeholder="Last Name"
                       className="modal-input"
                       style={styles.modalInput}
-                      value={employeesToEdit.last_name}
+                      value={employeesToEdit.last_name || ''}
                       onChange={(e) =>
                         setEmployeesToEdit({ ...employeesToEdit, last_name: e.target.value.replace(/[0-9]/g, "") })
                       }
@@ -2288,7 +2486,7 @@ function Employees() {
                       placeholder="Email"
                       className="modal-input"
                       style={styles.modalInput}
-                      value={employeesToEdit.email}
+                      value={employeesToEdit.email || ''}
                       onChange={(e) =>
                         setEmployeesToEdit({ ...employeesToEdit, email: e.target.value })
                       }
@@ -2299,7 +2497,7 @@ function Employees() {
                       placeholder="Position"
                       className="modal-input"
                       style={styles.modalInput}
-                      value={employeesToEdit.position}
+                      value={employeesToEdit.position || ''}
                       onChange={(e) =>
                         setEmployeesToEdit({ ...employeesToEdit, position: e.target.value.replace(/[0-9]/g, "") })
                       }
@@ -2381,7 +2579,7 @@ function Employees() {
                     <div className="employment-type-section" style={{ gridColumn: '1 / -1' }}>
                       <label className="input-label" style={styles.label}>Employment Type</label>
                       <div className="employment-type-container" style={styles.genderContainer}>
-                        {['Temporary', 'Permanent', 'Contractual', 'Casual'].map((type) => (
+                        {['Temporary', 'Permanent', 'Contractual', 'Casual', 'Job Order', 'Coterminous'].map((type) => (
                           <div
                             key={type}
                             className={`employment-type-btn ${employeesToEdit.employment_status === type ? 'active' : ''}`}
@@ -2397,18 +2595,6 @@ function Employees() {
                       </div>
                     </div>
 
-                    {/* Status */}
-                    <select
-                      className="select-input"
-                      style={styles.selectInput}
-                      value={employeesToEdit.status || ""}
-                      onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, status: e.target.value })}
-                    >
-                      <option value="">Select Employment Status</option>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-
                     {/* Date Hired */}
                     <input
                       type="date"
@@ -2423,66 +2609,6 @@ function Employees() {
                   <div className="modal-actions" style={styles.modalActions}>
                     <button className="cancel-btn" style={styles.cancelBtn} onClick={() => setShowEditModal(false)}>Cancel</button>
                     <button className="save-btn" style={styles.saveBtn} onClick={handleEditSave}>Save</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {showDeleteModal && (
-              <div className="delete-modal-overlay" style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                background: 'rgba(0,0,0,0.5)',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                zIndex: 1000
-              }}>
-                <div className="delete-modal-content" style={{
-                  background: '#fff',
-                  padding: '30px 20px',
-                  width: '400px',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                  textAlign: 'center'
-                }}>
-                  <p style={{ marginBottom: '25px', fontSize: '16px' }}>
-                      This action will permanently remove <strong>{employeeToDelete?.full_name}</strong> from the employee list. Do you want to continue?                    
-                  </p>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                    <button 
-                      className="confirm-delete-btn"
-                      onClick={confirmDelete} 
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: 'red',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      Delete
-                    </button>
-                    <button 
-                      className="cancel-delete-btn"
-                      onClick={() => setShowDeleteModal(false)} 
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#ccc',
-                        color: '#333',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      Cancel
-                    </button>
                   </div>
                 </div>
               </div>
@@ -2616,17 +2742,10 @@ function Employees() {
                       </div>
                     </div>
 
-                    <select
-                      className="select-input"
-                      style={styles.selectInput}
-                      value={newEmployee.status}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, status: e.target.value })}
-                    >
-                      <option value="">Select Employment Status</option>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
                     
+                  
+                  </div>
+
                     <input
                         placeholder="Select date hired"
                         type="text"
@@ -2643,7 +2762,6 @@ function Employees() {
                         value={newEmployee.date_hired || ''}
                         onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
                       />
-                  </div>
 
                   <div className="modal-actions" style={styles.modalActions}>
                     <button className="cancel-btn" style={styles.cancelBtn} onClick={() => setShowAddModal(false)}>Cancel</button>
@@ -2686,7 +2804,7 @@ function Employees() {
                     ? `Importing ${employeesToUpload.length} employees...`
                     : selectedEmployees.length > 1
                       ? 'Deleting selected employees...'
-                      : 'Deleting employee...'}
+                      : 'Processing...'}
                 </p>
                 <style>
                   {`@keyframes spin {
@@ -2726,17 +2844,34 @@ function Employees() {
                 <option value="inactive">Inactive</option>
               </select>
 
-              <select
-                className="department-filter"
-                style={styles.filterStatus2}
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-              >
-                <option value="">Filter by Department</option>
-                {departments.map((dept, idx) => (
-                  <option key={idx} value={dept}>{dept}</option>
-                ))}
-              </select>
+              {canFilterAllDepartments() ? (
+                <select
+                  className="department-filter"
+                  style={styles.filterStatus2}
+                  value={filterDepartment}
+                  onChange={(e) => setFilterDepartment(e.target.value)}
+                >
+                  <option value="">Filter by Department</option>
+                  {departments.map((dept, idx) => (
+                    <option key={idx} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{
+                   padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    backgroundColor: '#ffffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '500',
+                    fontSize: '12px',
+                    marginLeft: '10px'
+                }}>
+                  {userDepartment || 'My Department'}
+                </div>
+              )}
 
               <select
                 className="employment-type-filter"
@@ -2812,79 +2947,87 @@ function Employees() {
             </div>
 
             {/* Pagination */}
-            <div className="pagination-container" style={styles.paginationContainer}>
-              {/* Previous Button */}
-              <button
-                className="page-btn prev-btn"
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                style={styles.pageBtn}
-                disabled={currentPage === 1}
-              >
-                {'<'}
-              </button>
-
-              {/* First page + ellipsis if needed */}
-              {getPaginationRange(currentPage, totalPages)[0] > 1 && (
-                <>
-                  <button 
-                    className="page-btn" 
-                    onClick={() => setCurrentPage(1)} 
-                    style={styles.pageBtn}
-                  >
-                    1
-                  </button>
-                  {getPaginationRange(currentPage, totalPages)[0] > 2 && (
-                    <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
-                  )}
-                </>
-              )}
-
-              {/* Visible page numbers */}
-              {getPaginationRange(currentPage, totalPages).map((page) => (
+            {employeeRecord.filter(emp => {
+              const search = searchTerm.toLowerCase();
+              const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+              const email = (emp.email || '').toLowerCase();
+              const position = (emp.position || '').toLowerCase();
+              return fullName.includes(search) || email.includes(search) || position.includes(search);
+            }).length > 0 && (
+              <div className="pagination-container" style={styles.paginationContainer}>
+                {/* Previous Button */}
                 <button
-                  key={page}
-                  className={`page-btn ${currentPage === page ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(page)}
-                  style={{
-                    ...styles.pageBtn,
-                    ...(currentPage === page ? styles.activePageBtn : {}),
-                  }}
+                  className="page-btn prev-btn"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  style={styles.pageBtn}
+                  disabled={currentPage === 1}
                 >
-                  {page}
+                  {'<'}
                 </button>
-              ))}
 
-              {/* Last page + ellipsis if needed */}
-              {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
-                <>
-                  {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && (
-                    <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
-                  )}
-                  <button 
-                    className="page-btn" 
-                    onClick={() => setCurrentPage(totalPages)} 
-                    style={styles.pageBtn}
+                {/* First page + ellipsis if needed */}
+                {getPaginationRange(currentPage, totalPages)[0] > 1 && (
+                  <>
+                    <button 
+                      className="page-btn" 
+                      onClick={() => setCurrentPage(1)} 
+                      style={styles.pageBtn}
+                    >
+                      1
+                    </button>
+                    {getPaginationRange(currentPage, totalPages)[0] > 2 && (
+                      <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+                    )}
+                  </>
+                )}
+
+                {/* Visible page numbers */}
+                {getPaginationRange(currentPage, totalPages).map((page) => (
+                  <button
+                    key={page}
+                    className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(page)}
+                    style={{
+                      ...styles.pageBtn,
+                      ...(currentPage === page ? styles.activePageBtn : {}),
+                    }}
                   >
-                    {totalPages}
+                    {page}
                   </button>
-                </>
-              )}
+                ))}
 
-              {/* Next Button */}
-              <button
-                className="page-btn next-btn"
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                style={styles.pageBtn}
-                disabled={currentPage === totalPages}
-              >
-                {'>'}
-              </button>
-            </div>
+                {/* Last page + ellipsis if needed */}
+                {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
+                  <>
+                    {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && (
+                      <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+                    )}
+                    <button 
+                      className="page-btn" 
+                      onClick={() => setCurrentPage(totalPages)} 
+                      style={styles.pageBtn}
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+
+                {/* Next Button */}
+                <button
+                  className="page-btn next-btn"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  style={styles.pageBtn}
+                  disabled={currentPage === totalPages}
+                >
+                  {'>'}
+                </button>
+              </div>
+            )}
 
           </div>
         )}
 
-        {view === 'inactive' && (
+          {view === 'inactive' && (
           <div className="inactive-view" style={styles.content1}>
             <div className="filters-row" style={styles.firstRow}>
               {/* Search Input */}
@@ -2899,17 +3042,33 @@ function Employees() {
                 />
 
                 {/* Department Filter */}
-                <select
-                  value={filterDepartment}
-                  onChange={(e) => setFilterDepartment(e.target.value)}
-                  className="department-filter"
-                  style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
-                >
-                  <option value="">All Departments</option>
-                  {departments.map((dept, idx) => (
-                    <option key={idx} value={dept}>{dept}</option>
-                  ))}
-                </select>
+                {canFilterAllDepartments() ? (
+                  <select
+                    value={filterDepartment}
+                    onChange={(e) => setFilterDepartment(e.target.value)}
+                    className="department-filter"
+                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', width: '200px' }}
+                  >
+                    <option value="">All Departments</option>
+                    {departments.map((dept, idx) => (
+                      <option key={idx} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    backgroundColor: '#ffffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '500',
+                    fontSize: '12px'
+                  }}>
+                    {userDepartment || 'My Department'}
+                  </div>
+                )}
 
                 {/* Employment Status Filter */}
                 <select
@@ -2927,7 +3086,6 @@ function Employees() {
                   <option value="Coterminous">Coterminous</option>
                 </select>
               </div>
-
             </div>
 
             <div className="table-container" style={styles.tableContainer}>
@@ -2941,6 +3099,7 @@ function Employees() {
                       <th className="column-position" style={styles.columnName}>Position</th>
                       <th className="column-department" style={styles.columnName}>Department</th>
                       <th className="column-employment-status" style={styles.columnName}>Status of Employment</th>
+                      <th className="column-reason" style={styles.columnName}>Reason</th> {/* NEW COLUMN */}
                       <th className="column-status" style={styles.columnName}>Account Status</th>
                       <th className="column-actions" style={styles.columnName}>Action</th>
                     </tr>
@@ -2950,7 +3109,7 @@ function Employees() {
                       inactiveEmployees
                         .slice((currentInactivePage - 1) * listEmployeePerPage, currentInactivePage * listEmployeePerPage)
                         .map((record, index) => (
-                          <tr key={record.id} className="employee-row" style={{ opacity: 0.8 }}>
+                          <tr key={record.id} className="employee-row" style={{ opacity: 0.9 }}>
                             <td className="row-number" style={styles.rowName}>
                               {index + 1 + (currentInactivePage - 1) * listEmployeePerPage}
                             </td>
@@ -2969,6 +3128,26 @@ function Employees() {
                               {record.department || '—'}
                             </td>
                             <td className="row-employment-status" style={styles.rowName}>{record.employment_status}</td>
+                            
+                            {/* NEW: Reason column */}
+                            <td className="row-reason" style={styles.rowName}>
+                              <div style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: record.inactive_reason ? '#fff3cd' : '#f8d7da',
+                                color: record.inactive_reason ? '#856404' : '#721c24',
+                                fontSize: '12px',
+                                fontWeight: '500',
+                                border: record.inactive_reason ? '1px solid #ffeaa7' : '1px solid #f5c6cb',
+                                maxWidth: '150px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>
+                                {record.inactive_reason || 'No reason specified'}
+                              </div>
+                            </td>
+                            
                             <td className="row-status" style={styles.rowName}>
                               <span style={{
                                 padding: '3px 8px',
@@ -2998,6 +3177,21 @@ function Employees() {
                                   >
                                     <FontAwesomeIcon icon={faRedo} /> Reactivate
                                   </button>
+                                  <button 
+                                    className="delete-inactive-btn" 
+                                    style={{
+                                      backgroundColor: '#dc3545',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      marginLeft: '5px',
+                                      cursor: 'pointer'
+                                    }}
+                                    onClick={() => handleDeleteInactive(record)}
+                                  >
+                                    <FontAwesomeIcon icon={faTrash} /> Delete
+                                  </button>
                                 </>
                               )}
                             </td>
@@ -3005,7 +3199,7 @@ function Employees() {
                         ))
                     ) : (
                       <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
                           No inactive employees found.
                         </td>
                       </tr>
@@ -3738,7 +3932,7 @@ checkbox: {
     border: '1px solid #ccc',
     textAlign: 'center',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '12px',
     color: '#333',
     backgroundColor: '#f7f7f7',
     transition: '0.2s'

@@ -20,11 +20,13 @@ import {
   faChevronLeft,
   faChevronRight,
   faPen,
+  faBars
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
 import { FaEllipsisV } from "react-icons/fa";
 import ProfileDropdown from './profileDropdown';
+import './announcement-responsive.css';
 
 function Announcement() {
   const [showModal, setShowModal] = useState(false);
@@ -52,6 +54,9 @@ function Announcement() {
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState("All");
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+const [isMobileView, setIsMobileView] = useState(false);
 
   // Loading states
   const [loading, setLoading] = useState({
@@ -81,7 +86,6 @@ function Announcement() {
     { name: "Employees", icon: faUsers, to: "/employee" },
     { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-    { name: "Message", icon: faEnvelope, to: "/messages" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
@@ -93,16 +97,23 @@ function Announcement() {
       return [
         "Dashboard",
         "Employees",
-        "Attendance",
         "Leave Management",
-        "Message",
-        "Announcement",
       ].includes(item.name);
     }
     return false;
   });
   
   const API_URL = "https://ezleave-admin-api.onrender.com";
+
+
+  useEffect(() => {
+  const checkMobile = () => {
+    if (typeof window !== 'undefined') setIsMobileView(window.innerWidth <= 768);
+  };
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  return () => window.removeEventListener('resize', checkMobile);
+}, []);
 
    useEffect(() => {
       const storedUser = JSON.parse(localStorage.getItem("admin"));
@@ -456,549 +467,606 @@ function Announcement() {
     setVisibilityFilter("All");
   };
 
-  return (
-    <div style={styles.dashboardContainer}>
-      {/* Global Loading Overlay */}
-      {(loading.post || loading.update || loading.delete) && (
-        <div style={styles.globalLoadingOverlay}>
-          <div style={styles.globalLoadingContent}>
-            <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
-            <p style={styles.loadingText}>
-              {loading.post && "Posting announcement..."}
-              {loading.update && "Updating announcement..."}
-              {loading.delete && "Deleting announcement..."}
-            </p>
+ return (
+  <div className="dashboard-container" style={styles.dashboardContainer}>
+    {/* Global Loading Overlay */}
+    {(loading.post || loading.update || loading.delete) && (
+      <div style={styles.globalLoadingOverlay}>
+        <div className="globalLoadingContent" style={styles.globalLoadingContent}>
+          <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
+          <p style={styles.loadingText}>
+            {loading.post && "Posting announcement..."}
+            {loading.update && "Updating announcement..."}
+            {loading.delete && "Deleting announcement..."}
+          </p>
+        </div>
+      </div>
+    )}
+
+    {/* Mobile Header */}
+    <div className="mobile-header">
+      <button 
+        className="hamburger"
+        onClick={() => setIsSidebarOpen(true)}
+      >
+        <FontAwesomeIcon icon={faBars} />
+      </button>
+      <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+      <div className="mobile-header-right">
+        <ProfileDropdown
+          showProfileModal={showProfileModal}
+          setShowProfileModal={setShowProfileModal}
+          showLogoutModal={showLogoutModal}
+          setShowLogoutModal={setShowLogoutModal}
+          isMobile={true}
+          profileData={profileData}
+          admin={admin}
+        />
+      </div>
+    </div>
+
+    {/* Mobile Sidebar Overlay */}
+    {isSidebarOpen && (
+      <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+    )}
+
+    {/* Desktop Header */}
+    <div className="desktop-header attendance-desktop-header" style={styles.header}>
+      <div style={styles.headerRight}>
+        <ProfileDropdown
+          showProfileModal={showProfileModal}
+          setShowProfileModal={setShowProfileModal}
+          showLogoutModal={showLogoutModal}
+          setShowLogoutModal={setShowLogoutModal}
+          isMobile={false}
+          profileData={profileData}
+          admin={admin}
+        />
+      </div>
+    </div>
+
+    {/* Sidebar */}
+    <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+      {/* Mobile Sidebar Header */}
+      <div className="sidebar-header">
+        <button 
+          className="sidebar-close-btn"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+        <img 
+          className='logo-sidebar' 
+          src={require('./images/logo_ez.png')} 
+          alt="logo" 
+        />
+      </div>
+
+      {/* Desktop Logo */}
+      <img 
+        src={require('./images/logo_ez.png')} 
+        alt="logo" 
+        style={styles.logo} 
+        className='logo-desktop'
+      />
+      
+      <ul className='sidebar-menu-link' style={styles.sidebarList}>
+        {allowedMenus.map((item) => {
+          const isActive = location.pathname === item.to;
+
+          return (
+            <li
+              key={item.name}
+              style={{
+                ...(isActive ? styles.btnActive : {}),
+              }}
+            >
+              <Link
+                style={{
+                  ...styles.sb,
+                  ...(isActive ? styles.btnActive : {}),
+                }}
+                to={item.to}
+                onClick={() => setIsSidebarOpen(false)}
+              >
+                <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+
+    <div className="content" style={styles.content}>
+      {showLogoutModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelBtn}
+                onClick={() => setShowLogoutModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                style={styles.confirmBtn}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="attendance-desktop-header" style={styles.header}>
-        <div style={styles.headerRight}>
-          <ProfileDropdown
-            showProfileModal={showProfileModal}
-            setShowProfileModal={setShowProfileModal}
-            showLogoutModal={showLogoutModal}
-            setShowLogoutModal={setShowLogoutModal}
-            isMobile={false}
-            profileData={profileData}
-            admin={admin}
-          />
-        </div>
-      </div>
+      <div className="announcementBoard" style={styles.announcementBoard}>
+        <h1>Announcement</h1>
 
-      <div style={styles.sidebar}>
-        <img src={require('./images/logo_ez.png')} alt="logo" style={styles.logo} />
-        <ul style={styles.sidebarList}>
-          {allowedMenus.map((item) => {
-            const isActive = location.pathname === item.to;
-
-            return (
-              <li
-                key={item.name}
-                style={{
-                  ...(isActive ? styles.btnActive : {}),
-                }}
-              >
-                <Link
-                  style={{
-                    ...styles.sb,
-                    ...(isActive ? styles.btnActive : {}),
-                  }}
-                  to={item.to}
+        <div className="announcementFilter" style={styles.announcementFilter}>
+          <div className="announcementLeft" style={styles.announcementLeft}>
+            <div className="searchContainer" style={styles.searchContainer}>
+              <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+              <input 
+                className="searchInput"
+                style={styles.searchInput} 
+                placeholder="Search announcements..." 
+                value={searchQuery}
+                onChange={handleSearchChange}
+              />
+              {searchQuery && (
+                <button 
+                  style={styles.clearSearchBtn}
+                  onClick={() => setSearchQuery("")}
+                  title="Clear search"
                 >
-                  <FontAwesomeIcon icon={item.icon} style={styles.icon} /> {item.name}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+                  <FontAwesomeIcon icon={faTimes} />
+                </button>
+              )}
+            </div>
+            
+            {(searchQuery || visibilityFilter !== "All") && (
+              <button 
+                className="clearFilterBtn"
+                style={styles.clearFilterBtn}
+                onClick={clearFilters}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+          <div>
+            <button 
+              className="postBtn"
+              style={styles.postBtn} 
+              onClick={() => setShowModal(true)}
+              disabled={loading.post || loading.update || loading.delete}
+            >
+              <FontAwesomeIcon icon={faPen} style={{paddingRight: '5px'}}/> {loading.post ? 'Posting...' : 'Post'}
+            </button>
+          </div>
+        </div>
 
-      <div style={styles.content}>
-        {showLogoutModal && (
+        {loading.fetch ? (
+          <div style={styles.loadingContainer}>
+            <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
+            <p>Loading announcements...</p>
+          </div>
+        ) : filteredAnnouncements.length === 0 ? (
+          <div style={styles.noResultsContainer}>
+            <p style={styles.noAnnouncementText}>
+              {announcements.length === 0 
+                ? "No announcements have been posted yet." 
+                : "No announcements match your search criteria."}
+            </p>
+            {(searchQuery || visibilityFilter !== "All") && (
+              <button 
+                style={styles.clearFilterBtn2}
+                onClick={clearFilters}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <div style={styles.announcementsContainer}>
+            <div style={styles.resultsCount}>
+              Showing {filteredAnnouncements.length} of {announcements.length} announcements
+            </div>
+            
+            {/* 2-Column Grid Layout */}
+            <div className="announcementsGrid" style={styles.announcementsGrid}>
+              {filteredAnnouncements.map((announcement, index) => {
+                const carouselState = imageCarouselStates[announcement.id] || { 
+                  currentIndex: 0, 
+                  totalImages: 0, 
+                  showArrows: false 
+                };
+                const imagesToShow = announcement.images || [];
+                const hasCarousel = imagesToShow.length > 6;
+                
+                // Get visible images based on carousel state
+                let visibleImages = imagesToShow;
+                if (hasCarousel) {
+                  const startIndex = carouselState.currentIndex;
+                  const endIndex = Math.min(startIndex + 6, imagesToShow.length);
+                  visibleImages = imagesToShow.slice(startIndex, endIndex);
+                  
+                  if (endIndex > imagesToShow.length) {
+                    const remaining = 6 - (imagesToShow.length - startIndex);
+                    visibleImages = [
+                      ...imagesToShow.slice(startIndex),
+                      ...imagesToShow.slice(0, remaining)
+                    ];
+                  }
+                }
+
+                return (
+                  <div
+                    key={announcement.id || index}
+                    className="announcementCard"
+                    style={styles.announcementCard}
+                  >
+                    <div className="announcementCardContent" style={styles.announcementCardContent}>
+                      {/* Header Section */}
+                      <div className="announcementHeader" style={styles.announcementHeader}>
+                        <div style={styles.announcementSender}>
+                          <div style={styles.announcementProfile}>
+                            <img src={announcement.profile_picture} alt='Profile' style={styles.announcementProfile}/>
+                          </div>
+                          <div style={styles.announcementName}>
+                            <p style={styles.lblName}>{announcement.posted_by}</p>
+                            <p style={styles.lblPosition}>{announcement.position}</p>
+                            {announcement.visibility && (
+                              <p style={styles.lblVisibility}>
+                                Visibility: {announcement.visibility}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="announcementDate" style={styles.announcementDate}>
+                          <p style={styles.lblDate}>{announcement.created_at}</p>
+
+                          <div style={{ position: "relative", display: "inline-block" }}>
+                            <button
+                              style={{
+                                ...styles.menuDots,
+                                ...((loading.update || loading.delete) && styles.menuDotsDisabled)
+                              }}
+                              onClick={() =>
+                                setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
+                              }
+                              onBlur={() => setMenuOpen(null)}
+                              disabled={loading.update || loading.delete}
+                            >
+                              <FaEllipsisV />
+                            </button>
+
+                            {menuOpen === announcement.id && (
+                              <div style={styles.menu}>
+                                <button
+                                  style={styles.buttonMenu1}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => editAnnouncement(announcement.id)}
+                                  disabled={loading.update}
+                                >
+                                  {loading.update ? 'Editing...' : 'Edit'}
+                                </button>
+                                <button
+                                  style={styles.buttonMenu}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => deleteAnnouncement(announcement.id)}
+                                  disabled={loading.delete}
+                                >
+                                  {loading.delete ? 'Deleting...' : 'Delete'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content Section */}
+                      <div style={styles.announcementContent}>
+                        <div style={styles.announcementText}>
+                          <p style={styles.lblTitle}>{announcement.title}</p>
+                          <p 
+                            ref={(el) => {
+                              if (el) {
+                                setTimeout(() => checkEllipsis(announcement.id, el), 50);
+                              }
+                            }}
+                            style={{
+                              ...styles.lblDetails,
+                              textAlign: "justify",
+                              display: "-webkit-box",
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                              WebkitLineClamp: expanded[announcement.id] ? "unset" : 3,
+                            }}
+                          >
+                            {announcement.details}
+                          </p>
+                        </div>
+
+                        {/* Images Section with Carousel */}
+                        {imagesToShow.length > 0 && (
+                          <div className="imagesContainerWrapper" style={styles.imagesContainerWrapper}>
+                            <div className="imagesContainer" style={styles.imagesContainer}>
+                              {/* Left arrow for carousel */}
+                              {hasCarousel && (
+                                <button 
+                                  className="carouselArrowLeft"
+                                  style={styles.carouselArrowLeft}
+                                  onClick={() => prevImage(announcement.id)}
+                                  title="Previous images"
+                                >
+                                  <FontAwesomeIcon icon={faChevronLeft} />
+                                </button>
+                              )}
+                              
+                              {/* Images grid */}
+                              <div className="imagesGrid" style={{
+                                ...styles.imagesGrid,
+                                marginLeft: hasCarousel ? '30px' : '0',
+                                marginRight: hasCarousel ? '30px' : '0'
+                              }}>
+                                {visibleImages.map((img, i) => {
+                                  const actualIndex = hasCarousel 
+                                    ? (carouselState.currentIndex + i) % imagesToShow.length
+                                    : i;
+                                  
+                                  return (
+                                    <div key={i} style={styles.imageWrapper}>
+                                      <img
+                                        src={img} 
+                                        alt={`attachment-${actualIndex}`}
+                                        className="announcementImage"
+                                        style={styles.announcementImage}
+                                        onClick={() => setPreviewImage(img)}
+                                        title={`Image ${actualIndex + 1} of ${imagesToShow.length}`}
+                                      />
+                                      {hasCarousel && imagesToShow.length > 6 && (
+                                        <div style={styles.imageNumberBadge}>
+                                          {actualIndex + 1}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              
+                              {/* Right arrow for carousel */}
+                              {hasCarousel && (
+                                <button 
+                                  className="carouselArrowRight"
+                                  style={styles.carouselArrowRight}
+                                  onClick={() => nextImage(announcement.id)}
+                                  title="Next images"
+                                >
+                                  <FontAwesomeIcon icon={faChevronRight} />
+                                </button>
+                              )}
+                            </div>
+                            
+                            {/* Carousel indicators */}
+                            {hasCarousel && imagesToShow.length > 6 && (
+                              <div className="carouselIndicators" style={styles.carouselIndicators}>
+                                {Array.from({ length: Math.ceil(imagesToShow.length / 6) }).map((_, i) => (
+                                  <button
+                                    key={i}
+                                    style={{
+                                      ...styles.carouselIndicator,
+                                      ...(Math.floor(carouselState.currentIndex / 6) === i 
+                                        ? styles.carouselIndicatorActive 
+                                        : {})
+                                    }}
+                                    onClick={() => {
+                                      setImageCarouselStates(prev => ({
+                                        ...prev,
+                                        [announcement.id]: {
+                                          ...prev[announcement.id],
+                                          currentIndex: i * 6
+                                        }
+                                      }));
+                                    }}
+                                    title={`View images ${i * 6 + 1}-${Math.min((i + 1) * 6, imagesToShow.length)}`}
+                                  >
+                                    {i + 1}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer Section */}
+                      <div className="announcementFooter" style={styles.announcementFooter}>
+                        {(hasEllipsis[announcement.id] || expanded[announcement.id]) && ( 
+                         <button 
+                            onClick={() => toggleExpand(announcement.id)} 
+                            style={expanded[announcement.id] 
+                              ? { ...styles.readBtn,  backgroundColor: "#fff", border: '1px solid #009205', color: '#009205'}   // Show Less style
+                              : { ...styles.readBtn,  backgroundColor: "#009205", color: '#fff'  } // Read More style
+                            }
+                          >
+                            {expanded[announcement.id] ? "Show Less" : "Read More"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {previewImage && (
+          <div
+            style={styles.previewOverlay}
+            onClick={() => setPreviewImage(null)} 
+          >
+            <img
+              src={previewImage}
+              alt="preview"
+              className="previewImageLarge"
+              style={styles.previewImageLarge}
+            />
+
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="closePreviewButton"
+              style={styles.closePreviewButton}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {showModal && (
           <div style={styles.modalOverlay}>
-            <div style={styles.modalContent}>
-              <h3>Confirm Logout</h3>
-              <p>Are you sure you want to log out?</p>
-              <div style={styles.modalActions}>
+            <div className="modalContainer" style={styles.modalContainer}>
+              <div style={styles.modalHeader}>
+                <h2 style={styles.modalTitle}>
+                  {isEditMode ? 'Edit Announcement' : 'Post Announcement'}
+                </h2>
                 <button
-                  style={styles.cancelBtn}
-                  onClick={() => setShowLogoutModal(false)}
+                  style={styles.closeButton}
+                  onClick={() => {
+                    setShowModal(false);
+                    setIsEditMode(false);
+                    setEditingAnnouncement(null);
+                    setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
+                    setImages([]);
+                  }}
+                  disabled={loading.post || loading.update}
+                >
+                  <FontAwesomeIcon icon={faTimes} />
+                </button>
+              </div>
+
+              <div className="modalBody" style={styles.modalBody}>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Title</label>
+                  <input
+                    type="text"
+                    name="title"
+                    value={newAnnouncement.title}
+                    onChange={handleInputChange}
+                    placeholder="Enter announcement title..."
+                    style={styles.formInput}
+                    disabled={loading.post || loading.update}
+                  />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Details</label>
+                  <textarea
+                    name="details"
+                    value={newAnnouncement.details}
+                    onChange={handleInputChange}
+                    placeholder="Enter announcement details..."
+                    style={styles.formTextarea}
+                    rows={5}
+                    disabled={loading.post || loading.update}
+                  />
+                </div>
+
+                {images.length > 0 && (
+                  <div style={styles.attachmentsSection}>
+                    <h4 style={styles.attachmentsTitle}>Image Attachments</h4>
+                    <div style={styles.imagesPreview}>
+                      {images.map((img, i) => (
+                        <div key={i} style={styles.imagePreviewItem}>
+                          <img
+                            src={URL.createObjectURL(img)}
+                            alt="preview"
+                            style={styles.previewImage}
+                          />
+                          <button
+                            onClick={() => removeImage(i)}
+                            style={styles.removeImageButton}
+                            disabled={loading.post || loading.update}
+                          >
+                            <FontAwesomeIcon icon={faTimes} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={styles.uploadSection}>
+                  <button 
+                    style={{
+                      ...styles.uploadButton,
+                      ...((loading.post || loading.update) && styles.uploadButtonDisabled)
+                    }} 
+                    onClick={handleImageClick}
+                    disabled={loading.post || loading.update}
+                  >
+                    <FontAwesomeIcon icon={faImage} style={styles.uploadIcon} />
+                    Upload Image
+                  </button>
+                </div>
+
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  ref={imageInputRef}
+                  style={{ display: "none" }}
+                  onChange={handleImageChange}
+                  disabled={loading.post || loading.update}
+                />                       
+              </div>
+
+              <div className="modalFooter" style={styles.modalFooter}>
+                <button
+                  className="cancelButton"
+                  style={styles.cancelButton}
+                  onClick={() => {
+                    setShowModal(false);
+                    setIsEditMode(false);
+                    setEditingAnnouncement(null);
+                    setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
+                    setImages([]);
+                  }}
+                  disabled={loading.post || loading.update}
                 >
                   Cancel
                 </button>
                 <button
-                  style={styles.confirmBtn}
-                  onClick={handleLogout}
+                  className="submitButton"
+                  style={{
+                    ...styles.submitButton,
+                    ...((loading.post || loading.update) && styles.submitButtonDisabled)
+                  }}
+                  onClick={isEditMode ? saveEditedAnnouncement : addAnnouncement}
+                  disabled={loading.post || loading.update}
                 >
-                  Logout
+                  {loading.post || loading.update ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                      {isEditMode ? "Saving..." : "Posting..."}
+                    </>
+                  ) : (
+                    isEditMode ? "Save Changes" : "Post Announcement"
+                  )}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        <div style={styles.announcementBoard}>
-          <h1>Announcement</h1>
-
-          <div style={styles.announcementFilter}>
-            <div style={styles.announcementLeft}>
-              <div style={styles.searchContainer}>
-                <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
-                <input 
-                  style={styles.searchInput} 
-                  placeholder="Search announcements..." 
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                />
-                {searchQuery && (
-                  <button 
-                    style={styles.clearSearchBtn}
-                    onClick={() => setSearchQuery("")}
-                    title="Clear search"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                )}
-              </div>
-            
-              
-              {(searchQuery || visibilityFilter !== "All") && (
-                <button 
-                  style={styles.clearFilterBtn}
-                  onClick={clearFilters}
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-            <div>
-              <button 
-                style={styles.postBtn} 
-                onClick={() => setShowModal(true)}
-                disabled={loading.post || loading.update || loading.delete}
-              >
-               <FontAwesomeIcon icon={faPen} style={{paddingRight: '5px'}}/> {loading.post ? 'Posting...' : 'Post'}
-              </button>
-            </div>
-          </div>
-
-          {loading.fetch ? (
-            <div style={styles.loadingContainer}>
-              <FontAwesomeIcon icon={faSpinner} spin style={styles.loadingSpinner} />
-              <p>Loading announcements...</p>
-            </div>
-          ) : filteredAnnouncements.length === 0 ? (
-            <div style={styles.noResultsContainer}>
-              <p style={styles.noAnnouncementText}>
-                {announcements.length === 0 
-                  ? "No announcements have been posted yet." 
-                  : "No announcements match your search criteria."}
-              </p>
-              {(searchQuery || visibilityFilter !== "All") && (
-                <button 
-                  style={styles.clearFilterBtn2}
-                  onClick={clearFilters}
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-          ) : (
-            <div style={styles.announcementsContainer}>
-              <div style={styles.resultsCount}>
-                Showing {filteredAnnouncements.length} of {announcements.length} announcements
-              </div>
-              
-              {/* 2-Column Grid Layout */}
-              <div style={styles.announcementsGrid}>
-                {filteredAnnouncements.map((announcement, index) => {
-                  const carouselState = imageCarouselStates[announcement.id] || { 
-                    currentIndex: 0, 
-                    totalImages: 0, 
-                    showArrows: false 
-                  };
-                  const imagesToShow = announcement.images || [];
-                  const hasCarousel = imagesToShow.length > 6;
-                  
-                  // Get visible images based on carousel state
-                  let visibleImages = imagesToShow;
-                  if (hasCarousel) {
-                    // For carousel mode, show only 6 images at a time
-                    const startIndex = carouselState.currentIndex;
-                    const endIndex = Math.min(startIndex + 6, imagesToShow.length);
-                    visibleImages = imagesToShow.slice(startIndex, endIndex);
-                    
-                    // If we're near the end, wrap around
-                    if (endIndex > imagesToShow.length) {
-                      const remaining = 6 - (imagesToShow.length - startIndex);
-                      visibleImages = [
-                        ...imagesToShow.slice(startIndex),
-                        ...imagesToShow.slice(0, remaining)
-                      ];
-                    }
-                  }
-
-                  return (
-                    <div
-                      key={announcement.id || index}
-                      style={styles.announcementCard}
-                    >
-                      <div style={styles.announcementCardContent}>
-                        {/* Header Section */}
-                        <div style={styles.announcementHeader}>
-                          <div style={styles.announcementSender}>
-                            <div style={styles.announcementProfile}>
-                              <img src={announcement.profile_picture} alt='Profile' style={styles.announcementProfile}/>
-                            </div>
-                            <div style={styles.announcementName}>
-                              <p style={styles.lblName}>{announcement.posted_by}</p>
-                              <p style={styles.lblPosition}>{announcement.position}</p>
-                              {announcement.visibility && (
-                                <p style={styles.lblVisibility}>
-                                  Visibility: {announcement.visibility}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div style={styles.announcementDate}>
-                            <p style={styles.lblDate}>{announcement.created_at}</p>
-
-                            <div style={{ position: "relative", display: "inline-block" }}>
-                              <button
-                                style={{
-                                  ...styles.menuDots,
-                                  ...((loading.update || loading.delete) && styles.menuDotsDisabled)
-                                }}
-                                onClick={() =>
-                                  setMenuOpen(menuOpen === announcement.id ? null : announcement.id)
-                                }
-                                onBlur={() => setMenuOpen(null)}
-                                disabled={loading.update || loading.delete}
-                              >
-                                <FaEllipsisV />
-                              </button>
-
-                              {menuOpen === announcement.id && (
-                                <div style={styles.menu}>
-                                  <button
-                                    style={styles.buttonMenu1}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => editAnnouncement(announcement.id)}
-                                    disabled={loading.update}
-                                  >
-                                    {loading.update ? 'Editing...' : 'Edit'}
-                                  </button>
-                                  <button
-                                    style={styles.buttonMenu}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => deleteAnnouncement(announcement.id)}
-                                    disabled={loading.delete}
-                                  >
-                                    {loading.delete ? 'Deleting...' : 'Delete'}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Content Section */}
-                        <div style={styles.announcementContent}>
-                          <div style={styles.announcementText}>
-                            <p style={styles.lblTitle}>{announcement.title}</p>
-                            <p 
-                              ref={(el) => {
-                                if (el) {
-                                  // Check after rendering
-                                  setTimeout(() => checkEllipsis(announcement.id, el), 50);
-                                }
-                              }}
-                              style={{
-                                ...styles.lblDetails,
-                                textAlign: "justify",
-                                display: "-webkit-box",
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
-                                WebkitLineClamp: expanded[announcement.id] ? "unset" : 3,
-                              }}
-                            >
-                              {announcement.details}
-                            </p>
-                          </div>
-
-                          {/* Images Section with Carousel */}
-                          {imagesToShow.length > 0 && (
-                            <div style={styles.imagesContainerWrapper}>
-                              
-                              <div style={styles.imagesContainer}>
-                                {/* Left arrow for carousel */}
-                                {hasCarousel && (
-                                  <button 
-                                    style={styles.carouselArrowLeft}
-                                    onClick={() => prevImage(announcement.id)}
-                                    title="Previous images"
-                                  >
-                                    <FontAwesomeIcon icon={faChevronLeft} />
-                                  </button>
-                                )}
-                                
-                                {/* Images grid */}
-                                <div style={{
-                                  ...styles.imagesGrid,
-                                  marginLeft: hasCarousel ? '30px' : '0',
-                                  marginRight: hasCarousel ? '30px' : '0'
-                                }}>
-                                  {visibleImages.map((img, i) => {
-                                    const actualIndex = hasCarousel 
-                                      ? (carouselState.currentIndex + i) % imagesToShow.length
-                                      : i;
-                                    
-                                    return (
-                                      <div key={i} style={styles.imageWrapper}>
-                                        <img
-                                          src={img} 
-                                          alt={`attachment-${actualIndex}`}
-                                          style={styles.announcementImage}
-                                          onClick={() => setPreviewImage(img)}
-                                          title={`Image ${actualIndex + 1} of ${imagesToShow.length}`}
-                                        />
-                                        {hasCarousel && imagesToShow.length > 6 && (
-                                          <div style={styles.imageNumberBadge}>
-                                            {actualIndex + 1}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                
-                                {/* Right arrow for carousel */}
-                                {hasCarousel && (
-                                  <button 
-                                    style={styles.carouselArrowRight}
-                                    onClick={() => nextImage(announcement.id)}
-                                    title="Next images"
-                                  >
-                                    <FontAwesomeIcon icon={faChevronRight} />
-                                  </button>
-                                )}
-                              </div>
-                              
-                              {/* Carousel indicators */}
-                              {hasCarousel && imagesToShow.length > 6 && (
-                                <div style={styles.carouselIndicators}>
-                                  {Array.from({ length: Math.ceil(imagesToShow.length / 6) }).map((_, i) => (
-                                    <button
-                                      key={i}
-                                      style={{
-                                        ...styles.carouselIndicator,
-                                        ...(Math.floor(carouselState.currentIndex / 6) === i 
-                                          ? styles.carouselIndicatorActive 
-                                          : {})
-                                      }}
-                                      onClick={() => {
-                                        setImageCarouselStates(prev => ({
-                                          ...prev,
-                                          [announcement.id]: {
-                                            ...prev[announcement.id],
-                                            currentIndex: i * 6
-                                          }
-                                        }));
-                                      }}
-                                      title={`View images ${i * 6 + 1}-${Math.min((i + 1) * 6, imagesToShow.length)}`}
-                                    >
-                                      {i + 1}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Footer Section */}
-                        <div style={styles.announcementFooter}>
-                          {(hasEllipsis[announcement.id] || expanded[announcement.id]) && ( 
-                           <button 
-                              onClick={() => toggleExpand(announcement.id)} 
-                              style={expanded[announcement.id] 
-                                ? { ...styles.readBtn,  backgroundColor: "#fff", border: '1px solid #009205', color: '#009205'}   // Show Less style
-                                : { ...styles.readBtn,  backgroundColor: "#009205", color: '#fff'  } // Read More style
-                              }
-                            >
-                              {expanded[announcement.id] ? "Show Less" : "Read More"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {previewImage && (
-            <div
-              style={styles.previewOverlay}
-              onClick={() => setPreviewImage(null)} 
-            >
-              <img
-                src={previewImage}
-                alt="preview"
-                style={styles.previewImageLarge}
-              />
-
-              <button
-                onClick={() => setPreviewImage(null)}
-                style={styles.closePreviewButton}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {showModal && (
-            <div style={styles.modalOverlay}>
-              <div style={styles.modalContainer}>
-                <div style={styles.modalHeader}>
-                  <h2 style={styles.modalTitle}>
-                    {isEditMode ? 'Edit Announcement' : 'Post Announcement'}
-                  </h2>
-                  <button
-                    style={styles.closeButton}
-                    onClick={() => {
-                      setShowModal(false);
-                      setIsEditMode(false);
-                      setEditingAnnouncement(null);
-                      setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
-                      setImages([]);
-                    }}
-                    disabled={loading.post || loading.update}
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
-
-                <div style={styles.modalBody}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Title</label>
-                    <input
-                      type="text"
-                      name="title"
-                      value={newAnnouncement.title}
-                      onChange={handleInputChange}
-                      placeholder="Enter announcement title..."
-                      style={styles.formInput}
-                      disabled={loading.post || loading.update}
-                    />
-                  </div>
-
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Details</label>
-                    <textarea
-                      name="details"
-                      value={newAnnouncement.details}
-                      onChange={handleInputChange}
-                      placeholder="Enter announcement details..."
-                      style={styles.formTextarea}
-                      rows={5}
-                      disabled={loading.post || loading.update}
-                    />
-                  </div>
-
-                  {images.length > 0 && (
-                    <div style={styles.attachmentsSection}>
-                      <h4 style={styles.attachmentsTitle}>Image Attachments</h4>
-                      <div style={styles.imagesPreview}>
-                        {images.map((img, i) => (
-                          <div key={i} style={styles.imagePreviewItem}>
-                            <img
-                              src={URL.createObjectURL(img)}
-                              alt="preview"
-                              style={styles.previewImage}
-                            />
-                            <button
-                              onClick={() => removeImage(i)}
-                              style={styles.removeImageButton}
-                              disabled={loading.post || loading.update}
-                            >
-                              <FontAwesomeIcon icon={faTimes} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={styles.uploadSection}>
-                    <button 
-                      style={{
-                        ...styles.uploadButton,
-                        ...((loading.post || loading.update) && styles.uploadButtonDisabled)
-                      }} 
-                      onClick={handleImageClick}
-                      disabled={loading.post || loading.update}
-                    >
-                      <FontAwesomeIcon icon={faImage} style={styles.uploadIcon} />
-                      Upload Image
-                    </button>
-                  </div>
-
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    ref={imageInputRef}
-                    style={{ display: "none" }}
-                    onChange={handleImageChange}
-                    disabled={loading.post || loading.update}
-                  />                       
-                </div>
-
-                <div style={styles.modalFooter}>
-                  <button
-                    style={styles.cancelButton}
-                    onClick={() => {
-                      setShowModal(false);
-                      setIsEditMode(false);
-                      setEditingAnnouncement(null);
-                      setNewAnnouncement({ title: "", details: "", visibility: "All Employee" });
-                      setImages([]);
-                    }}
-                    disabled={loading.post || loading.update}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    style={{
-                      ...styles.submitButton,
-                      ...((loading.post || loading.update) && styles.submitButtonDisabled)
-                    }}
-                    onClick={isEditMode ? saveEditedAnnouncement : addAnnouncement}
-                    disabled={loading.post || loading.update}
-                  >
-                    {loading.post || loading.update ? (
-                      <>
-                        <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
-                        {isEditMode ? "Saving..." : "Posting..."}
-                      </>
-                    ) : (
-                      isEditMode ? "Save Changes" : "Post Announcement"
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
         {showDeleteModal && (
           <div style={styles.modalOverlay}>
-            <div style={styles.modalContainerDel}>
+            <div className="modalContainerDel" style={styles.modalContainerDel}>
               <p style={styles.questionDelete}>Are you sure you want to delete this announcement?</p>
-              <div style={styles.deleteButtons}>
+              <div className="deleteButtons" style={styles.deleteButtons}>
                 <button 
                   style={{
                     ...styles.deleteBtn,
@@ -1029,7 +1097,8 @@ function Announcement() {
         )}
       </div>
     </div>
-  );
+  </div>
+);
 }
 
 const styles = {

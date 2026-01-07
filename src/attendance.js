@@ -76,7 +76,6 @@ function Attendance() {
     { name: "Employees", icon: faUsers, to: "/employee" },
     { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-    { name: "Message", icon: faEnvelope, to: "/messages" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
@@ -90,10 +89,7 @@ function Attendance() {
       return [
         "Dashboard",
         "Employees",
-        "Attendance",
         "Leave Management",
-        "Message",
-        "Announcement",
       ].includes(item.name);
     }
     return false;
@@ -441,15 +437,15 @@ useEffect(() => {
   return (
     <div style={styles.dashboardContainer}>
       {/* Mobile Header */}
-      <div className="attendance-mobile-header">
+      <div className="mobile-header">
         <button 
-          className="attendance-hamburger"
+          className="hamburger"
           onClick={() => setIsSidebarOpen(true)}
         >
           <FontAwesomeIcon icon={faBars} />
         </button>
-        <img src={require('./images/logo_ez.png')} alt="logo" className="attendance-mobile-logo" />
-        <div className="attendance-mobile-header-right">
+        <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
+        <div className="mobile-header-right">
           <ProfileDropdown
             showSettingsModal={showSettingsModal}
             setShowSettingsModal={setShowSettingsModal}
@@ -466,20 +462,20 @@ useEffect(() => {
 
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
-        <div className="attendance-mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+        <div className="mobile-overlay" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
       {/* Desktop Sidebar */}
-      <div className={`attendance-mobile-sidebar attendance-desktop-sidebar ${isSidebarOpen ? 'attendance-sidebar-open' : 'attendance-sidebar-closed'}`} style={styles.sidebar}>
-        <div className="attendance-sidebar-header">
+      <div className={`mobile-sidebar attendance-desktop-sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={styles.sidebar}>
+        <div className="sidebar-header">
           <button 
-            className="attendance-sidebar-close-btn"
+            className="sidebar-close-btn"
             onClick={() => setIsSidebarOpen(false)}
           >
             <FontAwesomeIcon icon={faTimes} />
           </button>
           <img 
-            className='attendance-logo-sidebar' 
+            className='logo-sidebar' 
             src={require('./images/logo_ez.png')} 
             alt="logo" 
           />
@@ -489,10 +485,10 @@ useEffect(() => {
           src={require('./images/logo_ez.png')} 
           alt="logo" 
           style={styles.logo} 
-          className='attendance-logo-desktop'
+          className='logo-desktop'
         />
 
-        <ul className='attendance-sidebar-menu-link' style={styles.sidebarList}>
+        <ul className='sidebar-menu-link' style={styles.sidebarList}>
           {allowedMenus.map((item) => {
             const isActive = location.pathname === item.to;
 
@@ -520,7 +516,7 @@ useEffect(() => {
       </div>
 
       {/* Desktop Header */}
-      <div className="attendance-desktop-header" style={styles.header}>
+      <div className="desktop-header" style={styles.header}>
         <div style={styles.headerRight}>
           <ProfileDropdown
             showSettingsModal={showSettingsModal}
@@ -537,11 +533,11 @@ useEffect(() => {
       </div>
 
       {/* Main Content */}
-      <div className="attendance-content" style={styles.content}>
+      <div className="content" style={styles.content}>
 
         {showLogoutModal && (
           <div style={styles.modalOverlay}>
-            <div style={styles.modalContent} className="attendance-modal-content">
+            <div style={styles.modalContent} className="modal-content">
               <h3>Confirm Logout</h3>
               <p>Are you sure you want to log out?</p>
               <div style={styles.modalActions}>
@@ -564,8 +560,8 @@ useEffect(() => {
 
         {/* Profile Modal */}
         {showProfileModal && (
-          <div style={styles.modalOverlayProfile} className="profile-modal-overlay">
-            <div style={styles.modalContentProfile} className="profile-modal-content">
+          <div style={styles.modalOverlayProfile} className="modal-overlay">
+            <div style={styles.modalContentProfile} className="modal-content">
               <h2 style={styles.modalTitle}>My Profile</h2>
 
               <div style={styles.profileSection}>
@@ -929,84 +925,95 @@ useEffect(() => {
             </div>
             
             <div className="attendance-pagination-controls" style={styles.paginationControls}>
-              <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  goToFirstPage();
-                }}
-                disabled={currentPage === 1}
-                style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
-                className="attendance-pagination-first"
-              >
-                <FontAwesomeIcon icon={faAnglesLeft} />
-              </button>
-              
-              <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  goToPrevPage();
-                }}
-                disabled={currentPage === 1}
-                style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
-                className="attendance-pagination-prev"
-              >
-                <FontAwesomeIcon icon={faAngleLeft} />
-              </button>
-              
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                
-                if (pageNum > 0 && pageNum <= totalPages) {
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        paginate(pageNum);
-                      }}
-                      style={currentPage === pageNum ? styles.paginationButtonActive : styles.paginationButton}
-                      className="attendance-pagination-number"
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                }
-                return null;
-              })}
-              
-              <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  goToNextPage();
-                }}
-                disabled={currentPage === totalPages}
-                style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
-                className="attendance-pagination-next"
-              >
-                <FontAwesomeIcon icon={faAngleRight} />
-              </button>
-              
-              <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  goToLastPage();
-                }}
-                disabled={currentPage === totalPages}
-                style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
-                className="attendance-pagination-last"
-              >
-                <FontAwesomeIcon icon={faAnglesRight} />
-              </button>
-            </div>
+  {/* First Page */}
+  <button 
+    onClick={(e) => {
+      e.preventDefault();
+      goToFirstPage();
+    }}
+    disabled={currentPage === 1}
+    style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
+    className="attendance-pagination-first"
+  >
+    <FontAwesomeIcon icon={faAnglesLeft} />
+  </button>
+  
+  {/* Previous Page */}
+  <button 
+    onClick={(e) => {
+      e.preventDefault();
+      goToPrevPage();
+    }}
+    disabled={currentPage === 1}
+    style={currentPage === 1 ? styles.paginationButtonDisabled : styles.paginationButton}
+    className="attendance-pagination-prev"
+  >
+    <FontAwesomeIcon icon={faAngleLeft} />
+  </button>
+  
+  {/* Page Numbers - Simple version */}
+  {Array.from({ length: totalPages }, (_, i) => {
+    const pageNum = i + 1;
+    
+    // For many pages, only show some pages
+    if (totalPages > 10) {
+      // Always show first, last, and pages around current
+      const shouldShow = 
+        pageNum === 1 || 
+        pageNum === totalPages || 
+        (pageNum >= currentPage - 2 && pageNum <= currentPage + 2);
+      
+      if (!shouldShow) {
+        // Show ellipsis for gaps
+        if (pageNum === currentPage - 3 || pageNum === currentPage + 3) {
+          return <span key={`ellipsis-${pageNum}`} style={styles.paginationEllipsis}>...</span>;
+        }
+        return null;
+      }
+    }
+    
+    return (
+      <button
+        key={pageNum}
+        onClick={(e) => {
+          e.preventDefault();
+          console.log('Page button clicked:', pageNum);
+          paginate(pageNum);
+        }}
+        style={currentPage === pageNum ? styles.paginationButtonActive : styles.paginationButton}
+        className="attendance-pagination-number"
+      >
+        {pageNum}
+      </button>
+    );
+  })}
+  
+  {/* Next Page */}
+  <button 
+    onClick={(e) => {
+      e.preventDefault();
+      goToNextPage();
+    }}
+    disabled={currentPage === totalPages}
+    style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
+    className="attendance-pagination-next"
+  >
+    <FontAwesomeIcon icon={faAngleRight} />
+  </button>
+  
+  {/* Last Page */}
+  <button 
+    onClick={(e) => {
+      e.preventDefault();
+      goToLastPage();
+    }}
+    disabled={currentPage === totalPages}
+    style={currentPage === totalPages ? styles.paginationButtonDisabled : styles.paginationButton}
+    className="attendance-pagination-last"
+  >
+    <FontAwesomeIcon icon={faAnglesRight} />
+  </button>
+</div>
             
             <div className="attendance-pagination-perpage" style={styles.paginationPerPage}>
               <span>Items per page:</span>

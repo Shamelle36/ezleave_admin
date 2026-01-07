@@ -117,13 +117,13 @@ function Dashboard() {
   });
   const [editingHoliday, setEditingHoliday] = useState(null);
   const [isLoadingHolidays, setIsLoadingHolidays] = useState(false);
+const [showNotificationModal, setShowNotificationModal] = useState(false);
 
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
     { name: "Employees", icon: faUsers, to: "/employee" },
     { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-    { name: "Message", icon: faEnvelope, to: "/messages" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
@@ -135,10 +135,7 @@ function Dashboard() {
       return [
         "Dashboard",
         "Employees",
-        "Attendance",
         "Leave Management",
-        "Message",
-        "Announcement",
       ].includes(item.name);
     }
     return false;
@@ -179,7 +176,8 @@ function Dashboard() {
     showTimeSettingsModal || 
     showLocalHolidayModal || 
     showProfileModal || 
-    showLogoutModal;
+    showLogoutModal ||
+    showNotificationModal;
   
   if (isAnyModalOpen) {
     // Store current scroll position
@@ -200,7 +198,7 @@ function Dashboard() {
       window.scrollTo(0, scrollY);
     };
   }
-}, [showSettingsModal, showTermsModal, showTimeSettingsModal, showLocalHolidayModal, showProfileModal, showLogoutModal]);
+}, [showSettingsModal, showTermsModal, showNotificationModal, showTimeSettingsModal, showLocalHolidayModal, showProfileModal, showLogoutModal]);
 
   // Add this useEffect after your other useEffects
   useEffect(() => {
@@ -784,6 +782,7 @@ const fetchLocalHolidays = async () => {
     title: 'Total Employees',
     value: employeeCount,
     background: styles.card, 
+    showForAll: true
   },
   {
     title: 'Pending Leave Requests',
@@ -1104,6 +1103,7 @@ const fetchLocalHolidays = async () => {
           />
         </div>
       </div>
+
 
       {/* Mobile Profile Dropdown */}
       {showProfileMenu && (

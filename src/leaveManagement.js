@@ -51,6 +51,7 @@ import './leave-management-responsive.css';
 import './dashboard-responsive.css'; 
 import ProfileDropdown from './profileDropdown.js';
 
+
 function LeaveManagement() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -77,6 +78,7 @@ function LeaveManagement() {
     const [filteredRequests, setFilteredRequests] = useState([]);
     const [savedPDFs, setSavedPDFs] = useState([]);
 const [showSavedPDFsModal, setShowSavedPDFsModal] = useState(false);
+
 
 const [signatureMethod, setSignatureMethod] = useState(""); // "e-sign" or "traditional"
     const [signatureData, setSignatureData] = useState("");
@@ -155,6 +157,10 @@ const [calendarYearFilter, setCalendarYearFilter] = useState(new Date().getFullY
 const [calendarLeaveTypeFilter, setCalendarLeaveTypeFilter] = useState("all");
 const [availableYears, setAvailableYears] = useState([]);
 const [availableLeaveTypes, setAvailableLeaveTypes] = useState([]);
+
+// Add these near your other useState declarations
+const [loadingApprovalId, setLoadingApprovalId] = useState(null);
+const [loadingRejectionId, setLoadingRejectionId] = useState(null);
 
 // Helper function to calculate days between dates
 const calculateDaysBetween = (startDate, endDate) => {
@@ -463,7 +469,6 @@ useEffect(() => {
       { name: "Employees", icon: faUsers, to: "/employee" },
       { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
       { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
-      { name: "Message", icon: faEnvelope, to: "/messages" },
       { name: "Announcement", icon: faBullhorn, to: "/announcement" },
       { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
       { name: "User Management", icon: faUserCog, to: "/userManagement" },
@@ -475,10 +480,7 @@ useEffect(() => {
         return [
           "Dashboard",
           "Employees",
-          "Attendance",
           "Leave Management",
-          "Message",
-          "Announcement",
         ].includes(item.name);
       }
       return false;
@@ -1450,10 +1452,18 @@ const completeCSFormApproval = async () => {
 
     const role = admin.role?.toLowerCase().replace(" ", "_");
 
+    // Set loading state based on action type
+    if (actionType === "approve") {
+      setLoadingApprovalId(selectedRequest.id);
+    } else {
+      setLoadingRejectionId(selectedRequest.id);
+    }
+
     // For rejection, validate that we have a reason
     if (actionType === "reject") {
       if (!rejectionReason && !actionRemarks.trim()) {
         alert("Please select or specify a reason for rejection");
+        setLoadingRejectionId(null);
         return;
       }
       
@@ -1463,6 +1473,7 @@ const completeCSFormApproval = async () => {
       
       if (!finalRemarks.trim()) {
         alert("Please provide a reason for rejection");
+        setLoadingRejectionId(null);
         return;
       }
       
@@ -1489,7 +1500,7 @@ const completeCSFormApproval = async () => {
     // Generate PDF and save to database
     const generateRes = await fetch(`${API_URL}/api/generate-cs-form`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generatePayload),
     });
 
@@ -1521,26 +1532,45 @@ const completeCSFormApproval = async () => {
 
     const finalRes = await fetch(endpoint, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
     if (finalRes.ok) {
-      // Update frontend state
+      const data = await finalRes.json();
+      
+      // ✅ CRITICAL: Update BOTH requests and leaveRecords states
+      const newStatus = actionType === "approve" ? "Approved" : "Rejected";
+      
+      // Update requests state
       setRequests(prev =>
         prev.map(req =>
           req.id === selectedRequest.id
             ? {
                 ...req,
-                status: actionType === "approve" ? "Approved" : "Rejected",
-                mayor_status: actionType === "approve" ? "Approved" : "Rejected",
+                status: newStatus,
+                mayor_status: newStatus,
                 approver_name: admin.name || admin.email,
                 remarks: remarks,
                 days_with_pay: daysWithPay,
                 rejection_reason: actionType === "reject" ? rejectionReason : null,
-                cs_form_generated: true // ✅ Add this flag
+                cs_form_generated: true
               }
             : req
+        )
+      );
+      
+      // ✅ ALSO update leaveRecords state (this is what the table uses)
+      setLeaveRecords(prev =>
+        prev.map(record =>
+          record.id === selectedRequest.id
+            ? {
+                ...record,
+                status: newStatus,
+                approvedBy: admin.name || admin.email,
+                remarks: remarks
+              }
+            : record
         )
       );
 
@@ -1573,6 +1603,10 @@ const completeCSFormApproval = async () => {
   } catch (err) {
     console.error(`Error ${actionType === "approve" ? "approving" : "rejecting"} with CS Form:`, err);
     alert(`Error ${actionType === "approve" ? "approving" : "rejecting"} leave request`);
+  } finally {
+    // Clear loading states
+    setLoadingApprovalId(null);
+    setLoadingRejectionId(null);
   }
 };
 
@@ -2837,96 +2871,151 @@ const getLeaveAbbreviation = (leaveType) => {
                                 </div>
                             </div>
 
-                            {/* ACTION BUTTONS - MODIFIED FOR MAYOR, OFFICE HEAD, AND HR ADMIN */}
-                          <div style={styles.actionSection}>
-                            {/* Check if head has rejected - if so, don't show action buttons for HR/Mayor */}
-                            {selectedRequest.office_head_status !== "Rejected" ? (
-                              (userRole === "office head" && 
-                              (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
-                              (userRole === "admin" && 
-                              selectedRequest.office_head_status === "Approved" && 
-                              (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
-                              (userRole === "mayor" && 
-                              selectedRequest.hr_status === "Approved" && 
-                              (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending")) ? (
-                                <div className='actionButtons' style={styles.actionButtons}>
-                                  <button
-                                    style={styles.approveBtn}
-                                    className='approveBtn'
-                                    onClick={() => {
-                                      setActionType("approve");
-                                      setActionRemarks("Approved via dashboard");
-                                      // For office head, check overlapping leaves before proceeding
-                                      if (userRole === "office head") {
-                                        handleApprove(selectedRequest.id, "Approved via dashboard");
-                                      } else {
-                                        // For mayor and admin, proceed directly
-                                        setDaysWithPay(selectedRequest.number_of_days || 0);
-                                        generationTriggerRef.current = true;
-                                        setIsGeneratingCSForm(true);
-                                      }
-                                    }}
-                                    disabled={overlapCheckLoading}
-                                  >
-                                    <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
-                                    {overlapCheckLoading ? "Checking..." : 
-                                     (userRole === "office head" ? "Approve (Check Overlaps)" : 
-                                      (userRole === "mayor" || userRole === "admin") ? "Approve with CS Form" : 
-                                      "Approve Request")}
-                                  </button>
-                                  <button
-                                    style={styles.rejectBtn}
-                                    className='rejectBtn'
-                                    onClick={() => {
-                                      setActionType("reject");
-                                      setActionRemarks("Pending rejection reason...");
-                                      handleReject(selectedRequest.id, "Pending rejection reason...");
-                                    }}
-                                  >
-                                    <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
-                                    {(userRole === "mayor" || userRole === "office head" || userRole === "admin") 
-                                      ? "Reject with CS Form" 
-                                      : "Reject Request"}
-                                  </button>
-                                </div>
-                              ) : (
-                                <div style={styles.finalStatus}>
-                                  <div style={{
-                                    ...styles.finalStatusBadge,
-                                    ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
-                                        selectedRequest.status === 'Rejected' ? styles.statusRejected : 
-                                        styles.statusPending)
-                                  }}>
-                                    {selectedRequest.status}
-                                  </div>
-                                  <p style={styles.finalStatusText}>
-                                    Processed by {selectedRequest.approver_name} on {" "}
-                                    {new Date(selectedRequest.approver_date).toLocaleDateString()}
-                                  </p>
-                                  {selectedRequest.remarks && (
-                                    <p style={styles.remarksText}>
-                                      <strong>Remarks:</strong> {selectedRequest.remarks}
-                                    </p>
-                                  )}
-                                </div>
-                              )
-                            ) : (
-                              // Show rejection message when head has rejected
-                              <div style={styles.finalStatus}>
-                                <div style={styles.statusRejected}>
-                                  Rejected by Office Head
-                                </div>
-                                <p style={styles.finalStatusText}>
-                                  This request was rejected by the Office Head and cannot be processed further.
-                                </p>
-                                {selectedRequest.remarks && (
-                                  <p style={styles.remarksText}>
-                                    <strong>Rejection Reason:</strong> {selectedRequest.remarks}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          {/* ACTION BUTTONS - MODIFIED FOR MAYOR, OFFICE HEAD, AND HR ADMIN */}
+<div style={styles.actionSection}>
+  {/* Check if leave has been approved or rejected */}
+  {(() => {
+    // Get the current admin
+    const admin = JSON.parse(localStorage.getItem("admin"));
+    const currentUserRole = admin?.role?.toLowerCase().replace("_", " ");
+    
+    // Check if the current user has already acted on this request
+    const userHasAlreadyActed = 
+      (currentUserRole === "office head" && selectedRequest.office_head_status && selectedRequest.office_head_status !== "Pending") ||
+      (currentUserRole === "admin" && selectedRequest.hr_status && selectedRequest.hr_status !== "Pending") ||
+      (currentUserRole === "mayor" && selectedRequest.mayor_status && selectedRequest.mayor_status !== "Pending");
+    
+    // Check if the current user can act on this request
+    const userCanAct = 
+      (currentUserRole === "office head" && (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
+      (currentUserRole === "admin" && selectedRequest.office_head_status === "Approved" && (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
+      (currentUserRole === "mayor" && selectedRequest.hr_status === "Approved" && (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending"));
+    
+    // If request is already fully approved/rejected OR user has already acted on it, show status
+    if (selectedRequest.status === "Approved" || selectedRequest.status === "Rejected" || userHasAlreadyActed) {
+      return (
+        <div style={styles.finalStatus}>
+          <div style={{
+            ...styles.finalStatusBadge,
+            ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
+                selectedRequest.status === 'Rejected' ? styles.statusRejected : 
+                selectedRequest.office_head_status === "Rejected" ? styles.statusRejected :
+                selectedRequest.hr_status === "Rejected" ? styles.statusRejected :
+                selectedRequest.mayor_status === "Rejected" ? styles.statusRejected :
+                styles.statusPending)
+          }}>
+            {selectedRequest.status || 'Processed'}
+          </div>
+          <p style={styles.finalStatusText}>
+            {selectedRequest.approver_name && (
+              <>Processed by {selectedRequest.approver_name}</>
+            )}
+            {selectedRequest.approver_date && (
+              <> on {new Date(selectedRequest.approver_date).toLocaleDateString()}</>
+            )}
+            {!selectedRequest.approver_name && !selectedRequest.approver_date && (
+              <>Leave has been processed</>
+            )}
+          </p>
+          {selectedRequest.remarks && (
+            <p style={styles.remarksText}>
+              <strong>Remarks:</strong> {selectedRequest.remarks}
+            </p>
+          )}
+        </div>
+      );
+    }
+    
+    // If user can act and request hasn't been rejected by office head
+    if (selectedRequest.office_head_status !== "Rejected" && userCanAct) {
+      return (
+        <div className='actionButtons' style={styles.actionButtons}>
+          <button
+            style={styles.approveBtn}
+            className='approveBtn'
+            onClick={() => {
+              setActionType("approve");
+              setActionRemarks("Approved via dashboard");
+              // For office head, check overlapping leaves before proceeding
+              if (currentUserRole === "office head") {
+                handleApprove(selectedRequest.id, "Approved via dashboard");
+              } else {
+                // For mayor and admin, proceed directly
+                setDaysWithPay(selectedRequest.number_of_days || 0);
+                generationTriggerRef.current = true;
+                setIsGeneratingCSForm(true);
+              }
+            }}
+            disabled={overlapCheckLoading}
+          >
+            <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
+            {overlapCheckLoading ? "Checking..." : 
+              (currentUserRole === "office head" ? "Approve" : 
+              (currentUserRole === "mayor" || currentUserRole === "admin") ? "Approve with CS Form" : 
+              "Approve Request")}
+          </button>
+          <button
+            style={styles.rejectBtn}
+            className='rejectBtn'
+            onClick={() => {
+              setActionType("reject");
+              setActionRemarks("Pending rejection reason...");
+              handleReject(selectedRequest.id, "Pending rejection reason...");
+            }}
+          >
+            <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
+            {(currentUserRole === "mayor" || currentUserRole === "office head" || currentUserRole === "admin") 
+              ? "Reject" 
+              : "Reject Request"}
+          </button>
+        </div>
+      );
+    }
+    
+    // If head has rejected, show rejection message
+    if (selectedRequest.office_head_status === "Rejected") {
+      return (
+        <div style={styles.finalStatus}>
+          <div style={styles.statusRejected}>
+            Rejected by Office Head
+          </div>
+          <p style={styles.finalStatusText}>
+            This request was rejected by the Office Head and cannot be processed further.
+          </p>
+          {selectedRequest.remarks && (
+            <p style={styles.remarksText}>
+              <strong>Rejection Reason:</strong> {selectedRequest.remarks}
+            </p>
+          )}
+        </div>
+      );
+    }
+    
+    // Otherwise, user cannot act (waiting for previous approval)
+    return (
+      <div style={styles.finalStatus}>
+        <div style={{
+          ...styles.finalStatusBadge,
+          ...styles.statusPending
+        }}>
+          Pending
+        </div>
+        <p style={styles.finalStatusText}>
+          {selectedRequest.office_head_status === "Approved" && currentUserRole === "admin" ? 
+            "Waiting for HR review" :
+          selectedRequest.hr_status === "Approved" && currentUserRole === "mayor" ? 
+            "Waiting for Mayor's review" :
+          selectedRequest.office_head_status === "Pending" && currentUserRole === "admin" ? 
+            "Waiting for Office Head approval" :
+          selectedRequest.hr_status === "Pending" && currentUserRole === "mayor" ? 
+            "Waiting for HR approval" :
+            "Awaiting next approval step"}
+        </p>
+      </div>
+    );
+  })()}
+</div>
+
                             </div>
                         </>
                         ) : (
@@ -3186,51 +3275,73 @@ const getLeaveAbbreviation = (leaveType) => {
       </div>
 
       {/* ACTION BUTTONS AT BOTTOM */}
-      <div style={styles.formActions}>
-        <button
-          style={styles.cancelBtn}
-          onClick={() => {
-            setShowActualCSForm(false);
-            setCsFormData(null);
-            setActionType(null);
-            setActionRemarks("");
-            setRejectionReason("");
-            setCustomRejectionReason("");
-            setShowCustomReasonInput(false);
-            setRealTimeFormData({
-              action_type: "",
-              action_remarks: "",
-              days_with_pay: 0
-            });
-            if (formGenerationTimeout) {
-              clearTimeout(formGenerationTimeout);
-            }
-          }}
-        >
-          Cancel
-        </button>
+   {/* ACTION BUTTONS AT BOTTOM */}
+<div style={styles.formActions}>
+  <button
+    style={styles.cancelBtn}
+    onClick={() => {
+      setShowActualCSForm(false);
+      setCsFormData(null);
+      setActionType(null);
+      setActionRemarks("");
+      setRejectionReason("");
+      setCustomRejectionReason("");
+      setShowCustomReasonInput(false);
+      setRealTimeFormData({
+        action_type: "",
+        action_remarks: "",
+        days_with_pay: 0
+      });
+      if (formGenerationTimeout) {
+        clearTimeout(formGenerationTimeout);
+      }
+    }}
+  >
+    Cancel
+  </button>
+  
+  <button
+    style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
+    onClick={() => {
+      if (actionType === "reject") {
+        if (!rejectionReason && !actionRemarks.trim()) {
+          alert("Please select or specify a reason for rejection");
+          return;
+        }
         
-        <button
-          style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
-          onClick={() => {
-            if (actionType === "reject") {
-              if (!rejectionReason && !actionRemarks.trim()) {
-                alert("Please select or specify a reason for rejection");
-                return;
-              }
-              
-              if (rejectionReason === "Other (specify below)" && !customRejectionReason.trim()) {
-                alert("Please specify the reason for rejection");
-                return;
-              }
-            }
-            handleConfirmApproval();
-          }}
-          disabled={actionType === "reject" && !actionRemarks.trim()}
-        >
-          {actionType === "approve" ? "Approve Request" : "Reject Request"}
-        </button>
-      </div>
+        if (rejectionReason === "Other (specify below)" && !customRejectionReason.trim()) {
+          alert("Please specify the reason for rejection");
+          return;
+        }
+      }
+      handleConfirmApproval();
+    }}
+    disabled={
+      (actionType === "reject" && !actionRemarks.trim()) ||
+      loadingApprovalId === selectedRequest?.id ||
+      loadingRejectionId === selectedRequest?.id
+    }
+  >
+    {loadingApprovalId === selectedRequest?.id || loadingRejectionId === selectedRequest?.id ? (
+      <>
+        <div style={{
+          display: 'inline-block',
+          width: '16px',
+          height: '16px',
+          border: '2px solid #ffffff',
+          borderTop: '2px solid transparent',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginRight: '8px'
+        }}></div>
+        Processing...
+      </>
+    ) : (
+      actionType === "approve" ? "Approve Request" : "Reject Request"
+    )}
+  </button>
+</div>
+
     </div>
   </div>
 )}
@@ -3252,28 +3363,10 @@ const getLeaveAbbreviation = (leaveType) => {
 {showSignatureChoice && (
   <div style={styles.modalOverlay}>
     <div style={styles.signatureChoiceModal}>
-      <h3 style={styles.modalTitle}>Select Signature Method</h3>
       
       <div style={styles.signatureOptions}>
-        <p style={styles.signatureDescription}>
-          How would you like to sign the CS Form No. 6?
-        </p>
         
         <div style={styles.signatureButtons}>
-          <button
-            style={styles.eSignBtn}
-            onClick={() => {
-              setSignatureMethod("e-sign");
-              setShowSignatureChoice(false);
-              setShowESignPad(true);
-              setIsSigning(true);
-            }}
-            disabled={isSigning}
-          >
-            <FontAwesomeIcon icon={faSignature} />
-            {isSigning ? " Signing..." : " Draw Signature"}
-            <span style={styles.methodDescription}>Draw your signature using mouse or touchpad</span>
-          </button>
           
           {/* ADD THIS NEW UPLOAD OPTION */}
           <button
@@ -3289,18 +3382,6 @@ const getLeaveAbbreviation = (leaveType) => {
             <span style={styles.methodDescription}>Upload an image of your signature</span>
           </button>
           
-          <button
-            style={styles.traditionalSignBtn}
-            onClick={() => {
-              setSignatureMethod("traditional");
-              setShowSignatureChoice(false);
-              generateAndShowCSForm();
-            }}
-          >
-            <FontAwesomeIcon icon={faPrint} />
-            Print & Sign
-            <span style={styles.methodDescription}>Print the form and sign manually</span>
-          </button>
         </div>
       </div>
 
@@ -3529,36 +3610,6 @@ const getLeaveAbbreviation = (leaveType) => {
             ))}
           </select>
           
-          {/* Department Filter */}
-          <select
-            style={styles.calendarFilter}
-            value={selectedDepartment}
-            onChange={(e) => {
-              setSelectedDepartment(e.target.value);
-              setTimeout(() => fetchLeaveCalendarData(selectedCalendarDate, 'month'), 300);
-            }}
-          >
-            <option value="all">All Departments</option>
-            <option value="Office of the Municipal Mayor">Mayor's Office</option>
-            <option value="Human Resource Management Division">HRMD</option>
-            <option value="Business Permit and Licensing Division">BPLD</option>
-            <option value="Sangguniang Bayan Office">Sangguniang Bayan</option>
-            {/* Add more departments as needed */}
-          </select>
-          
-          {/* Clear Filters Button */}
-          <button
-            style={styles.clearFilterBtn}
-            onClick={() => {
-              clearCalendarFilters();
-              fetchLeaveCalendarData(selectedCalendarDate, 'month');
-            }}
-            disabled={!calendarSearchQuery && calendarYearFilter === new Date().getFullYear() && 
-                      calendarLeaveTypeFilter === "all" && selectedDepartment === "all"}
-          >
-            <FontAwesomeIcon icon={faEraser} />
-            Clear
-          </button>
         </div>
       </div>
 
