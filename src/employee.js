@@ -93,8 +93,6 @@ function Employees() {
     id_number: '',
     contact_number: '',
     civil_status: '',
-    contract_start_date: '',
-    contract_end_date: '',
   });
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -364,8 +362,6 @@ function Employees() {
             gender: row[11]?.toString().toLowerCase().includes("female") ? "Female" : "Male",
             civil_status: normalizeCivilStatus(civilStatus),
             status: "active",
-            contract_start_date: row[13] ? new Date(row[13]).toISOString().split("T")[0] : "",
-            contract_end_date: row[14] ? new Date(row[14]).toISOString().split("T")[0] : "",
           };
         });
 
@@ -665,7 +661,6 @@ const handleAddEmployee = async () => {
       return;
     }
 
-    // Prepare data for API - match backend field names
     const employeeData = {
       first_name,
       last_name,
@@ -679,24 +674,8 @@ const handleAddEmployee = async () => {
       id_number: newEmployee.id_number,
       contact_number: newEmployee.contact_number,
       civil_status: newEmployee.civil_status,
+      // REMOVED: No contract dates
     };
-    
-    // CRITICAL FIX: Use contractStart and contractEnd (not contract_start_date, contract_end_date)
-    if (newEmployee.employment_status !== 'Permanent') {
-      // Check if contract dates are required for this employment type
-      const needsContractDates = shouldShowContractDates(newEmployee.employment_status);
-      
-      if (needsContractDates) {
-        if (!newEmployee.contract_start_date || !newEmployee.contract_end_date) {
-          alert("Contract start and end dates are required for this employment status");
-          return;
-        }
-        
-        // Use the EXACT field names the backend expects
-        employeeData.contract_start_date = newEmployee.contract_start_date;
-        employeeData.contract_end_date = newEmployee.contract_end_date;
-      }
-    }
 
     console.log("Data to be sent to API:", employeeData);
 
@@ -743,8 +722,8 @@ const handleAddEmployee = async () => {
       id_number: "",
       contact_number: "",
       civil_status: "",
-      contract_start_date: "",
-      contract_end_date: "",
+      // REMOVED: contract_start_date: "",
+      // REMOVED: contract_end_date: "",
     });
   } catch (error) {
     console.error("Add employee error:", error);
@@ -770,49 +749,59 @@ const handleAddEmployee = async () => {
     setShowEditModal(true);
   };
 
-  const handleEditSave = async () => {
-    try {
-      // Get current employee data to preserve status
-      const currentEmployee = employeeRecord.find(emp => emp.id === employeesToEdit.id);
-      
-      // Prepare data for update - preserve the original status
-      const updateData = {
-        ...employeesToEdit,
-        status: currentEmployee?.status || 'active', // Preserve original status
-        // Don't include inactive_reason in edit
-      };
+const handleEditSave = async () => {
+  try {
+    // Get current employee data to preserve status and inactive_reason
+    const currentEmployee = employeeRecord.find(emp => emp.id === employeesToEdit.id);
+    
+    // Prepare data for update - preserve the original status and inactive_reason
+    const updateData = {
+      first_name: employeesToEdit.first_name,
+      last_name: employeesToEdit.last_name,
+      email: employeesToEdit.email,
+      position: employeesToEdit.position,
+      id_number: employeesToEdit.id_number,
+      contact_number: employeesToEdit.contact_number,
+      civil_status: employeesToEdit.civil_status,
+      department: employeesToEdit.department,
+      employment_status: employeesToEdit.employment_status,
+      gender: employeesToEdit.gender,
+      status: currentEmployee?.status || 'active',
+      date_hired: employeesToEdit.date_hired,
+      inactive_reason: currentEmployee?.inactive_reason || '' // Preserve inactive_reason
+      // REMOVED: No contract dates
+    };
 
-      // Clear contract dates for permanent employees
-      if (updateData.employment_status === 'Permanent') {
-        delete updateData.contract_start_date;
-        delete updateData.contract_end_date;
-      }
+    console.log("Sending update data:", updateData);
 
-      const response = await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updateData),
-      });
+    const response = await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updateData),
+    });
 
-      if (!response.ok) {
-        throw new Error("Failed to update employee");
-      }
-
-      const updatedEmployee = await response.json();
-
-      setEmployeeRecords((prev) =>
-        prev.map((emp) =>
-          emp.id === employeesToEdit.id ? updatedEmployee : emp
-        )
-      );
-      
-      setShowEditModal(false);
-      alert("Employee updated successfully!");
-    } catch (error) {
-      console.error("Error updating employee:", error);
-      alert("Failed to update employee");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Update failed:", errorText);
+      throw new Error("Failed to update employee: " + errorText);
     }
-  };
+
+    const updatedEmployee = await response.json();
+
+    // Update local state with the response from backend
+    setEmployeeRecords((prev) =>
+      prev.map((emp) =>
+        emp.id === employeesToEdit.id ? updatedEmployee : emp
+      )
+    );
+    
+    setShowEditModal(false);
+    alert("Employee updated successfully!");
+  } catch (error) {
+    console.error("Error updating employee:", error);
+    alert("Failed to update employee: " + error.message);
+  }
+};
 
   const handleSelectAll = (e) => {
     const checked = e.target.checked;
@@ -2732,7 +2721,7 @@ const handleAddEmployee = async () => {
                     />
 
 
-                    {shouldShowContractDates(employeesToEdit.employment_status) && (
+                    {/* {shouldShowContractDates(employeesToEdit.employment_status) && (
                       <input
                         placeholder="Contract Start Date"
                         type="text"
@@ -2753,10 +2742,10 @@ const handleAddEmployee = async () => {
                           })
                         }
                       />
-                    )}
+                    )} */}
 
 
-                    {shouldShowContractDates(employeesToEdit.employment_status) && (
+                    {/* {shouldShowContractDates(employeesToEdit.employment_status) && (
                       <input
                         placeholder="Contract End Date"
                         type="text"
@@ -2776,7 +2765,7 @@ const handleAddEmployee = async () => {
                           })
                         }
                       />
-                    )}
+                    )} */}
 
                   </div>
 
@@ -2946,7 +2935,7 @@ const handleAddEmployee = async () => {
                       />
 
                     {/* Contract Start Date - Conditionally Shown */}
-                   {shouldShowContractDates() && (
+                   {/* {shouldShowContractDates() && (
                         <input
                           placeholder="Contract Start Date"
                           type="text"
@@ -2967,10 +2956,10 @@ const handleAddEmployee = async () => {
                             })
                           }
                         />
-                      )}
+                      )} */}
 
 
-                   {shouldShowContractDates() && (
+                   {/* {shouldShowContractDates() && (
                       <input
                         placeholder="Contract End Date"
                         type="text"
@@ -2990,7 +2979,7 @@ const handleAddEmployee = async () => {
                           })
                         }
                       />
-                    )}
+                    )} */}
 
 
                   <div className="modal-actions" style={styles.modalActions}>
@@ -4196,6 +4185,18 @@ checkbox: {
     borderRadius: '8px',
     border: 'none',
     backgroundColor: '#E74C3C',
+    color: '#fff',
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: '0.2s'
+  },
+
+  
+  saveBtn: {
+    padding: '10px 22px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: '#4CAF50',
     color: '#fff',
     fontSize: '14px',
     cursor: 'pointer',
