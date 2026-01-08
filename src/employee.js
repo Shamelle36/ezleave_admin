@@ -81,7 +81,8 @@ function Employees() {
   const [uploadBalancesProgress, setUploadBalancesProgress] = useState(0);
   
   const [newEmployee, setNewEmployee] = useState({
-    full_name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     position: '',
     department: '',
@@ -92,6 +93,8 @@ function Employees() {
     id_number: '',
     contact_number: '',
     civil_status: '',
+    contract_start_date: '',
+    contract_end_date: '',
   });
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -129,6 +132,10 @@ function Employees() {
   const [inactiveReason, setInactiveReason] = useState('');
   const [employeeToInactivate, setEmployeeToInactivate] = useState(null);
 
+  // Add state for delete confirmation modal
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [employeeToDeletePermanently, setEmployeeToDeletePermanently] = useState(null);
+
   // Reasons for making employee inactive
   const inactiveReasons = [
     "Resigned",
@@ -140,6 +147,29 @@ function Employees() {
     "Retired",
     "Other"
   ];
+
+  // Add this function to your component
+  const getMinMaxDates = () => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      maxDateHired: today, // Date hired cannot be in the future
+      minContractEnd: newEmployee.contract_start_date || today, // End date cannot be before start date
+    };
+  };
+
+  // Function to determine if contract dates should be shown
+  const shouldShowContractDates = (employmentType) => {
+    const fixedContractTypes = ['Temporary', 'Contractual', 'Casual', 'Job Order'];
+    const cosTypes = ['COS'];
+    const coterminousTypes = ['Coterminous'];
+    
+    const selectedType = employmentType || newEmployee.employment_status || '';
+    
+    // Show for fixed contract durations and coterminous
+    return fixedContractTypes.includes(selectedType) || 
+           cosTypes.includes(selectedType) || 
+           coterminousTypes.includes(selectedType);
+  };
 
   useEffect(() => {
     if (showTermsModal) {
@@ -334,6 +364,8 @@ function Employees() {
             gender: row[11]?.toString().toLowerCase().includes("female") ? "Female" : "Male",
             civil_status: normalizeCivilStatus(civilStatus),
             status: "active",
+            contract_start_date: row[13] ? new Date(row[13]).toISOString().split("T")[0] : "",
+            contract_end_date: row[14] ? new Date(row[14]).toISOString().split("T")[0] : "",
           };
         });
 
@@ -374,6 +406,8 @@ function Employees() {
                 contact_number: row.contact_number?.trim() || "",
                 id_number: row.id_number?.trim() || "",
                 status: row.status?.trim() || "active",
+                contract_start_date: row.contract_start_date?.trim() || "",
+                contract_end_date: row.contract_end_date?.trim() || "",
               };
             });
 
@@ -402,6 +436,12 @@ function Employees() {
         try {
           const payload = { ...emp };
           if (!payload.id_number) delete payload.id_number;
+          
+          // Clear contract dates for permanent employees
+          if (payload.employment_status === 'Permanent') {
+            delete payload.contract_start_date;
+            delete payload.contract_end_date;
+          }
 
           const response = await fetch(`${API_URL}/api/employees`, {
             method: "POST",
@@ -487,17 +527,19 @@ function Employees() {
   };
 
   // Function to delete inactive employee permanently
-  const handleDeleteInactive = async (employee) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to PERMANENTLY delete ${employee.first_name} ${employee.last_name}? This action cannot be undone.`
-    );
-    
-    if (!confirmDelete) return;
-    
+  const handleDeleteInactive = (employee) => {
+    setEmployeeToDeletePermanently(employee);
+    setShowDeleteConfirmModal(true);
+  };
+
+  // Function for permanent deletion
+  const confirmPermanentDelete = async () => {
+    if (!employeeToDeletePermanently) return;
+
     setIsDeleting(true);
     
     try {
-      const res = await fetch(`${API_URL}/api/employees/${employee.id}`, {
+      const res = await fetch(`${API_URL}/api/employees/${employeeToDeletePermanently.id}`, {
         method: "DELETE"
       });
 
@@ -506,7 +548,7 @@ function Employees() {
       }
 
       setEmployeeRecords((prev) =>
-        prev.filter((emp) => emp.id !== employee.id)
+        prev.filter((emp) => emp.id !== employeeToDeletePermanently.id)
       );
 
       alert("Employee permanently deleted!");
@@ -515,17 +557,14 @@ function Employees() {
       alert("Failed to delete employee");
     } finally {
       setIsDeleting(false);
+      setShowDeleteConfirmModal(false);
+      setEmployeeToDeletePermanently(null);
     }
   };
 
   // 🗑️ BULK DELETE SELECTED EMPLOYEES
   const handleBulkDelete = async () => {
     if (selectedEmployees.length === 0) return;
-
-    const confirmBulk = window.confirm(
-      `Are you sure you want to delete ${selectedEmployees.length} selected employees?`
-    );
-    if (!confirmBulk) return;
 
     setIsDeleting(true);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -606,45 +645,112 @@ function Employees() {
     navigate("/");
   };
 
-  const handleAddEmployee = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/employees`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newEmployee),
-      });
+const handleAddEmployee = async () => {
+  try {
+    console.log("Original newEmployee state:", newEmployee);
+    
+    const first_name = newEmployee.first_name.trim();
+    const last_name = newEmployee.last_name.trim();
 
-      if (!response.ok) {
-        throw new Error("Failed to add employee");
-      }
+    console.log("Name - First:", first_name, "Last:", last_name);
 
-      const savedEmployee = await response.json();
-
-      setEmployeeRecords((prev) => [savedEmployee, ...prev]);
-
-      setShowAddModal(false);
-      alert("Employee added successfully!");
-      
-      setNewEmployee({
-        full_name: "",
-        email: "",
-        position: "",
-        department_id: "",
-        employment_status: "",
-        gender: "",
-        status: "active",
-        date_hired: "",
-        id_number: "",
-        contact_number: "",
-        civil_status: "",
-      });
-    } catch (error) {
-      console.error(error);
-      alert("Error adding employee");
+    // Validate required fields
+    if (!first_name || !last_name) {
+      alert("First name and last name are required");
+      return;
     }
-  };
+
+    if (!newEmployee.email) {
+      alert("Email is required");
+      return;
+    }
+
+    // Prepare data for API - match backend field names
+    const employeeData = {
+      first_name,
+      last_name,
+      email: newEmployee.email,
+      position: newEmployee.position,
+      department: newEmployee.department,
+      employment_status: newEmployee.employment_status,
+      gender: newEmployee.gender,
+      status: 'active',
+      date_hired: newEmployee.date_hired,
+      id_number: newEmployee.id_number,
+      contact_number: newEmployee.contact_number,
+      civil_status: newEmployee.civil_status,
+    };
+    
+    // CRITICAL FIX: Use contractStart and contractEnd (not contract_start_date, contract_end_date)
+    if (newEmployee.employment_status !== 'Permanent') {
+      // Check if contract dates are required for this employment type
+      const needsContractDates = shouldShowContractDates(newEmployee.employment_status);
+      
+      if (needsContractDates) {
+        if (!newEmployee.contract_start_date || !newEmployee.contract_end_date) {
+          alert("Contract start and end dates are required for this employment status");
+          return;
+        }
+        
+        // Use the EXACT field names the backend expects
+        employeeData.contract_start_date = newEmployee.contract_start_date;
+        employeeData.contract_end_date = newEmployee.contract_end_date;
+      }
+    }
+
+    console.log("Data to be sent to API:", employeeData);
+
+    const response = await fetch(`${API_URL}/api/employees`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(employeeData),
+    });
+
+    console.log("Response status:", response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Error response:", errorText);
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || "Failed to add employee");
+      } catch (parseError) {
+        throw new Error(errorText || "Failed to add employee");
+      }
+    }
+
+    const savedEmployee = await response.json();
+    console.log("Saved employee:", savedEmployee);
+
+    setEmployeeRecords((prev) => [savedEmployee, ...prev]);
+
+    setShowAddModal(false);
+    alert("Employee added successfully!");
+    
+    // Reset form
+    setNewEmployee({
+      first_name: "",
+      last_name: "",
+      email: "",
+      position: "",
+      department: "",
+      employment_status: "",
+      gender: "",
+      status: "active",
+      date_hired: "",
+      id_number: "",
+      contact_number: "",
+      civil_status: "",
+      contract_start_date: "",
+      contract_end_date: "",
+    });
+  } catch (error) {
+    console.error("Add employee error:", error);
+    alert(`Error adding employee: ${error.message}`);
+  }
+};
 
   const handleViewClick = (employee) => {
     setSelectedEmployee(employee);
@@ -652,55 +758,61 @@ function Employees() {
   };
 
   const handleEditClick = (employee) => {
-  // Only allow editing active employees
-  if (employee.status === 'inactive') {
-    alert('Inactive employees cannot be edited. Please reactivate them first.');
-    return;
-  }
-  
-  // Remove status from editable fields
-  const { status, inactive_reason, ...editableFields } = employee;
-  setEmployeesToEdit(editableFields);
-  setShowEditModal(true);
-};
-
-const handleEditSave = async () => {
-  try {
-    // Get current employee data to preserve status
-    const currentEmployee = employeeRecord.find(emp => emp.id === employeesToEdit.id);
-    
-    // Prepare data for update - preserve the original status
-    const updateData = {
-      ...employeesToEdit,
-      status: currentEmployee?.status || 'active', // Preserve original status
-      // Don't include inactive_reason in edit
-    };
-
-    const response = await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updateData),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to update employee");
+    // Only allow editing active employees
+    if (employee.status === 'inactive') {
+      alert('Inactive employees cannot be edited. Please reactivate them first.');
+      return;
     }
-
-    const updatedEmployee = await response.json();
-
-    setEmployeeRecords((prev) =>
-      prev.map((emp) =>
-        emp.id === employeesToEdit.id ? updatedEmployee : emp
-      )
-    );
     
-    setShowEditModal(false);
-    alert("Employee updated successfully!");
-  } catch (error) {
-    console.error("Error updating employee:", error);
-    alert("Failed to update employee");
-  }
-};
+    // Include contract dates in editable fields
+    const { status, inactive_reason, ...editableFields } = employee;
+    setEmployeesToEdit(editableFields);
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async () => {
+    try {
+      // Get current employee data to preserve status
+      const currentEmployee = employeeRecord.find(emp => emp.id === employeesToEdit.id);
+      
+      // Prepare data for update - preserve the original status
+      const updateData = {
+        ...employeesToEdit,
+        status: currentEmployee?.status || 'active', // Preserve original status
+        // Don't include inactive_reason in edit
+      };
+
+      // Clear contract dates for permanent employees
+      if (updateData.employment_status === 'Permanent') {
+        delete updateData.contract_start_date;
+        delete updateData.contract_end_date;
+      }
+
+      const response = await fetch(`${API_URL}/api/employees/${employeesToEdit.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update employee");
+      }
+
+      const updatedEmployee = await response.json();
+
+      setEmployeeRecords((prev) =>
+        prev.map((emp) =>
+          emp.id === employeesToEdit.id ? updatedEmployee : emp
+        )
+      );
+      
+      setShowEditModal(false);
+      alert("Employee updated successfully!");
+    } catch (error) {
+      console.error("Error updating employee:", error);
+      alert("Failed to update employee");
+    }
+  };
 
   const handleSelectAll = (e) => {
     const checked = e.target.checked;
@@ -1617,20 +1729,20 @@ const handleEditSave = async () => {
       
         {showLogoutModal && (
           <div className="modal-overlay" style={styles.modalOverlay}>
-            <div className="modal-content" style={styles.modalContent}>
-              <h3>Confirm Logout</h3>
-              <p>Are you sure you want to log out?</p>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px', maxWidth: '500px'}}>
+              <h3 style={{marginBottom: '15px', color: '#2C3E50'}}>Confirm Logout</h3>
+              <p style={{marginBottom: '20px', fontSize: '16px'}}>Are you sure you want to log out?</p>
               <div className="modal-actions" style={styles.modalActions}>
                 <button
                   className="cancel-btn"
-                  style={styles.cancelBtn}
+                  style={{...styles.cancelBtn, backgroundColor: '#6c757d'}}
                   onClick={() => setShowLogoutModal(false)}
                 >
                   Cancel
                 </button>
                 <button
                   className="confirm-btn"
-                  style={styles.confirmBtn}
+                  style={{...styles.confirmBtn, backgroundColor: '#dc3545', border: 'none', borderRadius: '8px', padding: '10px', color: '#fff'}}
                   onClick={handleLogout}
                 >
                   Logout
@@ -1640,38 +1752,78 @@ const handleEditSave = async () => {
           </div>
         )}
 
-        {/* Inactive Modal (for Manage Employees tab) */}
+        {/* Upload CSV Confirmation Modal - Updated Design */}
+        {showConfirmModal && (
+          <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px', maxWidth: '500px'}}>
+              <h3 style={{marginBottom: '15px', color: '#2C3E50'}}>Confirm Import</h3>
+              <p style={{marginBottom: '20px', fontSize: '16px'}}>
+                Are you sure you want to import <strong>{employeesToUpload.length}</strong> employees?
+              </p>
+              <div className="modal-actions" style={styles.modalActions}>
+                <button
+                  className="cancel-btn"
+                  style={{...styles.cancelBtn, backgroundColor: '#6c757d'}}
+                  onClick={() => setShowConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="confirm-btn"
+                  style={{...styles.confirmBtn, backgroundColor: '#28a745', border: 'none', borderRadius: '8px', padding: '10px', color: '#fff'}}
+                  onClick={confirmUpload}
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Delete Confirmation Modal - Updated Design */}
+        {showBulkDeleteModal && (
+          <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px', maxWidth: '500px'}}>
+              <h3 style={{marginBottom: '15px', color: '#dc3545'}}>Confirm Bulk Deletion</h3>
+              <p style={{marginBottom: '20px', fontSize: '16px'}}>
+                You are about to permanently delete <strong>{selectedEmployees.length}</strong> employees.
+                This action cannot be undone.
+              </p>
+              <div className="modal-actions" style={styles.modalActions}>
+                <button
+                  className="cancel-btn"
+                  style={{...styles.cancelBtn, backgroundColor: '#6c757d'}}
+                  onClick={() => setShowBulkDeleteModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="confirm-btn"
+                  style={{...styles.confirmBtn, backgroundColor: '#dc3545', border: 'none', borderRadius: '8px', padding: '10px', color: '#fff'}}
+                  onClick={() => {
+                    setShowBulkDeleteModal(false);
+                    handleBulkDelete();
+                  }}
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Set Inactive Modal - Updated Design */}
         {showInactiveModal && employeeToInactivate && (
-          <div className="delete-modal-overlay" style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000
-          }}>
-            <div className="delete-modal-content" style={{
-              background: '#fff',
-              padding: '30px 20px',
-              width: '400px',
-              borderRadius: '12px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              textAlign: 'center'
-            }}>
-              <h3 style={{ marginBottom: '15px', color: '#d35400' }}>
-                Set Employee as Inactive
-              </h3>
+          <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px', maxWidth: '500px'}}>
+              <h3 style={{marginBottom: '15px', color: '#d35400'}}>Set Employee as Inactive</h3>
               
-              <p style={{ marginBottom: '15px', fontSize: '16px' }}>
+              <p style={{marginBottom: '15px', fontSize: '16px'}}>
                 Set <strong>{employeeToInactivate?.full_name}</strong> as inactive?
               </p>
               
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', textAlign: 'left' }}>
+              <div style={{marginBottom: '20px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontWeight: '500', textAlign: 'left'}}>
                   Reason for Inactive Status:
                 </label>
                 <select
@@ -1679,10 +1831,11 @@ const handleEditSave = async () => {
                   onChange={(e) => setInactiveReason(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '8px',
+                    padding: '10px',
                     borderRadius: '6px',
                     border: '1px solid #ccc',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    backgroundColor: '#fff'
                   }}
                 >
                   <option value="">Select a reason</option>
@@ -1691,66 +1844,91 @@ const handleEditSave = async () => {
                   ))}
                 </select>
                 {!inactiveReason && (
-                  <p style={{ color: '#e74c3c', fontSize: '12px', textAlign: 'left', marginTop: '5px' }}>
+                  <p style={{color: '#e74c3c', fontSize: '12px', textAlign: 'left', marginTop: '5px'}}>
                     Please select a reason
                   </p>
                 )}
               </div>
               
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
+              <div className="modal-actions" style={styles.modalActions}>
                 <button 
-                  className="confirm-inactive-btn"
+                  className="cancel-btn"
+                  style={{...styles.cancelBtn, backgroundColor: '#6c757d'}}
+                  onClick={() => {
+                    setShowInactiveModal(false);
+                    setEmployeeToInactivate(null);
+                    setInactiveReason('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="confirm-btn"
                   onClick={confirmSetInactive} 
                   disabled={!inactiveReason}
                   style={{
-                    padding: '8px 16px',
+                    ...styles.confirmBtn,
                     backgroundColor: inactiveReason ? '#d35400' : '#ccc',
-                    color: '#fff',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    color: '#fff',
                     cursor: inactiveReason ? 'pointer' : 'not-allowed',
                     fontWeight: 'bold'
                   }}
                 >
                   Set as Inactive
                 </button>
-                <button 
-                  className="cancel-inactive-btn"
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Inactive Employee Confirmation Modal */}
+        {showDeleteConfirmModal && employeeToDeletePermanently && (
+          <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px', maxWidth: '500px'}}>
+              <h3 style={{marginBottom: '15px', color: '#dc3545'}}>Permanently Delete Employee</h3>
+              <p style={{marginBottom: '20px', fontSize: '16px'}}>
+                Are you sure you want to PERMANENTLY delete <strong>{employeeToDeletePermanently.first_name} {employeeToDeletePermanently.last_name}</strong>? 
+                This action cannot be undone.
+              </p>
+              <div className="modal-actions" style={styles.modalActions}>
+                <button
+                  className="cancel-btn"
+                  style={{...styles.cancelBtn, backgroundColor: '#6c757d'}}
                   onClick={() => {
-                    setShowInactiveModal(false);
-                    setEmployeeToInactivate(null);
-                    setInactiveReason('');
-                  }} 
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#ccc',
-                    color: '#333',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
+                    setShowDeleteConfirmModal(false);
+                    setEmployeeToDeletePermanently(null);
                   }}
                 >
                   Cancel
+                </button>
+                <button
+                  className="confirm-btn"
+                  style={{...styles.confirmBtn, backgroundColor: '#dc3545', border: 'none', borderRadius: '8px', padding: '10px', color: '#fff'}}
+                  onClick={confirmPermanentDelete}
+                >
+                  Delete Permanently
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Reactivate Modal */}
+        {/* Reactivate Modal - Keep as is */}
         {showReactivateModal && employeeToReactivate && (
           <div className="modal-overlay" style={styles.modalOverlay}>
-            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px'}}>
-              <h3>Reactivate Employee</h3>
-              <p>
+            <div className="modal-content" style={{...styles.modalContent, backgroundColor: '#fff', borderRadius: '10px', padding: '20px', maxWidth: '500px'}}>
+              <h3 style={{marginBottom: '15px', color: '#009205'}}>Reactivate Employee</h3>
+              <p style={{marginBottom: '20px', fontSize: '16px'}}>
                 Are you sure you want to reactivate <strong>{employeeToReactivate.first_name} {employeeToReactivate.last_name}</strong>? 
                 This will restore their access to the system.
               </p>
               <div className="modal-actions" style={styles.modalActions}>
                 <button
                   className="cancel-btn"
-                  style={styles.cancelBtn}
+                  style={{...styles.cancelBtn, backgroundColor: '#6c757d'}}
                   onClick={() => {
                     setShowReactivateModal(false);
                     setEmployeeToReactivate(null);
@@ -1919,82 +2097,6 @@ const handleEditSave = async () => {
                       <span>Delete Selected ({selectedEmployees.length})</span>
                     </button>
                   )}
-
-                  {showBulkDeleteModal && (
-                    <div className="bulk-delete-modal" style={{
-                      position: 'fixed',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      background: 'rgba(0,0,0,0.5)',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      zIndex: 1000,
-                    }}>
-                      <div className="bulk-delete-content" style={{
-                        background: '#fff',
-                        padding: '30px 25px',
-                        width: '420px',
-                        borderRadius: '12px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                        textAlign: 'center',
-                        animation: 'fadeIn 0.3s ease-in-out',
-                      }}>
-                        <FontAwesomeIcon
-                          icon={faTrash}
-                          style={{ color: '#d62828', fontSize: '40px', marginBottom: '10px' }}
-                        />
-                        <h3 style={{ marginBottom: '10px', fontSize: '18px' }}>Confirm Bulk Deletion</h3>
-                        <p style={{ marginBottom: '25px', color: '#555', fontSize: '15px' }}>
-                          You are about to permanently delete <strong>{selectedEmployees.length}</strong> employees.
-                          This action cannot be undone.
-                        </p>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                          <button
-                            className="confirm-bulk-delete"
-                            onClick={() => {
-                              setShowBulkDeleteModal(false);
-                              handleBulkDelete();
-                            }}
-                            style={{
-                              backgroundColor: '#d62828',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '10px 18px',
-                              fontWeight: 'bold',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            className="cancel-bulk-delete"
-                            onClick={() => setShowBulkDeleteModal(false)}
-                            style={{
-                              backgroundColor: '#ccc',
-                              color: '#333',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '10px 18px',
-                              fontWeight: 'bold',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                        <style>
-                          {`@keyframes fadeIn {
-                            from { opacity: 0; transform: translateY(-10px); }
-                            to { opacity: 1; transform: translateY(0); }
-                          }`}
-                        </style>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
             </div>
@@ -2138,16 +2240,6 @@ const handleEditSave = async () => {
                 
               </div>
             </div>
-
-            {showConfirmModal && (
-              <div className="confirm-modal" style={styles.confirmModal}>
-                <div className="question-modal" style={styles.questionModal}>
-                  <p style={{fontSize: '20px'}}>Are you sure you want to import {employeesToUpload.length} employees?</p>
-                  <button className="btn-yes" onClick={confirmUpload} style={styles.btnYes}>Yes</button>
-                  <button className="btn-no" onClick={() => setShowConfirmModal(false)} style={styles.btnNo}>Cancel</button>
-                </div>
-              </div>
-            )}
 
             {showUploadBalancesModal && (
               <div className="modal-overlay" style={styles.modalOverlay}>
@@ -2425,6 +2517,27 @@ const handleEditSave = async () => {
                           <label>Date Hired</label>
                           <p>{new Date(selectedEmployee.date_hired).toLocaleDateString()}</p>
                         </div>
+                        {/* Show contract dates only for non-permanent employees */}
+                        {selectedEmployee.employment_status !== 'Permanent' && (
+                          <>
+                            <div className="detail-item">
+                              <label>Contract Start</label>
+                              <p>
+                                {selectedEmployee.contract_start_date 
+                                  ? new Date(selectedEmployee.contract_start_date).toLocaleDateString() 
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                            <div className="detail-item">
+                              <label>Contract End</label>
+                              <p>
+                                {selectedEmployee.contract_end_date 
+                                  ? new Date(selectedEmployee.contract_end_date).toLocaleDateString() 
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2459,25 +2572,29 @@ const handleEditSave = async () => {
                   </p>
 
                   <div className="modal-grid" style={styles.modalGrid}>
-                    {/* First Name */}
                     <input
                       placeholder="First Name"
                       className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.first_name || ''}
                       onChange={(e) =>
-                        setEmployeesToEdit({ ...employeesToEdit, first_name: e.target.value.replace(/[0-9]/g, "") })
+                        setEmployeesToEdit({ 
+                          ...employeesToEdit, 
+                          first_name: e.target.value.replace(/[^A-Za-z\s\-']/g, "") 
+                        })
                       }
                     />
 
-                    {/* Last Name */}
                     <input
                       placeholder="Last Name"
                       className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.last_name || ''}
                       onChange={(e) =>
-                        setEmployeesToEdit({ ...employeesToEdit, last_name: e.target.value.replace(/[0-9]/g, "") })
+                        setEmployeesToEdit({ 
+                          ...employeesToEdit, 
+                          last_name: e.target.value.replace(/[^A-Za-z\s\-']/g, "") 
+                        })
                       }
                     />
 
@@ -2595,14 +2712,72 @@ const handleEditSave = async () => {
                       </div>
                     </div>
 
-                    {/* Date Hired */}
                     <input
-                      type="date"
+                      placeholder="Select date hired"
+                      type="text"
+                      onFocus={(e) => (e.target.type = "date")}
+                      onBlur={(e) => {
+                        if (!e.target.value) e.target.type = "text";
+                      }}
                       className="modal-input"
                       style={styles.modalInput}
                       value={employeesToEdit.date_hired || ""}
-                      onChange={(e) => setEmployeesToEdit({ ...employeesToEdit, date_hired: e.target.value })}
+                      onChange={(e) =>
+                        setEmployeesToEdit({
+                          ...employeesToEdit,
+                          date_hired: e.target.value,
+                        })
+                      }
+                      max={new Date().toISOString().split("T")[0]}
                     />
+
+
+                    {shouldShowContractDates(employeesToEdit.employment_status) && (
+                      <input
+                        placeholder="Contract Start Date"
+                        type="text"
+                        onFocus={(e) => (e.target.type = "date")}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = "text";
+                        }}
+                        className="modal-input"
+                        style={styles.modalInput}
+                        value={employeesToEdit.contract_start_date || ""}
+                        min={employeesToEdit.date_hired || undefined}
+                        disabled={!employeesToEdit.date_hired}
+                        onChange={(e) =>
+                          setEmployeesToEdit({
+                            ...employeesToEdit,
+                            contract_start_date: e.target.value,
+                            contract_end_date: "", // reset end date if start changes
+                          })
+                        }
+                      />
+                    )}
+
+
+                    {shouldShowContractDates(employeesToEdit.employment_status) && (
+                      <input
+                        placeholder="Contract End Date"
+                        type="text"
+                        onFocus={(e) => (e.target.type = "date")}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = "text";
+                        }}
+                        className="modal-input"
+                        style={styles.modalInput}
+                        value={employeesToEdit.contract_end_date || ""}
+                        min={employeesToEdit.contract_start_date || undefined}
+                        disabled={!employeesToEdit.contract_start_date}
+                        onChange={(e) =>
+                          setEmployeesToEdit({
+                            ...employeesToEdit,
+                            contract_end_date: e.target.value,
+                          })
+                        }
+                      />
+                    )}
+
                   </div>
 
                   {/* Actions */}
@@ -2628,7 +2803,10 @@ const handleEditSave = async () => {
                       className="modal-input"
                       style={styles.modalInput}
                       value={newEmployee.first_name}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, first_name: e.target.value.replace(/[0-9]/g, "") })}
+                      onChange={(e) => setNewEmployee({ 
+                        ...newEmployee, 
+                        first_name: e.target.value.replace(/[^A-Za-z\s\-']/g, "") 
+                      })}
                     />
 
                     <input
@@ -2636,7 +2814,10 @@ const handleEditSave = async () => {
                       className="modal-input"
                       style={styles.modalInput}
                       value={newEmployee.last_name}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, last_name: e.target.value.replace(/[0-9]/g, "") })}
+                      onChange={(e) => setNewEmployee({ 
+                        ...newEmployee, 
+                        last_name: e.target.value.replace(/[^A-Za-z\s\-']/g, "") 
+                      })}
                     />
 
                     <input
@@ -2761,7 +2942,56 @@ const handleEditSave = async () => {
                         style={styles.modalInput}
                         value={newEmployee.date_hired || ''}
                         onChange={(e) => setNewEmployee({ ...newEmployee, date_hired: e.target.value })}
+                        max={new Date().toISOString().split('T')[0]}
                       />
+
+                    {/* Contract Start Date - Conditionally Shown */}
+                   {shouldShowContractDates() && (
+                        <input
+                          placeholder="Contract Start Date"
+                          type="text"
+                          onFocus={(e) => (e.target.type = 'date')}
+                          onBlur={(e) => {
+                            if (!e.target.value) e.target.type = 'text';
+                          }}
+                          className="modal-input"
+                          style={styles.modalInput}
+                          value={newEmployee.contract_start_date || ''}
+                          min={newEmployee.date_hired || undefined}
+                          disabled={!newEmployee.date_hired}
+                          onChange={(e) =>
+                            setNewEmployee({
+                              ...newEmployee,
+                              contract_start_date: e.target.value,
+                              contract_end_date: '' // reset end date if start changes
+                            })
+                          }
+                        />
+                      )}
+
+
+                   {shouldShowContractDates() && (
+                      <input
+                        placeholder="Contract End Date"
+                        type="text"
+                        onFocus={(e) => (e.target.type = 'date')}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = 'text';
+                        }}
+                        className="modal-input"
+                        style={styles.modalInput}
+                        value={newEmployee.contract_end_date || ''}
+                        min={newEmployee.contract_start_date || undefined}
+                        disabled={!newEmployee.contract_start_date}
+                        onChange={(e) =>
+                          setNewEmployee({
+                            ...newEmployee,
+                            contract_end_date: e.target.value
+                          })
+                        }
+                      />
+                    )}
+
 
                   <div className="modal-actions" style={styles.modalActions}>
                     <button className="cancel-btn" style={styles.cancelBtn} onClick={() => setShowAddModal(false)}>Cancel</button>
@@ -3702,7 +3932,7 @@ viewCloseBtn: {
   padding: '10px 24px',
   border: 'none',
   borderRadius: '6px',
-  fontSize: '14px',
+    fontSize: '14px',
   cursor: 'pointer',
   transition: 'background-color 0.3s ease',
 },
@@ -3862,6 +4092,15 @@ checkbox: {
     zIndex: 9999
   },
 
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: '10px',
+    padding: '20px',
+    maxWidth: '500px',
+    width: '90%',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+  },
+
   modalContainer: {
     backgroundColor: '#fff',
     borderRadius: '12px',
@@ -3963,7 +4202,7 @@ checkbox: {
     transition: '0.2s'
   },
 
-  saveBtn: {
+  confirmBtn: {
     padding: '10px 22px',
     borderRadius: '8px',
     border: 'none',
