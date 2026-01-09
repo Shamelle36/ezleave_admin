@@ -39,7 +39,11 @@ import {
   faTimes,
   faBars,
   faEye,
-  faDownload
+  faDownload,
+  faEdit,
+  faPlus,
+  faSave,
+  faFileImport
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -50,7 +54,6 @@ import SignatureCanvas from 'react-signature-canvas';
 import './leave-management-responsive.css';
 import './dashboard-responsive.css'; 
 import ProfileDropdown from './profileDropdown.js';
-
 
 function LeaveManagement() {
     const navigate = useNavigate();
@@ -162,6 +165,12 @@ const [availableLeaveTypes, setAvailableLeaveTypes] = useState([]);
 const [loadingApprovalId, setLoadingApprovalId] = useState(null);
 const [loadingRejectionId, setLoadingRejectionId] = useState(null);
 
+const [newLeaveType, setNewLeaveType] = useState({
+  name: '',
+  abbreviation: '',
+  days: 15
+});
+
 // Helper function to calculate days between dates
 const calculateDaysBetween = (startDate, endDate) => {
   try {
@@ -175,7 +184,7 @@ const calculateDaysBetween = (startDate, endDate) => {
   }
 };
 
-const leaveTypeMap = {
+const [leaveTypeMap, setLeaveTypeMap] = useState({
   "Vacation Leave": "VL",
   "Mandatory/Forced Leave": "ML",
   "Sick Leave": "SL",
@@ -191,7 +200,7 @@ const leaveTypeMap = {
   "Monetization of Leave Credits": "MOL",
   "Terminal Leave": "TL",
   "Adoption Leave": "AL",
-};
+});
 
 const printTable = (tableId) => {
   const printWindow = window.open('', '_blank');
@@ -2093,6 +2102,102 @@ const getLeaveAbbreviation = (leaveType) => {
   }
 };
 
+const addNewLeaveType = async (leaveTypeData) => {
+  try {
+    const { leaveName, abbreviation, defaultEntitlement } = leaveTypeData;
+    
+    // First, add to your local leaveTypeMap
+    const updatedLeaveTypeMap = {
+      ...leaveTypeMap,
+      [leaveName]: abbreviation
+    };
+    
+    // Update state
+    setLeaveTypeMap(updatedLeaveTypeMap);
+    
+    // You might want to save this to localStorage or backend
+    localStorage.setItem('leaveTypes', JSON.stringify(updatedLeaveTypeMap));
+    
+    // Then add to all employees
+    const response = await fetch(`${API_URL}/api/employees/add-leave-type-to-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leaveType: abbreviation,
+        days: defaultEntitlement
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      alert(`✅ ${data.message}\nAdded to ${data.addedCount} employees`);
+      
+      // Refresh leave types in the calendar filter
+      setAvailableLeaveTypes(prev => {
+        const newTypes = [...prev, leaveName];
+        return [...new Set(newTypes)].sort();
+      });
+      
+      return { success: true, data };
+    } else {
+      alert(`❌ Failed to add leave type: ${data.error}`);
+      return { success: false, error: data.error };
+    }
+  } catch (error) {
+    console.error('Error adding leave type:', error);
+    alert('Error adding leave type. Please try again.');
+    return { success: false, error: error.message };
+  }
+};
+
+const handleAddLeaveType = async () => {
+  if (!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim()) {
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  // Check if abbreviation already exists
+  const existingAbbr = Object.values(leaveTypeMap).find(abbr => abbr === newLeaveType.abbreviation);
+  if (existingAbbr) {
+    alert(`Abbreviation "${newLeaveType.abbreviation}" already exists. Please use a different abbreviation.`);
+    return;
+  }
+
+  // Check if name already exists
+  const existingName = Object.keys(leaveTypeMap).find(name => name.toLowerCase() === newLeaveType.name.toLowerCase());
+  if (existingName) {
+    alert(`Leave type "${newLeaveType.name}" already exists.`);
+    return;
+  }
+
+  // Show confirmation
+  if (window.confirm(`Add "${newLeaveType.name}" to ALL employees with ${newLeaveType.days} days entitlement?`)) {
+    try {
+      const result = await addNewLeaveType({
+        leaveName: newLeaveType.name,
+        abbreviation: newLeaveType.abbreviation,
+        defaultEntitlement: parseInt(newLeaveType.days)
+      });
+      
+      if (result.success) {
+        // Clear form on success
+        setNewLeaveType({
+          name: '',
+          abbreviation: '',
+          days: 15
+        });
+        
+        // Show success message
+        alert(`✅ Leave type "${newLeaveType.name}" added successfully!`);
+      }
+      
+    } catch (error) {
+      console.error('Error adding leave type:', error);
+      alert('Error adding leave type. Please try again.');
+    }
+  }
+};
 
   return (
     <div style={styles.dashboardContainer}>
@@ -2339,6 +2444,13 @@ const getLeaveAbbreviation = (leaveType) => {
                     onClick={() => setActiveTab('requests')}
                 >
                     Leave Requests
+                </button>
+                <button
+                    style={tabButtonStyle(activeTab === 'leaveSettings')}
+                    onClick={() => setActiveTab('leaveSettings')}
+                >
+                    <FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />
+                    Leave Settings
                 </button>
               
             </div>
@@ -3640,6 +3752,154 @@ const getLeaveAbbreviation = (leaveType) => {
     </div>
   </div>
 )}
+
+{activeTab === 'leaveSettings' && (
+    <div style={styles.leaveSettingsContainer}>
+        <div style={styles.settingsHeader}>
+            <h2 style={styles.settingsTitle}>
+                <FontAwesomeIcon icon={faCog} style={{ marginRight: '10px' }} />
+                Leave Types Management
+            </h2>
+            <p style={styles.settingsSubtitle}>
+                Configure leave types and set default entitlements
+            </p>
+        </div>
+
+        {/* TWO COLUMN LAYOUT */}
+        <div style={styles.settingsLayout}>
+            {/* LEFT COLUMN: Existing Leave Types */}
+            <div style={styles.leftColumn}>
+                <div style={styles.sectionCard}>
+                    <div style={styles.sectionHeader}>
+                        <h3 style={styles.sectionTitle}>Existing Leave Types</h3>
+                        <span style={styles.countBadge}>
+                            {Object.keys(leaveTypeMap).length} types
+                        </span>
+                    </div>
+                    
+                    <div style={styles.leaveTypesList}>
+                        {Object.entries(leaveTypeMap).map(([fullName, abbr]) => (
+                            <div key={abbr} style={styles.leaveTypeItem}>
+                                <div style={styles.leaveTypeInfo}>
+                                    <div style={styles.leaveTypeCode}>{abbr}</div>
+                                    <div>
+                                        <div style={styles.leaveTypeName}>{fullName}</div>
+                                        <div style={styles.leaveTypeMeta}>
+                                            Default: 15 days/year
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={styles.leaveTypeActions}>
+                                    <button 
+                                        style={styles.editBtn}
+                                        title="Edit leave type"
+                                        onClick={() => {
+                                            // Edit functionality
+                                            const newName = prompt(`Edit leave type name:`, fullName);
+                                            if (newName && newName !== fullName) {
+                                                // Update logic here
+                                            }
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faEdit} />
+                                    </button>
+                                    <button 
+                                        style={styles.deleteBtn}
+                                        title="Delete leave type"
+                                        onClick={() => {
+                                            if (window.confirm(`Delete "${fullName}"? This will remove it from all employees.`)) {
+                                                // Delete logic here
+                                                const updatedMap = { ...leaveTypeMap };
+                                                delete updatedMap[fullName];
+                                                setLeaveTypeMap(updatedMap);
+                                                localStorage.setItem('leaveTypes', JSON.stringify(updatedMap));
+                                            }
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faTrash} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* RIGHT COLUMN: Add New Leave Type */}
+            <div style={styles.rightColumn}>
+                <div style={styles.sectionCard}>
+                    <h3 style={styles.sectionTitle}>
+                        <FontAwesomeIcon icon={faPlus} style={{ marginRight: '8px' }} />
+                        Add New Leave Type
+                    </h3>
+                    
+                    <div style={styles.addLeaveForm}>
+                        <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>Leave Type Name *</label>
+                            <input 
+                                type="text" 
+                                style={styles.formInput}
+                                placeholder="e.g., Bereavement Leave, Mental Health Day"
+                                value={newLeaveType.name}
+                                onChange={(e) => setNewLeaveType({...newLeaveType, name: e.target.value})}
+                            />
+                        </div>
+
+                        <div style={styles.formRow}>
+                            <div style={styles.formGroup}>
+                                <label style={styles.formLabel}>Abbreviation *</label>
+                                <input 
+                                    type="text" 
+                                    style={styles.formInput}
+                                    placeholder="e.g., BL, MHD"
+                                    value={newLeaveType.abbreviation}
+                                    onChange={(e) => setNewLeaveType({...newLeaveType, abbreviation: e.target.value.toUpperCase()})}
+                                    maxLength="5"
+                                />
+                                <small style={styles.helperText}>Max 5 characters (e.g., VL, SL)</small>
+                            </div>
+                            
+                            <div style={styles.formGroup}>
+                                <label style={styles.formLabel}>Default Entitlement *</label>
+                                <div style={styles.inputWithUnit}>
+                                    <input 
+                                        type="number" 
+                                        style={styles.formInput}
+                                        placeholder="0"
+                                        min="0"
+                                        max="365"
+                                        value={newLeaveType.days}
+                                        onChange={(e) => setNewLeaveType({...newLeaveType, days: parseInt(e.target.value)})}
+                                    />
+                                    <span style={styles.inputUnit}>days/year</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={styles.formActions}>
+                            <button 
+                                style={styles.clearBtn}
+                                onClick={() => setNewLeaveType({ name: '', abbreviation: '', days: 15 })}
+                            >
+                                <FontAwesomeIcon icon={faEraser} style={{ marginRight: '8px' }} />
+                                Clear Form
+                            </button>
+                            <button 
+                                style={styles.submitBtn}
+                                onClick={handleAddLeaveType}
+                                disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim()}
+                            >
+                                <FontAwesomeIcon icon={faSave} style={{ marginRight: '8px' }} />
+                                Save New Leave Type
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+)}
+
              </div>
 
           <LeaveTooltip 
@@ -6979,6 +7239,386 @@ legendText: {
   color: '#666',
 },
 
+// Add/Update these styles - NO DOTS in property names
+leaveSettingsContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '30px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+},
+settingsHeader: {
+    marginBottom: '30px',
+    paddingBottom: '20px',
+    borderBottom: '1px solid #E5E7EB'
+},
+settingsTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#1F2937',
+    margin: '0 0 8px 0'
+},
+settingsSubtitle: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: 0
+},
+settingsLayout: {
+    display: 'flex',
+    gap: '30px',
+    flexWrap: 'wrap'
+},
+leftColumn: {
+    flex: 2,
+    minWidth: '400px'
+},
+rightColumn: {
+    flex: 1,
+    minWidth: '400px'
+},
+sectionCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: '12px',
+    padding: '25px',
+    marginBottom: '25px',
+    border: '1px solid #E5E7EB'
+},
+sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px'
+},
+sectionTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#1F2937',
+    margin: '0 0 15px 0'
+},
+subsectionTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#4B5563',
+    margin: '0 0 12px 0',
+    paddingBottom: '8px',
+    borderBottom: '1px solid #E5E7EB'
+},
+countBadge: {
+    backgroundColor: '#E5E7EB',
+    color: '#374151',
+    padding: '4px 12px',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: '600'
+},
+leaveTypesList: {
+    maxHeight: '500px',
+    overflowY: 'auto',
+    paddingRight: '10px'
+},
+leaveTypeItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '15px',
+    marginBottom: '10px',
+    backgroundColor: '#ffffff',
+    borderRadius: '10px',
+    border: '1px solid #E5E7EB',
+    transition: 'all 0.2s ease'
+},
+leaveTypeInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px'
+},
+leaveTypeCode: {
+    backgroundColor: '#5ab049ff',
+    color: '#ffffff',
+    width: '45px',
+    height: '45px',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: '700',
+    fontSize: '16px',
+    boxShadow: '0 2px 4px rgba(90, 176, 73, 0.3)'
+},
+leaveTypeName: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: '4px'
+},
+leaveTypeMeta: {
+    fontSize: '13px',
+    color: '#6B7280'
+},
+leaveTypeActions: {
+    display: 'flex',
+    gap: '10px'
+},
+editBtn: {
+    backgroundColor: '#3B82F6',
+    color: '#ffffff',
+    border: 'none',
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease'
+},
+deleteBtn: {
+    backgroundColor: '#EF4444',
+    color: '#ffffff',
+    border: 'none',
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease'
+},
+globalSettings: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px'
+},
+settingItem: {
+    paddingBottom: '15px',
+    borderBottom: '1px solid #E5E7EB'
+},
+settingLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '14px',
+    color: '#374151',
+    fontWeight: '500',
+    marginBottom: '5px',
+    cursor: 'pointer'
+},
+settingNote: {
+    fontSize: '12px',
+    color: '#6B7280',
+    marginLeft: '26px',
+    display: 'block'
+},
+smallSelect: {
+    padding: '8px 12px',
+    border: '1px solid #D1D5DB',
+    borderRadius: '6px',
+    fontSize: '14px',
+    backgroundColor: '#ffffff',
+    marginLeft: '10px',
+    minWidth: '100px'
+},
+addLeaveForm: {
+    marginTop: '10px'
+},
+formGroup: {
+    marginBottom: '20px'
+},
+formLabel: {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '8px'
+},
+formInput: {
+    width: '100%',
+    padding: '12px',
+    border: '1px solid #D1D5DB',
+    borderRadius: '8px',
+    fontSize: '14px',
+    boxSizing: 'border-box',
+    transition: 'all 0.2s ease'
+},
+inputWithUnit: {
+    position: 'relative'
+},
+inputUnit: {
+    position: 'absolute',
+    right: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    fontSize: '14px',
+    color: '#6B7280'
+},
+formSelect: {
+    width: '100%',
+    padding: '12px',
+    border: '1px solid #D1D5DB',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: '#ffffff',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+},
+formRow: {
+    display: 'flex',
+    gap: '20px',
+    marginBottom: '20px'
+},
+helperText: {
+    fontSize: '12px',
+    color: '#6B7280',
+    marginTop: '6px',
+    display: 'block'
+},
+checkboxGroup: {
+    backgroundColor: '#ffffff',
+    padding: '20px',
+    borderRadius: '8px',
+    border: '1px solid #E5E7EB',
+    marginBottom: '20px'
+},
+checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    fontSize: '14px',
+    color: '#374151',
+    cursor: 'pointer',
+    padding: '8px 0',
+    transition: 'all 0.2s ease'
+},
+checkbox: {
+    width: '18px',
+    height: '18px',
+    cursor: 'pointer'
+},
+formTextarea: {
+    width: '100%',
+    padding: '12px',
+    border: '1px solid #D1D5DB',
+    borderRadius: '8px',
+    fontSize: '14px',
+    resize: 'vertical',
+    minHeight: '100px',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s ease'
+},
+formActions: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'flex-end',
+    marginTop: '30px',
+    paddingTop: '20px',
+    borderTop: '1px solid #E5E7EB'
+},
+clearBtn: {
+    padding: '12px 20px',
+    backgroundColor: '#6B7280',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
+},
+submitBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#5ab049ff',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
+},
+importExportSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px'
+},
+importBox: {
+    textAlign: 'center',
+    padding: '25px',
+    border: '2px dashed #D1D5DB',
+    borderRadius: '10px',
+    backgroundColor: '#ffffff',
+    transition: 'all 0.2s ease'
+},
+exportBox: {
+    textAlign: 'center',
+    padding: '25px',
+    border: '2px dashed #D1D5DB',
+    borderRadius: '10px',
+    backgroundColor: '#ffffff',
+    transition: 'all 0.2s ease'
+},
+importIcon: {
+    color: '#3B82F6',
+    marginBottom: '12px'
+},
+exportIcon: {
+    color: '#10B981',
+    marginBottom: '12px'
+},
+importText: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: '0 0 15px 0'
+},
+exportText: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: '0 0 15px 0'
+},
+fileInput: {
+    width: '100%',
+    marginBottom: '15px',
+    padding: '10px',
+    border: '1px solid #D1D5DB',
+    borderRadius: '6px',
+    backgroundColor: '#ffffff'
+},
+downloadTemplateBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#3B82F6',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
+},
+exportBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#10B981',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
+}
 
 };
 

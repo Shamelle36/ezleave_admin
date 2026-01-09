@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -47,6 +47,8 @@ import * as XLSX from "xlsx";
 import './employee-responsive.css';
 import ProfileDropdown from './profileDropdown';
 
+import * as tf from '@tensorflow/tfjs';
+
 function Employees() {
   const [employeeRecord, setEmployeeRecords] = useState([]);
   const [filterEmploymentType, setFilterEmploymentType] = useState('');
@@ -90,6 +92,7 @@ function Employees() {
   const [newSignature, setNewSignature] = useState(null);
   const [signaturePreview, setSignaturePreview] = useState(null);
   const [isUploadingSignature, setIsUploadingSignature] = useState(false);
+  
   
   const [newEmployee, setNewEmployee] = useState({
     first_name: '',
@@ -147,6 +150,20 @@ function Employees() {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [employeeToDeletePermanently, setEmployeeToDeletePermanently] = useState(null);
 
+  const [isVerifyingSignature, setIsVerifyingSignature] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+  const [signatureCanvas, setSignatureCanvas] = useState(null);
+  const canvasRef = useRef(null);
+
+ const [isTfLoaded, setIsTfLoaded] = useState(false);
+  const [signatureModel, setSignatureModel] = useState(null);
+  const [predictionScore, setPredictionScore] = useState(null);
+  const [tfModel, setTfModel] = useState(null);
+  const [isTraining, setIsTraining] = useState(false);
+  const [trainingProgress, setTrainingProgress] = useState(0);
+
+  
+
   // Reasons for making employee inactive
   const inactiveReasons = [
     "Resigned",
@@ -167,6 +184,7 @@ function Employees() {
       minContractEnd: newEmployee.contract_start_date || today, // End date cannot be before start date
     };
   };
+
 
   // Function to determine if contract dates should be shown
   const shouldShowContractDates = (employmentType) => {
@@ -201,6 +219,31 @@ function Employees() {
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
+
+  // Add this useEffect at the top of your component, after the state declarations
+useEffect(() => {
+  if (showSignatureModal || showUploadBalancesModal || showConfirmModal || 
+      showBulkDeleteModal || showInactiveModal || showDeleteConfirmModal || 
+      showReactivateModal || showSettingsModal || showTermsModal || 
+      showTimeSettingsModal || showAddModal || showEditModal || 
+      showViewModal || showProfileModal || showLogoutModal) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = 'auto';
+  }
+  
+  // Cleanup function
+  return () => {
+    document.body.style.overflow = 'auto';
+  };
+}, [
+  showSignatureModal, showUploadBalancesModal, showConfirmModal, 
+  showBulkDeleteModal, showInactiveModal, showDeleteConfirmModal, 
+  showReactivateModal, showSettingsModal, showTermsModal, 
+  showTimeSettingsModal, showAddModal, showEditModal, 
+  showViewModal, showProfileModal, showLogoutModal
+]);
+
 
   // Function to view/upload signature
 const handleSignatureClick = (employee) => {
@@ -242,8 +285,7 @@ const loadEmployeeSignature = async (employeeId) => {
   }
 };
 
-// Handle signature file upload
-const handleSignatureFileChange = (e) => {
+const handleSignatureFileChange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
@@ -254,9 +296,9 @@ const handleSignatureFileChange = (e) => {
     return;
   }
 
-  // Validate file size (max 2MB)
-  if (file.size > 2 * 1024 * 1024) {
-    alert('File size too large. Maximum size is 2MB.');
+  // Validate file size (max 5MB for better quality)
+  if (file.size > 5 * 1024 * 1024) {
+    alert('File size too large. Maximum size is 5MB.');
     return;
   }
 
@@ -265,7 +307,8 @@ const handleSignatureFileChange = (e) => {
   // Create preview
   const reader = new FileReader();
   reader.onload = (e) => {
-    setSignaturePreview(e.target.result);
+    const imageSrc = e.target.result;
+    setSignaturePreview(imageSrc);
   };
   reader.readAsDataURL(file);
 };
@@ -406,6 +449,273 @@ useEffect(() => {
     }
     return false;
   });
+
+const renderSignatureModal = () => {
+  return (
+    <div className="modal-overlay" style={styles.modalOverlay}>
+      <div className="modal-content" style={{
+        ...styles.modalContent,
+        maxWidth: '800px',
+        backgroundColor: '#fff',
+        borderRadius: '10px',
+        padding: '25px'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          borderBottom: '1px solid #eee',
+          paddingBottom: '15px'
+        }}>
+          <h3 style={{ margin: 0, color: '#2C3E50' }}>
+            <FontAwesomeIcon icon={faSignature} style={{ marginRight: '10px' }} />
+            E-Signature Management
+            <span style={{
+              marginLeft: '10px',
+              fontSize: '14px',
+              fontWeight: 'normal',
+              color: employeeSignatures[selectedSignatureEmployee.id] ? '#28a745' : '#dc3545'
+            }}>
+              {employeeSignatures[selectedSignatureEmployee.id] ? '✓ Uploaded' : '⚠ Missing'}
+            </span>
+          </h3>
+          <button
+            onClick={() => {
+              setShowSignatureModal(false);
+              setSelectedSignatureEmployee(null);
+              setSignaturePreview(null);
+              setNewSignature(null);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              cursor: 'pointer',
+              color: '#666'
+            }}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+        </div>
+
+        {/* Employee Info */}
+        <div style={{
+          backgroundColor: '#f8f9fa',
+          padding: '15px',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
+              {selectedSignatureEmployee.first_name} {selectedSignatureEmployee.last_name}
+            </h4>
+            <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#6c757d' }}>
+              <span>ID: {selectedSignatureEmployee.id_number}</span>
+              <span>Department: {selectedSignatureEmployee.department}</span>
+              <span>Position: {selectedSignatureEmployee.position}</span>
+            </div>
+          </div>
+          <div style={{
+            padding: '8px 16px',
+            backgroundColor: employeeSignatures[selectedSignatureEmployee.id] ? '#d4edda' : '#f8d7da',
+            color: employeeSignatures[selectedSignatureEmployee.id] ? '#155724' : '#721c24',
+            borderRadius: '20px',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}>
+            {employeeSignatures[selectedSignatureEmployee.id] ? 'Signature Uploaded' : 'No Signature'}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
+          {/* Left: Current Signature */}
+          <div style={{ flex: 1 }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>Current Signature</h4>
+            
+            {/* Signature Preview */}
+            <div style={{
+              border: '2px dashed #dee2e6',
+              borderRadius: '8px',
+              padding: '20px',
+              height: '200px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#f8f9fa',
+              marginTop: '10px'
+            }}>
+              {signaturePreview ? (
+                <div style={{ textAlign: 'center' }}>
+                  <img 
+                    src={signaturePreview} 
+                    alt="Signature" 
+                    style={{ 
+                      maxWidth: '100%', 
+                      maxHeight: '150px',
+                      objectFit: 'contain'
+                    }}
+                  />
+                  {employeeSignatures[selectedSignatureEmployee.id] && (
+                    <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
+                      <FontAwesomeIcon icon={faCheck} /> Signature on file
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#6c757d' }}>
+                  <FontAwesomeIcon icon={faSignature} size="3x" style={{ marginBottom: '10px' }} />
+                  <p>No signature uploaded</p>
+                  <p style={{ fontSize: '12px' }}>Upload a signature image</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Upload/Update */}
+          <div style={{ flex: 1 }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
+              {signaturePreview ? 'Update Signature' : 'Upload Signature'}
+            </h4>
+            
+            <div style={{
+              border: '1px solid #ced4da',
+              borderRadius: '8px',
+              padding: '20px',
+              backgroundColor: '#fff',
+              height: '200px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center'
+            }}>
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <FontAwesomeIcon icon={faUpload} size="2x" style={{ color: '#6c757d', marginBottom: '10px' }} />
+                <p style={{ margin: '0 0 10px 0', color: '#495057' }}>
+                  Drag & drop or click to browse
+                </p>
+                <input
+                  type="file"
+                  id="signature-upload"
+                  accept=".png,.jpg,.jpeg,.svg"
+                  onChange={handleSignatureFileChange}
+                  style={{ display: 'none' }}
+                  disabled={isUploadingSignature}
+                />
+                <label
+                  htmlFor="signature-upload"
+                  style={{
+                    display: 'inline-block',
+                    padding: '10px 20px',
+                    backgroundColor: '#17a2b8',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: isUploadingSignature ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    opacity: isUploadingSignature ? 0.6 : 1
+                  }}
+                >
+                  Browse Files
+                </label>
+                {newSignature && (
+                  <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
+                    Selected: {newSignature.name}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          gap: '10px',
+          borderTop: '1px solid #eee',
+          paddingTop: '20px'
+        }}>
+          <div>
+            {employeeSignatures[selectedSignatureEmployee.id] && (
+              <button
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+                onClick={deleteSignature}
+                disabled={isUploadingSignature}
+              >
+                <FontAwesomeIcon icon={faTrash} /> Delete Signature
+              </button>
+            )}
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+              onClick={() => {
+                setShowSignatureModal(false);
+                setSelectedSignatureEmployee(null);
+                setSignaturePreview(null);
+                setNewSignature(null);
+              }}
+              disabled={isUploadingSignature}
+            >
+              Cancel
+            </button>
+            
+            <button
+              style={{
+                padding: '10px 20px',
+                backgroundColor: newSignature ? '#28a745' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: newSignature ? 'pointer' : 'not-allowed',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+              onClick={uploadSignature}
+              disabled={!newSignature || isUploadingSignature}
+            >
+              {isUploadingSignature ? (
+                <>
+                  <FontAwesomeIcon icon={faCircle} spin /> Uploading...
+                </>
+              ) : (
+                <>
+                  <FontAwesomeIcon icon={faUpload} /> 
+                  Upload Signature
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   const departments = [
     "Office of the Municipal Mayor",
@@ -2505,278 +2815,8 @@ const handleEditSave = async () => {
               </div>
             </div>
 
-            {/* Signature Management Modal */}
-              {showSignatureModal && selectedSignatureEmployee && (
-                <div className="modal-overlay" style={styles.modalOverlay}>
-                  <div className="modal-content" style={{
-                    ...styles.modalContent,
-                    maxWidth: '700px',
-                    backgroundColor: '#fff',
-                    borderRadius: '10px',
-                    padding: '25px'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '20px',
-                      borderBottom: '1px solid #eee',
-                      paddingBottom: '15px'
-                    }}>
-                      <h3 style={{ margin: 0, color: '#2C3E50' }}>
-                        <FontAwesomeIcon icon={faSignature} style={{ marginRight: '10px' }} />
-                        E-Signature Verification
-                      </h3>
-                      <button
-                        onClick={() => {
-                          setShowSignatureModal(false);
-                          setSelectedSignatureEmployee(null);
-                          setSignaturePreview(null);
-                          setNewSignature(null);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          fontSize: '20px',
-                          cursor: 'pointer',
-                          color: '#666'
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faTimes} />
-                      </button>
-                    </div>
+            {showSignatureModal && selectedSignatureEmployee && renderSignatureModal()}
 
-                    {/* Employee Info */}
-                    <div style={{
-                      backgroundColor: '#f8f9fa',
-                      padding: '15px',
-                      borderRadius: '8px',
-                      marginBottom: '20px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
-                          {selectedSignatureEmployee.first_name} {selectedSignatureEmployee.last_name}
-                        </h4>
-                        <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#6c757d' }}>
-                          <span>ID: {selectedSignatureEmployee.id_number}</span>
-                          <span>Department: {selectedSignatureEmployee.department}</span>
-                          <span>Position: {selectedSignatureEmployee.position}</span>
-                        </div>
-                      </div>
-                      <div style={{
-                        padding: '8px 16px',
-                        backgroundColor: employeeSignatures[selectedSignatureEmployee.id] ? '#d4edda' : '#f8d7da',
-                        color: employeeSignatures[selectedSignatureEmployee.id] ? '#155724' : '#721c24',
-                        borderRadius: '20px',
-                        fontSize: '14px',
-                        fontWeight: '500'
-                      }}>
-                        {employeeSignatures[selectedSignatureEmployee.id] ? '✓ Signature Verified' : '✗ No Signature'}
-                      </div>
-                    </div>
-
-                    {/* Main Content */}
-                    <div style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
-                      {/* Left: Current Signature */}
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>Stored Signature</h4>
-                        <div style={{
-                          border: '2px dashed #dee2e6',
-                          borderRadius: '8px',
-                          padding: '20px',
-                          height: '200px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: '#f8f9fa'
-                        }}>
-                          {signaturePreview ? (
-                            <div style={{ textAlign: 'center' }}>
-                              <img 
-                                src={signaturePreview} 
-                                alt="Signature" 
-                                style={{ 
-                                  maxWidth: '100%', 
-                                  maxHeight: '150px',
-                                  objectFit: 'contain'
-                                }}
-                              />
-                              <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
-                                <FontAwesomeIcon icon={faCheck} /> Verified signature
-                              </p>
-                            </div>
-                          ) : (
-                            <div style={{ textAlign: 'center', color: '#6c757d' }}>
-                              <FontAwesomeIcon icon={faSignature} size="3x" style={{ marginBottom: '10px' }} />
-                              <p>No signature uploaded</p>
-                              <p style={{ fontSize: '12px' }}>Upload a signature image to verify</p>
-                            </div>
-                          )}
-                        </div>
-                        <p style={{ fontSize: '12px', color: '#6c757d', marginTop: '10px' }}>
-                          This signature will be used to verify leave applications
-                        </p>
-                      </div>
-
-                      {/* Right: Upload/Update */}
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
-                          {signaturePreview ? 'Update Signature' : 'Upload Signature'}
-                        </h4>
-                        <div style={{
-                          border: '1px solid #ced4da',
-                          borderRadius: '8px',
-                          padding: '20px',
-                          backgroundColor: '#fff',
-                          height: '200px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'center'
-                        }}>
-                          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                            <FontAwesomeIcon icon={faUpload} size="2x" style={{ color: '#6c757d', marginBottom: '10px' }} />
-                            <p style={{ margin: '0 0 10px 0', color: '#495057' }}>
-                              Drag & drop or click to browse
-                            </p>
-                            <input
-                              type="file"
-                              id="signature-upload"
-                              accept=".png,.jpg,.jpeg,.svg"
-                              onChange={handleSignatureFileChange}
-                              style={{ display: 'none' }}
-                              disabled={isUploadingSignature}
-                            />
-                            <label
-                              htmlFor="signature-upload"
-                              style={{
-                                display: 'inline-block',
-                                padding: '10px 20px',
-                                backgroundColor: '#17a2b8',
-                                color: 'white',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '14px'
-                              }}
-                            >
-                              Browse Files
-                            </label>
-                            {newSignature && (
-                              <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
-                                Selected: {newSignature.name}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ 
-                          backgroundColor: '#e7f4e4', 
-                          padding: '12px', 
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          color: '#155724',
-                          border: '1px solid #c3e6cb',
-                          marginTop: '10px'
-                        }}>
-                          <p style={{ margin: '0 0 5px 0', fontWeight: '500' }}>
-                            <FontAwesomeIcon icon={faInfoCircle} /> Signature Guidelines:
-                          </p>
-                          <ul style={{ margin: '0', paddingLeft: '15px' }}>
-                            <li>Clear image of handwritten signature on white background</li>
-                            <li>Formats: PNG, JPEG, SVG (Max 2MB)</li>
-                            <li>Admin can cross-check with leave application signatures</li>
-                            <li>Prevents signature tampering in e-documents</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-
-
-                    {/* Actions */}
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between',
-                      gap: '10px',
-                      borderTop: '1px solid #eee',
-                      paddingTop: '20px'
-                    }}>
-                      <div>
-                        {employeeSignatures[selectedSignatureEmployee.id] && (
-                          <button
-                            style={{
-                              padding: '10px 20px',
-                              backgroundColor: '#dc3545',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '5px'
-                            }}
-                            onClick={deleteSignature}
-                            disabled={isUploadingSignature}
-                          >
-                            <FontAwesomeIcon icon={faTrash} /> Delete Signature
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                          style={{
-                            padding: '10px 20px',
-                            backgroundColor: '#6c757d',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '14px'
-                          }}
-                          onClick={() => {
-                            setShowSignatureModal(false);
-                            setSelectedSignatureEmployee(null);
-                            setSignaturePreview(null);
-                            setNewSignature(null);
-                          }}
-                          disabled={isUploadingSignature}
-                        >
-                          Cancel
-                        </button>
-                        
-                        <button
-                          style={{
-                            padding: '10px 20px',
-                            backgroundColor: newSignature ? '#28a745' : '#6c757d',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: newSignature ? 'pointer' : 'not-allowed',
-                            fontSize: '14px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px'
-                          }}
-                          onClick={uploadSignature}
-                          disabled={!newSignature || isUploadingSignature}
-                        >
-                          {isUploadingSignature ? (
-                            <>
-                              <FontAwesomeIcon icon={faCircle} spin /> Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <FontAwesomeIcon icon={faUpload} /> {signaturePreview ? 'Update' : 'Upload'} Signature
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
             {showUploadBalancesModal && (
               <div className="modal-overlay" style={styles.modalOverlay}>
@@ -4047,8 +4087,11 @@ const handleEditSave = async () => {
           </div>
         )}
 
-        {view === 'signatures' && (
+     {view === 'signatures' && (
   <div className="signatures-view" style={styles.content1}>
+
+    {showSignatureModal && selectedSignatureEmployee && renderSignatureModal()}
+
     <div className="filters-row" style={styles.firstRow}>
       <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px', width: '100%', justifyContent: 'space-between'}}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -4210,6 +4253,7 @@ const handleEditSave = async () => {
               })
               .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
               .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true)
+              .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
               .map((emp, index) => (
                 <tr key={emp.id} style={{
                   borderBottom: '1px solid #f0f0f0',
@@ -4217,7 +4261,7 @@ const handleEditSave = async () => {
                   transition: 'background-color 0.2s ease'
                 }}>
                   <td style={{ padding: '15px', fontSize: '13px', color: '#333' }}>
-                    {index + 1}
+                    {index + 1 + (currentPage - 1) * listEmployeePerPage}
                   </td>
                   <td style={{ padding: '15px', fontSize: '13px', color: '#333', fontWeight: '500' }}>
                     {emp.first_name} {emp.last_name}
@@ -4251,7 +4295,7 @@ const handleEditSave = async () => {
                         fontWeight: '500'
                       }}>
                         <FontAwesomeIcon icon={faCheck} />
-                        Signature Verified
+                        Signature Uploaded
                       </div>
                     ) : (
                       <div style={{
@@ -4296,33 +4340,6 @@ const handleEditSave = async () => {
                         <FontAwesomeIcon icon={faSignature} />
                         {employeeSignatures[emp.id] ? 'View/Update' : 'Upload'}
                       </button>
-                      {employeeSignatures[emp.id] && (
-                        <button
-                          onClick={() => {
-                            setSelectedSignatureEmployee(emp);
-                            setSignaturePreview(employeeSignatures[emp.id]);
-                            setShowSignatureModal(true);
-                          }}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#6c757d',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
-                          onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                        >
-                          <FontAwesomeIcon icon={faEye} />
-                          Verify
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -4344,41 +4361,85 @@ const handleEditSave = async () => {
       </div>
     </div>
 
-    {/* Signature Guidelines Info Box */}
-    <div style={{
-      marginTop: '30px',
-      padding: '20px',
-      backgroundColor: '#e8f4f8',
-      borderRadius: '10px',
-      borderLeft: '4px solid #17a2b8'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px' }}>
-        <FontAwesomeIcon icon={faInfoCircle} style={{ color: '#17a2b8', fontSize: '20px', marginTop: '2px' }} />
-        <div>
-          <h4 style={{ margin: '0 0 10px 0', color: '#0c5460' }}>
-            About E-Signature Security
-          </h4>
-          <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#0c5460', lineHeight: '1.5' }}>
-            All employee signatures are stored in a secure server folder. This system allows administrators to:
-          </p>
-          <ul style={{ 
-            margin: '0', 
-            paddingLeft: '20px', 
-            fontSize: '13px', 
-            color: '#0c5460',
-            lineHeight: '1.6'
-          }}>
-            <li>Verify that signatures on leave applications match the original stored signatures</li>
-            <li>Prevent signature tampering in electronic documents</li>
-            <li>Maintain a secure audit trail of all signature uploads and updates</li>
-            <li>Cross-reference signatures across different documents and applications</li>
-          </ul>
-          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#0c5460', fontStyle: 'italic' }}>
-            Note: Only administrators can upload, view, and verify signatures. Employees cannot modify their stored signatures.
-          </p>
-        </div>
+    {/* Pagination for Signature Management */}
+    {employeeRecord.filter(emp => emp.status === 'active').length > 0 && (
+      <div className="pagination-container" style={{
+        ...styles.paginationContainer,
+        position: 'static',
+        transform: 'none',
+        left: 'auto',
+        marginTop: '20px',
+        justifyContent: 'center'
+      }}>
+        {/* Previous Button */}
+        <button
+          className="page-btn prev-btn"
+          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+          style={styles.pageBtn}
+          disabled={currentPage === 1}
+        >
+          {'<'}
+        </button>
+
+        {/* First page + ellipsis if needed */}
+        {getPaginationRange(currentPage, totalPages)[0] > 1 && (
+          <>
+            <button 
+              className="page-btn" 
+              onClick={() => setCurrentPage(1)} 
+              style={styles.pageBtn}
+            >
+              1
+            </button>
+            {getPaginationRange(currentPage, totalPages)[0] > 2 && (
+              <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+            )}
+          </>
+        )}
+
+        {/* Visible page numbers */}
+        {getPaginationRange(currentPage, totalPages).map((page) => (
+          <button
+            key={page}
+            className={`page-btn ${currentPage === page ? 'active' : ''}`}
+            onClick={() => setCurrentPage(page)}
+            style={{
+              ...styles.pageBtn,
+              ...(currentPage === page ? styles.activePageBtn : {}),
+            }}
+          >
+            {page}
+          </button>
+        ))}
+
+        {/* Last page + ellipsis if needed */}
+        {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
+          <>
+            {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && (
+              <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+            )}
+            <button 
+              className="page-btn" 
+              onClick={() => setCurrentPage(totalPages)} 
+              style={styles.pageBtn}
+            >
+              {totalPages}
+            </button>
+          </>
+        )}
+
+        {/* Next Button */}
+        <button
+          className="page-btn next-btn"
+          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+          style={styles.pageBtn}
+          disabled={currentPage === totalPages}
+        >
+          {'>'}
+        </button>
       </div>
-    </div>
+    )}
+
   </div>
 )}
 
