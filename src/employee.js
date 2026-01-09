@@ -34,7 +34,11 @@ import {
   faArrowRight,
   faArrowLeft,
   faArchive,
-  faRedo
+  faRedo,
+  faSignature, // Add this
+  faCheck, // Add this
+  faFolderOpen ,
+  faInfoCircle
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -79,6 +83,13 @@ function Employees() {
   const [uploadingBalances, setUploadingBalances] = useState(false);
   const [uploadBalancesResult, setUploadBalancesResult] = useState(null);
   const [uploadBalancesProgress, setUploadBalancesProgress] = useState(0);
+
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [selectedSignatureEmployee, setSelectedSignatureEmployee] = useState(null);
+  const [employeeSignatures, setEmployeeSignatures] = useState({});
+  const [newSignature, setNewSignature] = useState(null);
+  const [signaturePreview, setSignaturePreview] = useState(null);
+  const [isUploadingSignature, setIsUploadingSignature] = useState(false);
   
   const [newEmployee, setNewEmployee] = useState({
     first_name: '',
@@ -93,6 +104,8 @@ function Employees() {
     id_number: '',
     contact_number: '',
     civil_status: '',
+    contract_start_date: '',
+    contract_end_date: ''
   });
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -189,6 +202,189 @@ function Employees() {
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
 
+  // Function to view/upload signature
+const handleSignatureClick = (employee) => {
+  setSelectedSignatureEmployee(employee);
+  loadEmployeeSignature(employee.id);
+  setShowSignatureModal(true);
+};
+
+// Load employee's signature
+const loadEmployeeSignature = async (employeeId) => {
+  try {
+    const response = await fetch(`${API_URL}/api/employees/${employeeId}/signature`);
+    if (response.ok) {
+      const data = await response.json();
+      setEmployeeSignatures(prev => ({
+        ...prev,
+        [employeeId]: data.signature_url
+      }));
+      setSignaturePreview(data.signature_url);
+    } else {
+      // If no signature found, check if there's a signature in the employee record
+      const employee = employeeRecord.find(emp => emp.id === employeeId);
+      if (employee?.signature_url) {
+        setEmployeeSignatures(prev => ({
+          ...prev,
+          [employeeId]: employee.signature_url
+        }));
+        setSignaturePreview(employee.signature_url);
+      } else {
+        setEmployeeSignatures(prev => ({
+          ...prev,
+          [employeeId]: null
+        }));
+        setSignaturePreview(null);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading signature:', error);
+  }
+};
+
+// Handle signature file upload
+const handleSignatureFileChange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // Validate file type
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+  if (!validTypes.includes(file.type)) {
+    alert('Please upload a valid image file (PNG, JPEG, SVG)');
+    return;
+  }
+
+  // Validate file size (max 2MB)
+  if (file.size > 2 * 1024 * 1024) {
+    alert('File size too large. Maximum size is 2MB.');
+    return;
+  }
+
+  setNewSignature(file);
+  
+  // Create preview
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    setSignaturePreview(e.target.result);
+  };
+  reader.readAsDataURL(file);
+};
+
+// Upload signature to server with Cloudinary support
+const uploadSignature = async () => {
+  if (!selectedSignatureEmployee || !newSignature) return;
+
+  setIsUploadingSignature(true);
+  
+  try {
+    const formData = new FormData();
+    formData.append('signature', newSignature);
+
+    const response = await fetch(
+      `${API_URL}/api/employees/${selectedSignatureEmployee.id}/signature`,
+      {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header - let browser set it with boundary
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      
+      // Update local state with Cloudinary URL
+      setEmployeeSignatures(prev => ({
+        ...prev,
+        [selectedSignatureEmployee.id]: data.signature_url
+      }));
+      
+      // Update signature preview with Cloudinary URL
+      setSignaturePreview(data.signature_url);
+      
+      alert('Signature uploaded successfully!');
+      setNewSignature(null);
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to upload signature');
+    }
+  } catch (error) {
+    console.error('Error uploading signature:', error);
+    alert(`Error: ${error.message}`);
+  } finally {
+    setIsUploadingSignature(false);
+  }
+};
+
+// Delete signature
+const deleteSignature = async () => {
+  if (!selectedSignatureEmployee) return;
+
+  if (!window.confirm('Are you sure you want to delete this signature?')) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/employees/${selectedSignatureEmployee.id}/signature`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    if (response.ok) {
+      // Update local state
+      setEmployeeSignatures(prev => ({
+        ...prev,
+        [selectedSignatureEmployee.id]: null
+      }));
+      setSignaturePreview(null);
+      setNewSignature(null);
+      alert('Signature deleted successfully!');
+    } else {
+      throw new Error('Failed to delete signature');
+    }
+  } catch (error) {
+    console.error('Error deleting signature:', error);
+    alert('Failed to delete signature');
+  }
+};
+
+// Load all signatures on component mount
+useEffect(() => {
+  const loadAllSignatures = async () => {
+    try {
+      // First try the dedicated endpoint
+      const response = await fetch(`${API_URL}/api/employees/signatures/all`);
+      if (response.ok) {
+        const signatures = await response.json();
+        setEmployeeSignatures(signatures);
+      } else {
+        // Fallback: extract signatures from employee records
+        const signatureMap = {};
+        employeeRecord.forEach(emp => {
+          if (emp.signature_url) {
+            signatureMap[emp.id] = emp.signature_url;
+          }
+        });
+        setEmployeeSignatures(signatureMap);
+      }
+    } catch (error) {
+      console.error('Error loading signatures:', error);
+      // Fallback to extracting from employee records
+      const signatureMap = {};
+      employeeRecord.forEach(emp => {
+        if (emp.signature_url) {
+          signatureMap[emp.id] = emp.signature_url;
+        }
+      });
+      setEmployeeSignatures(signatureMap);
+    }
+  };
+  
+  // Load signatures when employee records change
+  if (employeeRecord.length > 0) {
+    loadAllSignatures();
+  }
+}, [employeeRecord]); // Add employeeRecord as dependency
+
   const canViewAllDepartments = () => {
     const role = localStorage.getItem("role") || "admin";
     return role === "admin" || role === "mayor";
@@ -265,25 +461,36 @@ function Employees() {
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
 
-  const loadEmployees = async () => {
-    try {
-      const role = localStorage.getItem("role") || "admin";
-      const department = localStorage.getItem("department") || "";
+ const loadEmployees = async () => {
+  try {
+    const role = localStorage.getItem("role") || "admin";
+    const department = localStorage.getItem("department") || "";
 
-      const params = role === "mayor" 
-        ? new URLSearchParams({ role }).toString()
-        : new URLSearchParams({ role, department }).toString();
-      
-      const url = `${API_URL}/api/employees?${params}`;
-      const res = await fetch(url);
-      const data = await res.json();
+    const params = role === "mayor" 
+      ? new URLSearchParams({ role }).toString()
+      : new URLSearchParams({ role, department }).toString();
+    
+    const url = `${API_URL}/api/employees?${params}`;
+    const res = await fetch(url);
+    const data = await res.json();
 
-      setEmployeeRecords(Array.isArray(data) ? data : [data]);
-    } catch (err) {
-      console.error("Error loading employees:", err);
-      setEmployeeRecords([]);
-    }
-  };
+    setEmployeeRecords(Array.isArray(data) ? data : [data]);
+    
+    // Extract signatures from employee records
+    const signatureMap = {};
+    const employees = Array.isArray(data) ? data : [data];
+    employees.forEach(emp => {
+      if (emp.signature_url) {
+        signatureMap[emp.id] = emp.signature_url;
+      }
+    });
+    setEmployeeSignatures(signatureMap);
+    
+  } catch (err) {
+    console.error("Error loading employees:", err);
+    setEmployeeRecords([]);
+  }
+};
 
   const canPerformActions = (employeeDepartment) => {
     const role = localStorage.getItem("role") || "admin";
@@ -674,8 +881,15 @@ const handleAddEmployee = async () => {
       id_number: newEmployee.id_number,
       contact_number: newEmployee.contact_number,
       civil_status: newEmployee.civil_status,
+      contract_start_date: newEmployee.contract_start_date || "",
+      contract_end_date: newEmployee.contract_end_date || ""
       // REMOVED: No contract dates
     };
+
+     if (shouldShowContractDates()) {
+      employeeData.contract_start_date = newEmployee.contract_start_date;
+      employeeData.contract_end_date = newEmployee.contract_end_date;
+    }
 
     console.log("Data to be sent to API:", employeeData);
 
@@ -771,6 +985,11 @@ const handleEditSave = async () => {
       inactive_reason: currentEmployee?.inactive_reason || '' // Preserve inactive_reason
       // REMOVED: No contract dates
     };
+
+    if (shouldShowContractDates(employeesToEdit.employment_status)) {
+      updateData.contract_start_date = employeesToEdit.contract_start_date;
+      updateData.contract_end_date = employeesToEdit.contract_end_date;
+    }
 
     console.log("Sending update data:", updateData);
 
@@ -1930,7 +2149,7 @@ const handleEditSave = async () => {
                   style={{...styles.confirmBtn, backgroundColor: '#009205', border: 'none', borderRadius: '8px', padding: '10px', color: '#fff'}}
                   onClick={confirmReactivate}
                 >
-                  Reactivate
+                  Activate
                 </button>
               </div>
             </div>
@@ -1951,6 +2170,13 @@ const handleEditSave = async () => {
             onClick={() => setView('directory')}
           >
             Directory
+          </button>
+           <button 
+            className={`view-btn ${view === 'signatures' ? 'active' : ''}`}
+            style={view === 'signatures' ? styles.btn1 : styles.btn}
+            onClick={() => setView('signatures')}
+          >
+            Signature Management
           </button>
           <button 
             className={`view-btn ${view === 'inactive' ? 'active' : ''}`}
@@ -2112,6 +2338,7 @@ const handleEditSave = async () => {
                       <th className="column-position" style={styles.columnName}>Position</th>
                       <th className="column-department" style={styles.columnName}>Department</th>
                       <th className="column-employment-status" style={styles.columnName}>Status of Employment</th>
+                      <th className="column-signature" style={styles.columnName}>E-Signature</th>
                       <th className="column-actions" style={styles.columnName}>Action</th>
                     </tr>
                   </thead>
@@ -2146,12 +2373,60 @@ const handleEditSave = async () => {
                               {record.department || '—'}
                             </td>
                             <td className="row-employment-status" style={styles.rowName}>{record.employment_status}</td>
+                            <td className="row-signature" style={styles.rowName}>
+                              {employeeSignatures[record.id] ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    backgroundColor: '#28a745',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}>
+                                    <FontAwesomeIcon icon={faCheck} style={{ color: 'white', fontSize: '12px' }} />
+                                  </div>
+                                  <span style={{ fontSize: '12px', color: '#28a745' }}>Uploaded</span>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    backgroundColor: '#dc3545',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}>
+                                    <FontAwesomeIcon icon={faTimes} style={{ color: 'white', fontSize: '12px' }} />
+                                  </div>
+                                  <span style={{ fontSize: '12px', color: '#dc3545' }}>Missing</span>
+                                </div>
+                              )}
+                            </td>
                             <td className="row-actions" style={styles.rowName}>
                               <button className="view-btn" style={styles.viewBtn} onClick={() => handleViewClick(record)}>
                                 <FontAwesomeIcon icon={faEye} />
                               </button>
                               {canPerformActions(record.department) && (
                                 <>
+                                  <button 
+                                    className="signature-btn" 
+                                    style={{
+                                      ...styles.viewBtn,
+                                      backgroundColor: '#17a2b8',
+                                      color: 'white',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      marginLeft: '5px',
+                                      fontSize: '12px'
+                                    }}
+                                    onClick={() => handleSignatureClick(record)}
+                                  >
+                                    <FontAwesomeIcon icon={faSignature} /> Signature
+                                  </button>
                                   <button className="edit-btn" style={styles.editBtn} onClick={() => handleEditClick(record)}>
                                     <FontAwesomeIcon icon={faPenToSquare} />
                                   </button>
@@ -2229,6 +2504,279 @@ const handleEditSave = async () => {
                 
               </div>
             </div>
+
+            {/* Signature Management Modal */}
+              {showSignatureModal && selectedSignatureEmployee && (
+                <div className="modal-overlay" style={styles.modalOverlay}>
+                  <div className="modal-content" style={{
+                    ...styles.modalContent,
+                    maxWidth: '700px',
+                    backgroundColor: '#fff',
+                    borderRadius: '10px',
+                    padding: '25px'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '20px',
+                      borderBottom: '1px solid #eee',
+                      paddingBottom: '15px'
+                    }}>
+                      <h3 style={{ margin: 0, color: '#2C3E50' }}>
+                        <FontAwesomeIcon icon={faSignature} style={{ marginRight: '10px' }} />
+                        E-Signature Verification
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setShowSignatureModal(false);
+                          setSelectedSignatureEmployee(null);
+                          setSignaturePreview(null);
+                          setNewSignature(null);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '20px',
+                          cursor: 'pointer',
+                          color: '#666'
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faTimes} />
+                      </button>
+                    </div>
+
+                    {/* Employee Info */}
+                    <div style={{
+                      backgroundColor: '#f8f9fa',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
+                          {selectedSignatureEmployee.first_name} {selectedSignatureEmployee.last_name}
+                        </h4>
+                        <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#6c757d' }}>
+                          <span>ID: {selectedSignatureEmployee.id_number}</span>
+                          <span>Department: {selectedSignatureEmployee.department}</span>
+                          <span>Position: {selectedSignatureEmployee.position}</span>
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: '8px 16px',
+                        backgroundColor: employeeSignatures[selectedSignatureEmployee.id] ? '#d4edda' : '#f8d7da',
+                        color: employeeSignatures[selectedSignatureEmployee.id] ? '#155724' : '#721c24',
+                        borderRadius: '20px',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}>
+                        {employeeSignatures[selectedSignatureEmployee.id] ? '✓ Signature Verified' : '✗ No Signature'}
+                      </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <div style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
+                      {/* Left: Current Signature */}
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>Stored Signature</h4>
+                        <div style={{
+                          border: '2px dashed #dee2e6',
+                          borderRadius: '8px',
+                          padding: '20px',
+                          height: '200px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: '#f8f9fa'
+                        }}>
+                          {signaturePreview ? (
+                            <div style={{ textAlign: 'center' }}>
+                              <img 
+                                src={signaturePreview} 
+                                alt="Signature" 
+                                style={{ 
+                                  maxWidth: '100%', 
+                                  maxHeight: '150px',
+                                  objectFit: 'contain'
+                                }}
+                              />
+                              <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
+                                <FontAwesomeIcon icon={faCheck} /> Verified signature
+                              </p>
+                            </div>
+                          ) : (
+                            <div style={{ textAlign: 'center', color: '#6c757d' }}>
+                              <FontAwesomeIcon icon={faSignature} size="3x" style={{ marginBottom: '10px' }} />
+                              <p>No signature uploaded</p>
+                              <p style={{ fontSize: '12px' }}>Upload a signature image to verify</p>
+                            </div>
+                          )}
+                        </div>
+                        <p style={{ fontSize: '12px', color: '#6c757d', marginTop: '10px' }}>
+                          This signature will be used to verify leave applications
+                        </p>
+                      </div>
+
+                      {/* Right: Upload/Update */}
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
+                          {signaturePreview ? 'Update Signature' : 'Upload Signature'}
+                        </h4>
+                        <div style={{
+                          border: '1px solid #ced4da',
+                          borderRadius: '8px',
+                          padding: '20px',
+                          backgroundColor: '#fff',
+                          height: '200px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center'
+                        }}>
+                          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                            <FontAwesomeIcon icon={faUpload} size="2x" style={{ color: '#6c757d', marginBottom: '10px' }} />
+                            <p style={{ margin: '0 0 10px 0', color: '#495057' }}>
+                              Drag & drop or click to browse
+                            </p>
+                            <input
+                              type="file"
+                              id="signature-upload"
+                              accept=".png,.jpg,.jpeg,.svg"
+                              onChange={handleSignatureFileChange}
+                              style={{ display: 'none' }}
+                              disabled={isUploadingSignature}
+                            />
+                            <label
+                              htmlFor="signature-upload"
+                              style={{
+                                display: 'inline-block',
+                                padding: '10px 20px',
+                                backgroundColor: '#17a2b8',
+                                color: 'white',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '14px'
+                              }}
+                            >
+                              Browse Files
+                            </label>
+                            {newSignature && (
+                              <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
+                                Selected: {newSignature.name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ 
+                          backgroundColor: '#e7f4e4', 
+                          padding: '12px', 
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#155724',
+                          border: '1px solid #c3e6cb',
+                          marginTop: '10px'
+                        }}>
+                          <p style={{ margin: '0 0 5px 0', fontWeight: '500' }}>
+                            <FontAwesomeIcon icon={faInfoCircle} /> Signature Guidelines:
+                          </p>
+                          <ul style={{ margin: '0', paddingLeft: '15px' }}>
+                            <li>Clear image of handwritten signature on white background</li>
+                            <li>Formats: PNG, JPEG, SVG (Max 2MB)</li>
+                            <li>Admin can cross-check with leave application signatures</li>
+                            <li>Prevents signature tampering in e-documents</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+
+                    {/* Actions */}
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                      borderTop: '1px solid #eee',
+                      paddingTop: '20px'
+                    }}>
+                      <div>
+                        {employeeSignatures[selectedSignatureEmployee.id] && (
+                          <button
+                            style={{
+                              padding: '10px 20px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}
+                            onClick={deleteSignature}
+                            disabled={isUploadingSignature}
+                          >
+                            <FontAwesomeIcon icon={faTrash} /> Delete Signature
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                          onClick={() => {
+                            setShowSignatureModal(false);
+                            setSelectedSignatureEmployee(null);
+                            setSignaturePreview(null);
+                            setNewSignature(null);
+                          }}
+                          disabled={isUploadingSignature}
+                        >
+                          Cancel
+                        </button>
+                        
+                        <button
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: newSignature ? '#28a745' : '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: newSignature ? 'pointer' : 'not-allowed',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}
+                          onClick={uploadSignature}
+                          disabled={!newSignature || isUploadingSignature}
+                        >
+                          {isUploadingSignature ? (
+                            <>
+                              <FontAwesomeIcon icon={faCircle} spin /> Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <FontAwesomeIcon icon={faUpload} /> {signaturePreview ? 'Update' : 'Upload'} Signature
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {showUploadBalancesModal && (
               <div className="modal-overlay" style={styles.modalOverlay}>
@@ -2720,8 +3268,7 @@ const handleEditSave = async () => {
                       max={new Date().toISOString().split("T")[0]}
                     />
 
-
-                    {/* {shouldShowContractDates(employeesToEdit.employment_status) && (
+                    {shouldShowContractDates(employeesToEdit.employment_status) && (
                       <input
                         placeholder="Contract Start Date"
                         type="text"
@@ -2742,10 +3289,9 @@ const handleEditSave = async () => {
                           })
                         }
                       />
-                    )} */}
+                    )}
 
-
-                    {/* {shouldShowContractDates(employeesToEdit.employment_status) && (
+                    {shouldShowContractDates(employeesToEdit.employment_status) && (
                       <input
                         placeholder="Contract End Date"
                         type="text"
@@ -2765,8 +3311,7 @@ const handleEditSave = async () => {
                           })
                         }
                       />
-                    )} */}
-
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -2934,52 +3479,50 @@ const handleEditSave = async () => {
                         max={new Date().toISOString().split('T')[0]}
                       />
 
-                    {/* Contract Start Date - Conditionally Shown */}
-                   {/* {shouldShowContractDates() && (
-                        <input
-                          placeholder="Contract Start Date"
-                          type="text"
-                          onFocus={(e) => (e.target.type = 'date')}
-                          onBlur={(e) => {
-                            if (!e.target.value) e.target.type = 'text';
-                          }}
-                          className="modal-input"
-                          style={styles.modalInput}
-                          value={newEmployee.contract_start_date || ''}
-                          min={newEmployee.date_hired || undefined}
-                          disabled={!newEmployee.date_hired}
-                          onChange={(e) =>
-                            setNewEmployee({
-                              ...newEmployee,
-                              contract_start_date: e.target.value,
-                              contract_end_date: '' // reset end date if start changes
-                            })
-                          }
-                        />
-                      )} */}
+                         {shouldShowContractDates() && (
+                            <input
+                              placeholder="Contract Start Date"
+                              type="text"
+                              onFocus={(e) => (e.target.type = 'date')}
+                              onBlur={(e) => {
+                                if (!e.target.value) e.target.type = 'text';
+                              }}
+                              className="modal-input"
+                              style={styles.modalInput}
+                              value={newEmployee.contract_start_date || ''}
+                              min={newEmployee.date_hired || undefined}
+                              disabled={!newEmployee.date_hired}
+                              onChange={(e) =>
+                                setNewEmployee({
+                                  ...newEmployee,
+                                  contract_start_date: e.target.value,
+                                  contract_end_date: '' // reset end date if start changes
+                                })
+                              }
+                            />
+                          )}
 
-
-                   {/* {shouldShowContractDates() && (
-                      <input
-                        placeholder="Contract End Date"
-                        type="text"
-                        onFocus={(e) => (e.target.type = 'date')}
-                        onBlur={(e) => {
-                          if (!e.target.value) e.target.type = 'text';
-                        }}
-                        className="modal-input"
-                        style={styles.modalInput}
-                        value={newEmployee.contract_end_date || ''}
-                        min={newEmployee.contract_start_date || undefined}
-                        disabled={!newEmployee.contract_start_date}
-                        onChange={(e) =>
-                          setNewEmployee({
-                            ...newEmployee,
-                            contract_end_date: e.target.value
-                          })
-                        }
-                      />
-                    )} */}
+                          {shouldShowContractDates() && (
+                            <input
+                              placeholder="Contract End Date"
+                              type="text"
+                              onFocus={(e) => (e.target.type = 'date')}
+                              onBlur={(e) => {
+                                if (!e.target.value) e.target.type = 'text';
+                              }}
+                              className="modal-input"
+                              style={styles.modalInput}
+                              value={newEmployee.contract_end_date || ''}
+                              min={newEmployee.contract_start_date || undefined}
+                              disabled={!newEmployee.contract_start_date}
+                              onChange={(e) =>
+                                setNewEmployee({
+                                  ...newEmployee,
+                                  contract_end_date: e.target.value
+                                })
+                              }
+                            />
+                          )}
 
 
                   <div className="modal-actions" style={styles.modalActions}>
@@ -3390,11 +3933,12 @@ const handleEditSave = async () => {
                                       color: 'white',
                                       padding: '4px 8px',
                                       borderRadius: '4px',
-                                      marginLeft: '5px'
+                                      marginLeft: '5px',
+                                      fontSize: '12px'
                                     }}
                                     onClick={() => handleReactivateClick(record)}
                                   >
-                                    <FontAwesomeIcon icon={faRedo} /> Reactivate
+                                    <FontAwesomeIcon icon={faRedo} /> Activate
                                   </button>
                                   <button 
                                     className="delete-inactive-btn" 
@@ -3405,7 +3949,8 @@ const handleEditSave = async () => {
                                       padding: '4px 8px',
                                       borderRadius: '4px',
                                       marginLeft: '5px',
-                                      cursor: 'pointer'
+                                      cursor: 'pointer',
+                                      fontSize: '12px'
                                     }}
                                     onClick={() => handleDeleteInactive(record)}
                                   >
@@ -3501,6 +4046,341 @@ const handleEditSave = async () => {
             </div>
           </div>
         )}
+
+        {view === 'signatures' && (
+  <div className="signatures-view" style={styles.content1}>
+    <div className="filters-row" style={styles.firstRow}>
+      <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px', width: '100%', justifyContent: 'space-between'}}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <FontAwesomeIcon icon={faSearch} style={{ 
+              position: 'absolute', 
+              left: '10px', 
+              top: '50%', 
+              transform: 'translateY(-50%)', 
+              color: '#666' 
+            }} />
+            <input
+              type="text"
+              placeholder="Search employees by name, ID, or department..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+              style={{ 
+                ...styles.searchInput, 
+                width: '300px',
+                paddingLeft: '35px'
+              }}
+            />
+          </div>
+
+          {canFilterAllDepartments() ? (
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="department-filter"
+              style={{ 
+                padding: '8px 12px', 
+                borderRadius: '6px', 
+                border: '1px solid #ccc', 
+                width: '200px',
+                fontSize: '14px',
+                backgroundColor: '#fff'
+              }}
+            >
+              <option value="">All Departments</option>
+              {departments.map((dept, idx) => (
+                <option key={idx} value={dept}>{dept}</option>
+              ))}
+            </select>
+          ) : (
+            <div style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              border: '1px solid #ccc',
+              backgroundColor: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: '500',
+              fontSize: '14px',
+              minWidth: '200px'
+            }}>
+              {userDepartment || 'My Department'}
+            </div>
+          )}
+
+          <select
+            value={filterEmploymentStatus}
+            onChange={(e) => setFilterEmploymentStatus(e.target.value)}
+            className="employment-status-filter"
+            style={{ 
+              padding: '8px 12px', 
+              borderRadius: '6px', 
+              border: '1px solid #ccc',
+              fontSize: '14px',
+              backgroundColor: '#fff',
+              minWidth: '150px'
+            }}
+          >
+            <option value="">All Employment Types</option>
+            <option value="Temporary">Temporary</option>
+            <option value="Contractual">Contractual</option>
+            <option value="Permanent">Permanent</option>
+            <option value="Casual">Casual</option>
+            <option value="Job Order">Job Order</option>
+            <option value="Coterminous">Coterminous</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '15px',
+            padding: '10px 15px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #dee2e6'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{
+                width: '12px',
+                height: '12px',
+                backgroundColor: '#28a745',
+                borderRadius: '50%'
+              }}></div>
+              <span style={{ fontSize: '12px', color: '#495057' }}>
+                Signed: {Object.values(employeeSignatures).filter(s => s).length}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{
+                width: '12px',
+                height: '12px',
+                backgroundColor: '#dc3545',
+                borderRadius: '50%'
+              }}></div>
+              <span style={{ fontSize: '12px', color: '#495057' }}>
+                Missing: {employeeRecord.filter(emp => emp.status === 'active').length - Object.values(employeeSignatures).filter(s => s).length}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div className="signature-table-container" style={{ marginTop: '20px' }}>
+      <div style={{
+        backgroundColor: '#fff',
+        borderRadius: '10px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+        overflow: 'hidden'
+      }}>
+        <table style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontFamily: 'Arial, sans-serif'
+        }}>
+          <thead>
+            <tr style={{
+              backgroundColor: '#6FCB5C',
+              color: '#fff',
+              textAlign: 'left'
+            }}>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>No.</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Employee Name</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>ID Number</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Department</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Position</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>E-Signature Status</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Last Updated</th>
+              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employeeRecord
+              .filter(emp => emp.status === 'active')
+              .filter(emp => {
+                const search = searchTerm.toLowerCase();
+                const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+                const idNumber = (emp.id_number || '').toLowerCase();
+                const department = (emp.department || '').toLowerCase();
+                return fullName.includes(search) || idNumber.includes(search) || department.includes(search);
+              })
+              .filter(emp => filterDepartment ? emp.department === filterDepartment : true)
+              .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true)
+              .map((emp, index) => (
+                <tr key={emp.id} style={{
+                  borderBottom: '1px solid #f0f0f0',
+                  backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9',
+                  transition: 'background-color 0.2s ease'
+                }}>
+                  <td style={{ padding: '15px', fontSize: '13px', color: '#333' }}>
+                    {index + 1}
+                  </td>
+                  <td style={{ padding: '15px', fontSize: '13px', color: '#333', fontWeight: '500' }}>
+                    {emp.first_name} {emp.last_name}
+                  </td>
+                  <td style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
+                    {emp.id_number || '—'}
+                  </td>
+                  <td style={{ padding: '15px', fontSize: '13px', color: '#666', maxWidth: '200px' }}>
+                    <div style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {emp.department || '—'}
+                    </div>
+                  </td>
+                  <td style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
+                    {emp.position || '—'}
+                  </td>
+                  <td style={{ padding: '15px' }}>
+                    {employeeSignatures[emp.id] ? (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '5px 12px',
+                        backgroundColor: '#d4edda',
+                        color: '#155724',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500'
+                      }}>
+                        <FontAwesomeIcon icon={faCheck} />
+                        Signature Verified
+                      </div>
+                    ) : (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '5px 12px',
+                        backgroundColor: '#f8d7da',
+                        color: '#721c24',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500'
+                      }}>
+                        <FontAwesomeIcon icon={faTimes} />
+                        Signature Required
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: '15px', fontSize: '12px', color: '#666' }}>
+                    {employeeSignatures[emp.id] ? 'Recently uploaded' : 'Never'}
+                  </td>
+                  <td style={{ padding: '15px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => handleSignatureClick(emp)}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: employeeSignatures[emp.id] ? '#17a2b8' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                        onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                      >
+                        <FontAwesomeIcon icon={faSignature} />
+                        {employeeSignatures[emp.id] ? 'View/Update' : 'Upload'}
+                      </button>
+                      {employeeSignatures[emp.id] && (
+                        <button
+                          onClick={() => {
+                            setSelectedSignatureEmployee(emp);
+                            setSignaturePreview(employeeSignatures[emp.id]);
+                            setShowSignatureModal(true);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                          onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                        >
+                          <FontAwesomeIcon icon={faEye} />
+                          Verify
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+        
+        {employeeRecord.filter(emp => emp.status === 'active').length === 0 && (
+          <div style={{
+            textAlign: 'center',
+            padding: '50px 20px',
+            color: '#666'
+          }}>
+            <FontAwesomeIcon icon={faSignature} size="3x" style={{ marginBottom: '20px', color: '#ddd' }} />
+            <h3 style={{ margin: '0 0 10px 0', color: '#999' }}>No Active Employees</h3>
+            <p style={{ margin: 0, fontSize: '14px' }}>Add employees to manage their signatures</p>
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* Signature Guidelines Info Box */}
+    <div style={{
+      marginTop: '30px',
+      padding: '20px',
+      backgroundColor: '#e8f4f8',
+      borderRadius: '10px',
+      borderLeft: '4px solid #17a2b8'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px' }}>
+        <FontAwesomeIcon icon={faInfoCircle} style={{ color: '#17a2b8', fontSize: '20px', marginTop: '2px' }} />
+        <div>
+          <h4 style={{ margin: '0 0 10px 0', color: '#0c5460' }}>
+            About E-Signature Security
+          </h4>
+          <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#0c5460', lineHeight: '1.5' }}>
+            All employee signatures are stored in a secure server folder. This system allows administrators to:
+          </p>
+          <ul style={{ 
+            margin: '0', 
+            paddingLeft: '20px', 
+            fontSize: '13px', 
+            color: '#0c5460',
+            lineHeight: '1.6'
+          }}>
+            <li>Verify that signatures on leave applications match the original stored signatures</li>
+            <li>Prevent signature tampering in electronic documents</li>
+            <li>Maintain a secure audit trail of all signature uploads and updates</li>
+            <li>Cross-reference signatures across different documents and applications</li>
+          </ul>
+          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#0c5460', fontStyle: 'italic' }}>
+            Note: Only administrators can upload, view, and verify signatures. Employees cannot modify their stored signatures.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       </div>
     </div>
