@@ -2,11 +2,13 @@ import express from "express";
 import ExcelJS from "exceljs";
 import fs from "fs";
 import path from "path";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer"; // Keep using regular puppeteer
 
 const router = express.Router();
 
 router.post("/export-pdf", async (req, res) => {
+  let browser = null;
+  
   try {
     const { employee, leaveCards } = req.body;
 
@@ -242,33 +244,108 @@ router.post("/export-pdf", async (req, res) => {
 </html>
 `;
 
-    // 3️⃣ Convert HTML → PDF using Puppeteer
+    // 3️⃣ Convert HTML → PDF using Puppeteer with Render compatibility
     const tempPdfPath = tempExcelPath.replace(".xlsx", ".pdf");
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox'] });
+    
+    // Configure Puppeteer for both local and Render
+    const launchOptions = {
+      headless: 'new', // Use new headless mode
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // Important for Render
+        '--disable-gpu',
+        '--single-process',
+        '--no-zygote',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
+      timeout: 30000,
+    };
+
+    // On Render, use the installed Chrome
+    if (process.env.RENDER || process.env.NODE_ENV === 'production') {
+      // Render has Chrome installed at this path
+      launchOptions.executablePath = '/usr/bin/chromium-browser';
+    }
+
+    console.log('Launching Puppeteer with options:', { 
+      headless: launchOptions.headless,
+      env: process.env.NODE_ENV,
+      isRender: !!process.env.RENDER 
+    });
+
+    browser = await puppeteer.launch(launchOptions);
+    
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({
-      path: tempPdfPath,
+    
+    // Set viewport to match Letter size
+    await page.setViewport({ width: 1120, height: 1580, deviceScaleFactor: 2 });
+    
+    // Set content with proper wait
+    await page.setContent(html, { 
+      waitUntil: ['networkidle0', 'domcontentloaded'],
+      timeout: 30000 
+    });
+
+    // Generate PDF buffer directly (avoid file system when possible)
+    const pdfBuffer = await page.pdf({
       format: "Letter",
       printBackground: true,
       landscape: false,
       margin: { top: "0", bottom: "0", left: "0", right: "0" },
+      preferCSSPageSize: true,
+      timeout: 30000,
     });
-    await browser.close();
 
-    // 4️⃣ Send back PDF
-    const fileBuffer = fs.readFileSync(tempPdfPath);
+    // 4️⃣ Send back PDF directly from buffer
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${employee.last_name}, ${employee.first_name}.pdf"`);
-    res.send(fileBuffer);
+    res.send(pdfBuffer);
 
-    // cleanup
-    try { fs.unlinkSync(tempExcelPath); } catch(e){/*ignore*/ }
-    try { fs.unlinkSync(tempPdfPath); } catch(e){/*ignore*/ }
+    // 5️⃣ Cleanup Excel file
+    try { 
+      fs.unlinkSync(tempExcelPath); 
+    } catch(e) { 
+      console.log("Cleanup Excel error:", e.message);
+    }
 
   } catch (error) {
     console.error("❌ Export failed:", error);
-    res.status(500).send("Internal Server Error");
+    
+    // Log specific Puppeteer errors
+    if (error.message.includes('Failed to launch chrome') || error.message.includes('executable')) {
+      console.error('Chrome executable not found. Check Render Chrome installation.');
+    }
+    
+    if (error.message.includes('ENOENT')) {
+      console.error('File system error - temp directory issue');
+    }
+    
+    // Provide error response
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? "PDF generation service is temporarily unavailable. Please try again or download the Excel version."
+      : error.message;
+    
+    res.status(500).json({ 
+      error: "PDF generation failed",
+      message: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    });
+    
+  } finally {
+    // Always close browser to prevent memory leaks
+    if (browser) {
+      try {
+        await browser.close();
+        console.log('Browser closed successfully');
+      } catch (e) {
+        console.error("Error closing browser:", e);
+      }
+    }
   }
 });
 
