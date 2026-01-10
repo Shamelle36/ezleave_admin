@@ -438,7 +438,7 @@ const rejectionReasons = [
 ];
 
 
-  const API_URL = "hhttps://ezleave-admin-api.onrender.com";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
       // Add this useEffect near your other useEffect hooks
 useEffect(() => {
@@ -3805,54 +3805,53 @@ const handleAddLeaveType = async () => {
                     <div style={styles.sectionHeader}>
                         <h3 style={styles.sectionTitle}>Existing Leave Types</h3>
                         <span style={styles.countBadge}>
-                            {Object.keys(leaveTypeMap).length} types
+                            {allLeaveTypes.length} types
                         </span>
                     </div>
                     
                     <div style={styles.leaveTypesList}>
-                        {Object.entries(leaveTypeMap).map(([fullName, abbr]) => (
-                            <div key={abbr} style={styles.leaveTypeItem}>
-                                <div style={styles.leaveTypeInfo}>
-                                    <div style={styles.leaveTypeCode}>{abbr}</div>
-                                    <div>
-                                        <div style={styles.leaveTypeName}>{fullName}</div>
-                                        <div style={styles.leaveTypeMeta}>
-                                            Default: 15 days/year
+                        {loadingLeaveTypes ? (
+                            <div style={styles.loadingPreview}>
+                                <p>Loading leave types...</p>
+                            </div>
+                        ) : allLeaveTypes.length > 0 ? (
+                            allLeaveTypes.map((leaveType) => (
+                                <div key={leaveType.id} style={styles.leaveTypeItem}>
+                                    <div style={styles.leaveTypeInfo}>
+                                        <div style={styles.leaveTypeCode}>
+                                            {leaveType.code || leaveType.abbreviation || 'N/A'}
+                                        </div>
+                                        <div>
+                                            <div style={styles.leaveTypeName}>{leaveType.name}</div>
+                                            <div style={styles.leaveTypeMeta}>
+                                                Default: {leaveType.days || 15} days/year
+                                            </div>
                                         </div>
                                     </div>
+                                    <div style={styles.leaveTypeActions}>
+                                        <button 
+                                            style={styles.editBtn}
+                                            title="Edit leave type"
+                                            
+                                        >
+                                            <FontAwesomeIcon icon={faEdit} />
+                                        </button>
+                                        <button 
+                                            style={styles.deleteBtn}
+                                            title="Delete leave type"
+                                            
+                                        >
+                                            <FontAwesomeIcon icon={faTrash} />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div style={styles.leaveTypeActions}>
-                                    <button 
-                                        style={styles.editBtn}
-                                        title="Edit leave type"
-                                        onClick={() => {
-                                            // Edit functionality
-                                            const newName = prompt(`Edit leave type name:`, fullName);
-                                            if (newName && newName !== fullName) {
-                                                // Update logic here
-                                            }
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faEdit} />
-                                    </button>
-                                    <button 
-                                        style={styles.deleteBtn}
-                                        title="Delete leave type"
-                                        onClick={() => {
-                                            if (window.confirm(`Delete "${fullName}"? This will remove it from all employees.`)) {
-                                                // Delete logic here
-                                                const updatedMap = { ...leaveTypeMap };
-                                                delete updatedMap[fullName];
-                                                setLeaveTypeMap(updatedMap);
-                                                localStorage.setItem('leaveTypes', JSON.stringify(updatedMap));
-                                            }
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faTrash} />
-                                    </button>
-                                </div>
+                            ))
+                        ) : (
+                            <div style={styles.emptyState}>
+                                <FontAwesomeIcon icon={faCalendarAlt} style={styles.emptyIcon} />
+                                <p style={styles.emptyText}>No leave types found</p>
                             </div>
-                        ))}
+                        )}
                     </div>
                 </div>
             </div>
@@ -3901,7 +3900,7 @@ const handleAddLeaveType = async () => {
                                         min="0"
                                         max="365"
                                         value={newLeaveType.days}
-                                        onChange={(e) => setNewLeaveType({...newLeaveType, days: parseInt(e.target.value)})}
+                                        onChange={(e) => setNewLeaveType({...newLeaveType, days: parseInt(e.target.value) || 15})}
                                     />
                                     <span style={styles.inputUnit}>days/year</span>
                                 </div>
@@ -3919,10 +3918,28 @@ const handleAddLeaveType = async () => {
                             <button 
                                 style={styles.submitBtn}
                                 onClick={handleAddLeaveType}
-                                disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim()}
+                                disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim() || loadingLeaveTypes}
                             >
-                                <FontAwesomeIcon icon={faSave} style={{ marginRight: '8px' }} />
-                                Save New Leave Type
+                                {loadingLeaveTypes ? (
+                                    <>
+                                        <div style={{
+                                            display: 'inline-block',
+                                            width: '16px',
+                                            height: '16px',
+                                            border: '2px solid #ffffff',
+                                            borderTop: '2px solid transparent',
+                                            borderRadius: '50%',
+                                            animation: 'spin 1s linear infinite',
+                                            marginRight: '8px'
+                                        }}></div>
+                                        Adding...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FontAwesomeIcon icon={faSave} style={{ marginRight: '8px' }} />
+                                        Save New Leave Type
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

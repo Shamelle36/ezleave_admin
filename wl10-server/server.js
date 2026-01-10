@@ -12,6 +12,16 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+// Late thresholds configuration
+const LATE_THRESHOLDS = {
+  1: { hour: 8, minute: 1 },   // Monday: 8:01 AM is late
+  2: { hour: 8, minute: 31 },  // Tuesday: 8:31 AM is late
+  3: { hour: 8, minute: 31 },  // Wednesday: 8:31 AM is late
+  4: { hour: 8, minute: 31 },  // Thursday: 8:31 AM is late
+  5: { hour: 8, minute: 31 },  // Friday: 8:31 AM is late
+  // Saturday and Sunday have no late thresholds (weekends)
+};
+
 // Helper function to create notification
 const createNotification = async (user_id, message, type = 'attendance') => {
   try {
@@ -62,174 +72,114 @@ const createNotification = async (user_id, message, type = 'attendance') => {
   }
 };
 
-// Helper function to get time settings for a specific day
-const getTimeSettingsForDay = async (dateTime) => {
-  try {
-    const dayOfWeek = moment(dateTime).tz("Asia/Manila").day(); // 0 = Sunday
-    
-    const dayMapping = {
-      0: 'sunday',
-      1: 'monday',
-      2: 'tuesday',
-      3: 'wednesday',
-      4: 'thursday',
-      5: 'friday',
-      6: 'saturday'
+// Helper function to determine which attendance slot based on time of day
+// Helper function to determine which attendance slot based on time of day
+const determineAttendanceSlot = (dateTime) => {
+  const scanTime = moment(dateTime).tz("Asia/Manila");
+  const hour = scanTime.hour();
+  const minute = scanTime.minute();
+  
+  // Convert to minutes since midnight for easier comparison
+  const minutesSinceMidnight = hour * 60 + minute;
+  
+  // Define clear boundaries
+  const MORNING_CHECKIN_END = 720;    // 12:00 PM
+  const MORNING_CHECKOUT_START = 660; // 11:00 AM
+  const MORNING_CHECKOUT_END = 840;   // 2:00 PM
+  const AFTERNOON_CHECKIN_START = 750; // 12:30 PM
+  const AFTERNOON_CHECKIN_END = 1020;  // 5:00 PM
+  
+  // Morning check-in: 4:00 AM - 12:00 PM
+  if (minutesSinceMidnight >= 240 && minutesSinceMidnight < MORNING_CHECKIN_END) {
+    return { 
+      slot: 'am_checkin', 
+      type: 'Morning check-in'
     };
-    
-    const dayName = dayMapping[dayOfWeek];
-    
-    const result = await pool.query(
-      `SELECT * FROM attendance_time_settings WHERE day_of_week = $1`,
-      [dayName]
-    );
-    
-    if (result.rows.length === 0) {
-      return { isDayOff: true, timeSettings: null };
-    }
-    
-    const timeSettings = result.rows[0];
-    
-    if (!timeSettings.is_active) {
-      return { isDayOff: true, timeSettings: timeSettings };
-    }
-    
-    return { isDayOff: false, timeSettings: timeSettings };
-  } catch (error) {
-    console.error('❌ Error getting time settings:', error.message);
-    return { isDayOff: true, timeSettings: null };
   }
+  // Morning check-out: 11:00 AM - 2:00 PM
+  else if (minutesSinceMidnight >= MORNING_CHECKOUT_START && minutesSinceMidnight < MORNING_CHECKOUT_END) {
+    return { 
+      slot: 'am_checkout', 
+      type: 'Morning check-out'
+    };
+  }
+  // Afternoon check-in: 12:30 PM - 5:00 PM
+  else if (minutesSinceMidnight >= AFTERNOON_CHECKIN_START && minutesSinceMidnight < AFTERNOON_CHECKIN_END) {
+    return { 
+      slot: 'pm_checkin', 
+      type: 'Afternoon check-in'
+    };
+  }
+  // Afternoon check-out: 2:00 PM - 11:59 PM
+  else if (minutesSinceMidnight >= MORNING_CHECKOUT_END) {
+    return { 
+      slot: 'pm_checkout', 
+      type: 'Afternoon check-out'
+    };
+  }
+  // Night shift check-in: 12:00 AM - 4:00 AM
+  else if (minutesSinceMidnight < 240) {
+    return { 
+      slot: 'am_checkin', 
+      type: 'Morning check-in (night shift)'
+    };
+  }
+  // Handle the gap between 12:00 PM - 12:30 PM
+  // This is the lunch break period
+  else if (minutesSinceMidnight >= MORNING_CHECKIN_END && minutesSinceMidnight < AFTERNOON_CHECKIN_START) {
+    // If closer to 12:00 PM, treat as morning checkout
+    // If closer to 12:30 PM, treat as afternoon check-in
+    const distanceToNoon = minutesSinceMidnight - MORNING_CHECKIN_END; // 0-30
+    const distanceTo1230 = AFTERNOON_CHECKIN_START - minutesSinceMidnight; // 0-30
+    
+    if (distanceToNoon <= distanceTo1230) {
+      return { 
+        slot: 'am_checkout', 
+        type: 'Morning check-out (lunch time)'
+      };
+    } else {
+      return { 
+        slot: 'pm_checkin', 
+        type: 'Afternoon check-in (lunch time)'
+      };
+    }
+  }
+  
+  // Fallback - should never reach here
+  return { 
+    slot: 'pm_checkout', 
+    type: 'Afternoon check-out'
+  };
 };
 
-// Helper function to check if scan is within working hours and determine which slot
-const validateAndDetermineSlot = (scanDateTime, timeSettings) => {
-  if (!timeSettings) {
-    return { isValid: false, slot: null, type: null, isLate: false, isEarly: false };
-  }
-
-  const scanTime = moment(scanDateTime).tz("Asia/Manila");
-  const scanTimeStr = scanTime.format("HH:mm:ss");
+// Helper function to check if check-in is late
+const checkIfLate = (dateTime) => {
+  const scanTime = moment(dateTime).tz("Asia/Manila");
+  const dayOfWeek = scanTime.day(); // 0 = Sunday, 1 = Monday, etc.
   
-  const startTime = moment.tz(timeSettings.start_time, "HH:mm:ss", "Asia/Manila");
-  const endTime = moment.tz(timeSettings.end_time, "HH:mm:ss", "Asia/Manila");
-  
-  // Check if scan is within working hours
-  if (scanTime.isBefore(startTime) || scanTime.isAfter(endTime)) {
-    return { isValid: false, slot: null, type: null, isLate: false, isEarly: false };
-  }
-  
-  // Calculate work duration
-  const workDuration = endTime.diff(startTime, 'minutes');
-  
-  // More flexible time windows that cover the entire workday
-  // AM check-in: First 4 hours of workday (until lunch)
-  const amCheckinEnd = startTime.clone().add(4 * 60, 'minutes');
-  
-  // AM check-out: Middle 2 hours of workday (lunch period)
-  const amCheckoutStart = startTime.clone().add(3.5 * 60, 'minutes'); // 3.5 hours after start
-  const amCheckoutEnd = startTime.clone().add(5.5 * 60, 'minutes'); // 5.5 hours after start
-  
-  // PM check-in: Next 4 hours after lunch
-  const pmCheckinStart = startTime.clone().add(5 * 60, 'minutes'); // 5 hours after start
-  const pmCheckinEnd = startTime.clone().add(9 * 60, 'minutes'); // 9 hours after start
-  
-  // PM check-out: Last 4 hours of workday
-  const pmCheckoutStart = startTime.clone().add(8.5 * 60, 'minutes'); // 8.5 hours after start
-  
-  // Determine which slot the scan belongs to
-  if (scanTime.isBetween(startTime, amCheckinEnd, null, '[)')) {
-    // AM Check-in: Late if ANY time after exact start time
-    const isLate = scanTime.isAfter(startTime);
+  // Check if it's a weekday (Monday = 1 to Friday = 5)
+  if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+    const threshold = LATE_THRESHOLDS[dayOfWeek];
     
-    return { 
-      isValid: true, 
-      slot: 'am_checkin', 
-      type: 'Morning check-in',
-      isLate: isLate,
-      isEarly: false
-    };
-  } else if (scanTime.isBetween(amCheckoutStart, amCheckoutEnd, null, '[)')) {
-    // AM Check-out: Expected around 4 hours after start, early if before that
-    const expectedCheckout = startTime.clone().add(4 * 60, 'minutes');
-    const isEarly = scanTime.isBefore(expectedCheckout);
+    // Create threshold time for today
+    const thresholdTime = scanTime.clone()
+      .hour(threshold.hour)
+      .minute(threshold.minute)
+      .second(0)
+      .millisecond(0);
     
-    return { 
-      isValid: true, 
-      slot: 'am_checkout', 
-      type: 'Morning check-out',
-      isLate: false,
-      isEarly: isEarly
-    };
-  } else if (scanTime.isBetween(pmCheckinStart, pmCheckinEnd, null, '[)')) {
-    // PM Check-in: Expected around 5 hours after start, late if after that
-    const expectedCheckin = startTime.clone().add(5 * 60, 'minutes');
-    const isLate = scanTime.isAfter(expectedCheckin);
-    
-    return { 
-      isValid: true, 
-      slot: 'pm_checkin', 
-      type: 'Afternoon check-in',
-      isLate: isLate,
-      isEarly: false
-    };
-  } else if (scanTime.isBetween(pmCheckoutStart, endTime, null, '[)')) {
-    // PM Check-out: Early if before end time
-    const isEarly = scanTime.isBefore(endTime);
-    
-    return { 
-      isValid: true, 
-      slot: 'pm_checkout', 
-      type: 'Afternoon check-out',
-      isLate: false,
-      isEarly: isEarly
-    };
+    // Check if scan is after the threshold time
+    if (scanTime.isAfter(thresholdTime)) {
+      const minutesLate = scanTime.diff(thresholdTime, 'minutes');
+      return {
+        isLate: true,
+        minutesLate: minutesLate,
+        thresholdTime: thresholdTime.format('HH:mm')
+      };
+    }
   }
   
-  // If scan is in between defined windows, still allow it but determine the closest slot
-  // This handles scans that might be in transition periods
-  const timeFromStart = scanTime.diff(startTime, 'minutes');
-  
-  if (timeFromStart < 4 * 60) { // Less than 4 hours from start
-    const isLate = scanTime.isAfter(startTime);
-    return { 
-      isValid: true, 
-      slot: 'am_checkin', 
-      type: 'Morning check-in',
-      isLate: isLate,
-      isEarly: false
-    };
-  } else if (timeFromStart >= 4 * 60 && timeFromStart < 5 * 60) { // Between 4-5 hours
-    const expectedCheckout = startTime.clone().add(4 * 60, 'minutes');
-    const isEarly = scanTime.isBefore(expectedCheckout);
-    return { 
-      isValid: true, 
-      slot: 'am_checkout', 
-      type: 'Morning check-out',
-      isLate: false,
-      isEarly: isEarly
-    };
-  } else if (timeFromStart >= 5 * 60 && timeFromStart < 8.5 * 60) { // Between 5-8.5 hours
-    const expectedCheckin = startTime.clone().add(5 * 60, 'minutes');
-    const isLate = scanTime.isAfter(expectedCheckin);
-    return { 
-      isValid: true, 
-      slot: 'pm_checkin', 
-      type: 'Afternoon check-in',
-      isLate: isLate,
-      isEarly: false
-    };
-  } else if (timeFromStart >= 8.5 * 60) { // More than 8.5 hours
-    const isEarly = scanTime.isBefore(endTime);
-    return { 
-      isValid: true, 
-      slot: 'pm_checkout', 
-      type: 'Afternoon check-out',
-      isLate: false,
-      isEarly: isEarly
-    };
-  }
-  
-  return { isValid: false, slot: null, type: null, isLate: false, isEarly: false };
+  return { isLate: false, minutesLate: 0, thresholdTime: null };
 };
 
 app.use((req, res, next) => {
@@ -293,38 +243,10 @@ app.post("/iclock/cdata", async (req, res) => {
           employeeName = `${firstName} ${lastName}`.trim() || pin;
         }
 
-        // Get time settings for this day
-        const daySettings = await getTimeSettingsForDay(dateTime);
-        
-        // Check if it's a day off
-        if (daySettings.isDayOff) {
-          console.log(`🚫 ${employeeName} (${pin}) scanned on a day off (${attendanceDate})`);
-          
-          // Send notification for day off scan
-          if (user_id) {
-            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const dayName = dayNames[dayOfWeek];
-            await createNotification(
-              user_id, 
-              `Today is ${dayName} (day off). Attendance scanning is not allowed on non-working days.`, 
-              'warning'
-            );
-          }
-          
-          console.log(`❌ Day off attendance NOT recorded for ${employeeName} (${pin})`);
-          continue; // Skip database recording completely
-        }
-
-        // Validate scan time and determine slot based on time settings
-        const validation = validateAndDetermineSlot(dateTime, daySettings.timeSettings);
-        
-        if (!validation.isValid) {
-          console.warn(`⚠️ Scan time ${formattedTime} is outside working hours (${daySettings.timeSettings.start_time} - ${daySettings.timeSettings.end_time}) for ${employeeName}`);
-          continue;
-        }
-
-        const columnToUpdate = validation.slot;
-        const checkinType = validation.type;
+        // Determine which attendance slot based on time of day
+        const slotInfo = determineAttendanceSlot(dateTime);
+        const columnToUpdate = slotInfo.slot;
+        const checkinType = slotInfo.type;
 
         // Check if this slot is already filled
         const existingLog = await pool.query(
@@ -354,31 +276,52 @@ app.post("/iclock/cdata", async (req, res) => {
         // Choose the proper unique constraint
         const constraintName = user_id ? "unique_attendance_per_user" : "unique_attendance_per_pin";
 
+        // Check if it's a morning check-in and mark if late
+        let isLate = false;
+        let minutesLate = 0;
+        let lateThreshold = null;
+        
+        if (columnToUpdate === 'am_checkin') {
+          const lateCheck = checkIfLate(dateTime);
+          isLate = lateCheck.isLate;
+          minutesLate = lateCheck.minutesLate;
+          lateThreshold = lateCheck.thresholdTime;
+          
+          if (isLate) {
+            console.log(`⏰ ${employeeName} is ${minutesLate} minutes late (scanned at ${formattedTime}, threshold: ${lateThreshold})`);
+          }
+        }
+
         // UPSERT: insert if not exists, else update the correct slot & name
-        await pool.query(
-          `
-          INSERT INTO attendance_logs (user_id, pin, name, attendance_date, ${columnToUpdate})
-          VALUES ($1, $2, $3, $4, $5)
+        const query = `
+          INSERT INTO attendance_logs (user_id, pin, name, attendance_date, ${columnToUpdate}, is_late, minutes_late, late_threshold)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT ON CONSTRAINT ${constraintName}
           DO UPDATE
           SET ${columnToUpdate} = COALESCE(attendance_logs.${columnToUpdate}, EXCLUDED.${columnToUpdate}),
               name = EXCLUDED.name,
               user_id = COALESCE(attendance_logs.user_id, EXCLUDED.user_id),
+              is_late = COALESCE(attendance_logs.is_late, EXCLUDED.is_late),
+              minutes_late = COALESCE(attendance_logs.minutes_late, EXCLUDED.minutes_late),
+              late_threshold = COALESCE(attendance_logs.late_threshold, EXCLUDED.late_threshold),
               updated_at = NOW()
-          `,
-          [user_id || null, pin, employeeName, attendanceDate, dateTime]
+          `;
+
+        await pool.query(
+          query,
+          [user_id || null, pin, employeeName, attendanceDate, dateTime, isLate, minutesLate, lateThreshold]
         );
 
-        console.log(`✅ ${columnToUpdate} saved for ${employeeName} (${pin}) at ${formattedDateTime}`);
+        console.log(`✅ ${checkinType} saved for ${employeeName} (${pin}) at ${formattedDateTime}`);
 
         // Create notification if user_id exists
         if (user_id) {
           let message = `${checkinType} recorded at ${formattedTime}`;
           
-          if (validation.isLate) {
-            message = `⚠️ Late ${checkinType.toLowerCase()} at ${formattedTime}`;
-          } else if (validation.isEarly) {
-            message = `⚠️ Early ${checkinType.toLowerCase()} at ${formattedTime}`;
+          if (isLate) {
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayName = dayNames[dayOfWeek];
+            message = `⚠️ Late ${checkinType.toLowerCase()} on ${dayName} at ${formattedTime} (${minutesLate} minutes late, threshold: ${lateThreshold})`;
           }
           
           await createNotification(user_id, message, 'attendance');
@@ -393,6 +336,115 @@ app.post("/iclock/cdata", async (req, res) => {
   res.send("OK");
 });
 
+// Optional: Endpoint to manually adjust attendance if needed
+app.post("/api/attendance/manual", async (req, res) => {
+  try {
+    const { user_id, pin, date, time, slot, reason } = req.body;
+    
+    if (!date || !time || (!user_id && !pin)) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    
+    const dateTime = moment.tz(`${date} ${time}`, "YYYY-MM-DD HH:mm", "Asia/Manila").toDate();
+    const attendanceDate = moment(dateTime).tz("Asia/Manila").format("YYYY-MM-DD");
+    
+    let employeeName = pin;
+    let firstName = "";
+    let lastName = "";
+    let resolvedUserId = user_id;
+    let resolvedPin = pin;
+    
+    // Get employee info
+    if (user_id) {
+      const result = await pool.query(
+        "SELECT first_name, last_name, id_number FROM employee_list WHERE user_id = $1",
+        [user_id]
+      );
+      if (result.rows.length > 0) {
+        firstName = result.rows[0].first_name || "";
+        lastName = result.rows[0].last_name || "";
+        employeeName = `${firstName} ${lastName}`.trim();
+        resolvedPin = result.rows[0].id_number;
+      }
+    } else if (pin) {
+      const result = await pool.query(
+        "SELECT first_name, last_name, user_id FROM employee_list WHERE id_number = $1",
+        [pin]
+      );
+      if (result.rows.length > 0) {
+        resolvedUserId = result.rows[0].user_id;
+        firstName = result.rows[0].first_name || "";
+        lastName = result.rows[0].last_name || "";
+        employeeName = `${firstName} ${lastName}`.trim() || pin;
+      }
+    }
+    
+    // Check if it's a morning check-in and mark if late
+    let isLate = false;
+    let minutesLate = 0;
+    let lateThreshold = null;
+    
+    if (slot === 'am_checkin') {
+      const lateCheck = checkIfLate(dateTime);
+      isLate = lateCheck.isLate;
+      minutesLate = lateCheck.minutesLate;
+      lateThreshold = lateCheck.thresholdTime;
+    }
+    
+    // Choose the proper unique constraint
+    const constraintName = resolvedUserId ? "unique_attendance_per_user" : "unique_attendance_per_pin";
+    
+    // UPSERT: insert if not exists, else update the correct slot
+    await pool.query(
+      `
+      INSERT INTO attendance_logs (user_id, pin, name, attendance_date, ${slot}, is_late, minutes_late, late_threshold, manual_adjustment, adjustment_reason)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+      ON CONFLICT ON CONSTRAINT ${constraintName}
+      DO UPDATE
+      SET ${slot} = EXCLUDED.${slot},
+          is_late = EXCLUDED.is_late,
+          minutes_late = EXCLUDED.minutes_late,
+          late_threshold = EXCLUDED.late_threshold,
+          manual_adjustment = true,
+          adjustment_reason = EXCLUDED.adjustment_reason,
+          name = EXCLUDED.name,
+          user_id = COALESCE(attendance_logs.user_id, EXCLUDED.user_id),
+          updated_at = NOW()
+      `,
+      [resolvedUserId || null, resolvedPin || null, employeeName, attendanceDate, dateTime, isLate, minutesLate, lateThreshold, reason || 'Manual adjustment']
+    );
+    
+    console.log(`✅ Manual ${slot} saved for ${employeeName} at ${date} ${time}`);
+    
+    res.json({ success: true, message: "Attendance manually recorded" });
+    
+  } catch (error) {
+    console.error("❌ Manual attendance error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint to get late thresholds
+app.get("/api/late-thresholds", (req, res) => {
+  const thresholds = {};
+  
+  Object.keys(LATE_THRESHOLDS).forEach(day => {
+    const threshold = LATE_THRESHOLDS[day];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    thresholds[dayNames[parseInt(day)]] = `${threshold.hour.toString().padStart(2, '0')}:${threshold.minute.toString().padStart(2, '0')}`;
+  });
+  
+  res.json({
+    late_thresholds: thresholds,
+    description: "Late thresholds for morning check-in (AM check-in)",
+    note: "Saturday and Sunday have no late thresholds"
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Attendance server listening on port ${PORT}`);
+  console.log(`📝 Late thresholds configured:`);
+  console.log(`   • Monday: 8:01 AM`);
+  console.log(`   • Tuesday - Friday: 8:31 AM`);
+  console.log(`   • Saturday & Sunday: No late threshold`);
 });
