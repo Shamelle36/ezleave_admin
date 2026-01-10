@@ -13,7 +13,8 @@ import {
   getEmployeeSignature,
   uploadEmployeeSignature,
   deleteEmployeeSignature,
-  addLeaveTypeToAllEmployees
+  addLeaveTypeToAllEmployees,
+  getAllLeaveTypes
 } from "../controllers/employeeController.js";
 import { signatureStorage } from "../config/cloudinary.js";
 import multer from "multer";
@@ -35,6 +36,8 @@ const upload = multer({
     }
   }
 });
+
+router.get('/leave-types', getAllLeaveTypes);
 
 // Employee routes
 router.post("/", addEmployee);

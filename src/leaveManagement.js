@@ -171,6 +171,38 @@ const [newLeaveType, setNewLeaveType] = useState({
   days: 15
 });
 
+const [allLeaveTypes, setAllLeaveTypes] = useState([]);
+const [loadingLeaveTypes, setLoadingLeaveTypes] = useState(false);
+
+const fetchAllLeaveTypes = async () => {
+  try {
+    setLoadingLeaveTypes(true);
+    const response = await fetch(`${API_URL}/api/employees/leave-types`);
+    const data = await response.json();
+    
+    if (data.success) {
+      setAllLeaveTypes(data.leaveTypes);
+      
+      // Also update your leaveTypeMap for consistency
+      const updatedMap = {};
+      data.leaveTypes.forEach(type => {
+        updatedMap[type.name] = type.code;
+      });
+      setLeaveTypeMap(updatedMap);
+    }
+  } catch (error) {
+    console.error("Error fetching leave types:", error);
+  } finally {
+    setLoadingLeaveTypes(false);
+  }
+};
+
+useEffect(() => {
+  if (activeTab === 'leaveSettings') {
+    fetchAllLeaveTypes();
+  }
+}, [activeTab]);
+
 // Helper function to calculate days between dates
 const calculateDaysBetween = (startDate, endDate) => {
   try {
@@ -3754,150 +3786,234 @@ const handleAddLeaveType = async () => {
 )}
 
 {activeTab === 'leaveSettings' && (
-    <div style={styles.leaveSettingsContainer}>
-        <div style={styles.settingsHeader}>
-            <h2 style={styles.settingsTitle}>
-                <FontAwesomeIcon icon={faCog} style={{ marginRight: '10px' }} />
-                Leave Types Management
-            </h2>
-            <p style={styles.settingsSubtitle}>
-                Configure leave types and set default entitlements
-            </p>
-        </div>
-
-        {/* TWO COLUMN LAYOUT */}
-        <div style={styles.settingsLayout}>
-            {/* LEFT COLUMN: Existing Leave Types */}
-            <div style={styles.leftColumn}>
-                <div style={styles.sectionCard}>
-                    <div style={styles.sectionHeader}>
-                        <h3 style={styles.sectionTitle}>Existing Leave Types</h3>
-                        <span style={styles.countBadge}>
-                            {Object.keys(leaveTypeMap).length} types
-                        </span>
-                    </div>
-                    
-                    <div style={styles.leaveTypesList}>
-                        {Object.entries(leaveTypeMap).map(([fullName, abbr]) => (
-                            <div key={abbr} style={styles.leaveTypeItem}>
-                                <div style={styles.leaveTypeInfo}>
-                                    <div style={styles.leaveTypeCode}>{abbr}</div>
-                                    <div>
-                                        <div style={styles.leaveTypeName}>{fullName}</div>
-                                        <div style={styles.leaveTypeMeta}>
-                                            Default: 15 days/year
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={styles.leaveTypeActions}>
-                                    <button 
-                                        style={styles.editBtn}
-                                        title="Edit leave type"
-                                        onClick={() => {
-                                            // Edit functionality
-                                            const newName = prompt(`Edit leave type name:`, fullName);
-                                            if (newName && newName !== fullName) {
-                                                // Update logic here
-                                            }
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faEdit} />
-                                    </button>
-                                    <button 
-                                        style={styles.deleteBtn}
-                                        title="Delete leave type"
-                                        onClick={() => {
-                                            if (window.confirm(`Delete "${fullName}"? This will remove it from all employees.`)) {
-                                                // Delete logic here
-                                                const updatedMap = { ...leaveTypeMap };
-                                                delete updatedMap[fullName];
-                                                setLeaveTypeMap(updatedMap);
-                                                localStorage.setItem('leaveTypes', JSON.stringify(updatedMap));
-                                            }
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faTrash} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* RIGHT COLUMN: Add New Leave Type */}
-            <div style={styles.rightColumn}>
-                <div style={styles.sectionCard}>
-                    <h3 style={styles.sectionTitle}>
-                        <FontAwesomeIcon icon={faPlus} style={{ marginRight: '8px' }} />
-                        Add New Leave Type
-                    </h3>
-                    
-                    <div style={styles.addLeaveForm}>
-                        <div style={styles.formGroup}>
-                            <label style={styles.formLabel}>Leave Type Name *</label>
-                            <input 
-                                type="text" 
-                                style={styles.formInput}
-                                placeholder="e.g., Bereavement Leave, Mental Health Day"
-                                value={newLeaveType.name}
-                                onChange={(e) => setNewLeaveType({...newLeaveType, name: e.target.value})}
-                            />
-                        </div>
-
-                        <div style={styles.formRow}>
-                            <div style={styles.formGroup}>
-                                <label style={styles.formLabel}>Abbreviation *</label>
-                                <input 
-                                    type="text" 
-                                    style={styles.formInput}
-                                    placeholder="e.g., BL, MHD"
-                                    value={newLeaveType.abbreviation}
-                                    onChange={(e) => setNewLeaveType({...newLeaveType, abbreviation: e.target.value.toUpperCase()})}
-                                    maxLength="5"
-                                />
-                                <small style={styles.helperText}>Max 5 characters (e.g., VL, SL)</small>
-                            </div>
-                            
-                            <div style={styles.formGroup}>
-                                <label style={styles.formLabel}>Default Entitlement *</label>
-                                <div style={styles.inputWithUnit}>
-                                    <input 
-                                        type="number" 
-                                        style={styles.formInput}
-                                        placeholder="0"
-                                        min="0"
-                                        max="365"
-                                        value={newLeaveType.days}
-                                        onChange={(e) => setNewLeaveType({...newLeaveType, days: parseInt(e.target.value)})}
-                                    />
-                                    <span style={styles.inputUnit}>days/year</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style={styles.formActions}>
-                            <button 
-                                style={styles.clearBtn}
-                                onClick={() => setNewLeaveType({ name: '', abbreviation: '', days: 15 })}
-                            >
-                                <FontAwesomeIcon icon={faEraser} style={{ marginRight: '8px' }} />
-                                Clear Form
-                            </button>
-                            <button 
-                                style={styles.submitBtn}
-                                onClick={handleAddLeaveType}
-                                disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim()}
-                            >
-                                <FontAwesomeIcon icon={faSave} style={{ marginRight: '8px' }} />
-                                Save New Leave Type
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div style={styles.leaveSettingsContainer}>
+    <div style={styles.settingsHeader}>
+      <h2 style={styles.settingsTitle}>
+        <FontAwesomeIcon icon={faCog} style={{ marginRight: '10px' }} />
+        Leave Types Management
+      </h2>
+      <p style={styles.settingsSubtitle}>
+        Configure leave types and set default entitlements
+      </p>
     </div>
+
+    {/* TWO COLUMN LAYOUT */}
+    <div style={styles.settingsLayout}>
+      {/* LEFT COLUMN: Existing Leave Types */}
+      <div style={styles.leftColumn}>
+        <div style={styles.sectionCard}>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>
+              Existing Leave Types
+              <span style={styles.countBadge}>
+                {allLeaveTypes.length} types
+              </span>
+            </h3>
+            <button 
+              style={styles.refreshBtn}
+              onClick={fetchAllLeaveTypes}
+              disabled={loadingLeaveTypes}
+              title="Refresh leave types"
+            >
+              <FontAwesomeIcon icon={faRefresh} />
+              {loadingLeaveTypes ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
+          
+          {loadingLeaveTypes ? (
+            <div style={styles.loadingContainer}>
+              <div style={styles.loadingSpinner}></div>
+              <p>Loading leave types...</p>
+            </div>
+          ) : allLeaveTypes.length > 0 ? (
+            <div style={styles.leaveTypesList}>
+              {allLeaveTypes.map((leaveType, index) => (
+                <div key={`${leaveType.code}-${index}`} style={styles.leaveTypeItem}>
+                  <div style={styles.leaveTypeInfo}>
+                    <div style={styles.leaveTypeCode}>{leaveType.code}</div>
+                    <div>
+                      <div style={styles.leaveTypeName}>{leaveType.name}</div>
+                      <div style={styles.leaveTypeMeta}>
+                        Code: {leaveType.code}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={styles.leaveTypeActions}>
+                    <button 
+                      style={styles.editBtn}
+                      title="Edit leave type"
+                      onClick={() => {
+                        setNewLeaveType({
+                          name: leaveType.name,
+                          abbreviation: leaveType.code,
+                          days: 15
+                        });
+                        // Scroll to form
+                        document.querySelector('.rightColumn')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faEdit} />
+                    </button>
+                    <button 
+                      style={styles.deleteBtn}
+                      title="Delete leave type"
+                      onClick={() => {
+                        if (window.confirm(`Delete "${leaveType.name}"? This will remove it from all employees.`)) {
+                          // Add delete functionality here
+                          console.log(`Delete leave type: ${leaveType.code}`);
+                        }
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faTrash} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={styles.emptyState}>
+              <FontAwesomeIcon icon={faCalendarAlt} size="3x" style={{ color: '#ccc', marginBottom: '15px' }} />
+              <p style={styles.emptyText}>No leave types found in the system</p>
+              <p style={styles.emptySubtext}>Add a new leave type using the form on the right</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN: Add New Leave Type */}
+      <div style={styles.rightColumn}>
+        <div style={styles.sectionCard}>
+          <h3 style={styles.sectionTitle}>
+            <FontAwesomeIcon icon={faPlus} style={{ marginRight: '8px' }} />
+            {newLeaveType.name && leaveTypeMap[newLeaveType.name] ? 'Edit Leave Type' : 'Add New Leave Type'}
+          </h3>
+          
+          <div style={styles.addLeaveForm}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Leave Type Name *</label>
+              <input 
+                type="text" 
+                style={styles.formInput}
+                placeholder="e.g., Bereavement Leave, Mental Health Day"
+                value={newLeaveType.name}
+                onChange={(e) => {
+                  // Auto-generate abbreviation from name
+                  const name = e.target.value;
+                  const abbreviation = name
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase())
+                    .join('')
+                    .substring(0, 4);
+                  
+                  setNewLeaveType({
+                    ...newLeaveType,
+                    name: name,
+                    abbreviation: abbreviation
+                  });
+                }}
+              />
+            </div>
+
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Abbreviation *</label>
+                <input 
+                  type="text" 
+                  style={styles.formInput}
+                  placeholder="e.g., BL, MHD"
+                  value={newLeaveType.abbreviation}
+                  onChange={(e) => setNewLeaveType({
+                    ...newLeaveType, 
+                    abbreviation: e.target.value.toUpperCase()
+                  })}
+                  maxLength="5"
+                />
+                <small style={styles.helperText}>
+                  Max 5 characters (e.g., VL, SL). Used in leave_entitlements table.
+                </small>
+              </div>
+              
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Default Entitlement *</label>
+                <div style={styles.inputWithUnit}>
+                  <input 
+                    type="number" 
+                    style={styles.formInput}
+                    placeholder="0"
+                    min="0"
+                    max="365"
+                    value={newLeaveType.days}
+                    onChange={(e) => setNewLeaveType({
+                      ...newLeaveType, 
+                      days: parseInt(e.target.value) || 0
+                    })}
+                  />
+                  <span style={styles.inputUnit}>days/year</span>
+                </div>
+                <small style={styles.helperText}>
+                  Default days for new employees
+                </small>
+              </div>
+            </div>
+
+            {/* Additional Settings */}
+            <div style={styles.subsectionTitle}>
+              <FontAwesomeIcon icon={faUserCog} style={{ marginRight: '8px' }} />
+              Eligibility Settings
+            </div>
+            
+            <div style={styles.checkboxGroup}>
+              <label style={styles.checkboxLabel}>
+                <input 
+                  type="checkbox" 
+                  style={styles.checkbox}
+                  checked={true}
+                  onChange={(e) => {}}
+                />
+                Available to all employees
+              </label>
+              
+              <label style={styles.checkboxLabel}>
+                <input 
+                  type="checkbox" 
+                  style={styles.checkbox}
+                  onChange={(e) => {}}
+                />
+                Female employees only
+              </label>
+              
+              <label style={styles.checkboxLabel}>
+                <input 
+                  type="checkbox" 
+                  style={styles.checkbox}
+                  onChange={(e) => {}}
+                />
+                Married employees only
+              </label>
+            </div>
+
+            <div style={styles.formActions}>
+              <button 
+                style={styles.clearBtn}
+                onClick={() => setNewLeaveType({ name: '', abbreviation: '', days: 15 })}
+              >
+                <FontAwesomeIcon icon={faEraser} style={{ marginRight: '8px' }} />
+                Clear Form
+              </button>
+              <button 
+                style={styles.submitBtn}
+                onClick={handleAddLeaveType}
+                disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim()}
+              >
+                <FontAwesomeIcon icon={faSave} style={{ marginRight: '8px' }} />
+                {newLeaveType.name && leaveTypeMap[newLeaveType.name] ? 'Update Leave Type' : 'Save New Leave Type'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 )}
 
              </div>

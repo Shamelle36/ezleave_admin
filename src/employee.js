@@ -2700,7 +2700,7 @@ const handleEditSave = async () => {
                                   <span style={{ fontSize: '12px', color: '#28a745' }}>Uploaded</span>
                                 </div>
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                                   <div style={{
                                     width: '24px',
                                     height: '24px',
@@ -2709,11 +2709,20 @@ const handleEditSave = async () => {
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
+                                    flexShrink: 0 // Prevents the icon from shrinking
                                   }}>
                                     <FontAwesomeIcon icon={faTimes} style={{ color: 'white', fontSize: '12px' }} />
                                   </div>
-                                  <span style={{ fontSize: '12px', color: '#dc3545' }}>Missing</span>
+                                  <span style={{
+                                    fontSize: '12px',
+                                    color: '#dc3545',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    width: '60px' // Important for flexbox text truncation
+                                  }}>No Signature Attached</span>
                                 </div>
+
                               )}
                             </td>
                             <td className="row-actions" style={styles.rowName}>
@@ -2759,58 +2768,84 @@ const handleEditSave = async () => {
                 </table>
 
                 {/* Pagination */}
-                {filteredEmployees.length > 0 && (
-                  <div className="pagination-container" style={styles.paginationContainer}>
-                    {/* Previous Button */}
-                    <button
-                      className="page-btn prev-btn"
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      style={styles.pageBtn}
-                    >
-                      {'<'}
-                    </button>
+               {/* Pagination for Manage Employees */}
+{filteredEmployees.length > 0 && (
+  <div className="pagination-container" style={{
+    ...styles.paginationContainer,
+    position: 'static',
+    transform: 'none',
+    left: 'auto',
+    marginTop: '20px',
+    justifyContent: 'center'
+  }}>
+    {/* Previous Button */}
+    <button
+      className="page-btn prev-btn"
+      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+      style={styles.pageBtn}
+      disabled={currentPage === 1}
+    >
+      {'<'}
+    </button>
 
-                    {/* First page + ellipsis if needed */}
-                    {getPaginationRange(currentPage, totalPages)[0] > 1 && (
-                      <>
-                        <button className="page-btn" onClick={() => setCurrentPage(1)} style={styles.pageBtn}>1</button>
-                        {getPaginationRange(currentPage, totalPages)[0] > 2 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
-                      </>
-                    )}
+    {/* First page + ellipsis if needed */}
+    {getPaginationRange(currentPage, totalPages)[0] > 1 && (
+      <>
+        <button 
+          className="page-btn" 
+          onClick={() => setCurrentPage(1)} 
+          style={styles.pageBtn}
+        >
+          1
+        </button>
+        {getPaginationRange(currentPage, totalPages)[0] > 2 && (
+          <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+        )}
+      </>
+    )}
 
-                    {/* Visible page numbers */}
-                    {getPaginationRange(currentPage, totalPages).map((page) => (
-                      <button
-                        key={page}
-                        className={`page-btn ${currentPage === page ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(page)}
-                        style={{
-                          ...styles.pageBtn,
-                          ...(currentPage === page ? styles.activePageBtn : {}),
-                        }}
-                      >
-                        {page}
-                      </button>
-                    ))}
+    {/* Visible page numbers */}
+    {getPaginationRange(currentPage, totalPages).map((page) => (
+      <button
+        key={page}
+        className={`page-btn ${currentPage === page ? 'active' : ''}`}
+        onClick={() => setCurrentPage(page)}
+        style={{
+          ...styles.pageBtn,
+          ...(currentPage === page ? styles.activePageBtn : {}),
+        }}
+      >
+        {page}
+      </button>
+    ))}
 
-                    {/* Last page + ellipsis if needed */}
-                    {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
-                      <>
-                        {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>}
-                        <button className="page-btn" onClick={() => setCurrentPage(totalPages)} style={styles.pageBtn}>{totalPages}</button>
-                      </>
-                    )}
+    {/* Last page + ellipsis if needed */}
+    {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages && (
+      <>
+        {getPaginationRange(currentPage, totalPages).slice(-1)[0] < totalPages - 1 && (
+          <span className="pagination-ellipsis" style={{ padding: '0 8px' }}>…</span>
+        )}
+        <button 
+          className="page-btn" 
+          onClick={() => setCurrentPage(totalPages)} 
+          style={styles.pageBtn}
+        >
+          {totalPages}
+        </button>
+      </>
+    )}
 
-                    {/* Next Button */}
-                    <button
-                      className="page-btn next-btn"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      style={styles.pageBtn}
-                    >
-                      {'>'}
-                    </button>
-                  </div>
-                )}
+    {/* Next Button */}
+    <button
+      className="page-btn next-btn"
+      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+      style={styles.pageBtn}
+      disabled={currentPage === totalPages}
+    >
+      {'>'}
+    </button>
+  </div>
+)}
                 
               </div>
             </div>
@@ -3748,7 +3783,7 @@ const handleEditSave = async () => {
               ))}
             </div>
 
-            {/* Pagination */}
+            {/* Pagination for Directory */}
             {employeeRecord.filter(emp => {
               const search = searchTerm.toLowerCase();
               const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
@@ -3756,7 +3791,14 @@ const handleEditSave = async () => {
               const position = (emp.position || '').toLowerCase();
               return fullName.includes(search) || email.includes(search) || position.includes(search);
             }).length > 0 && (
-              <div className="pagination-container" style={styles.paginationContainer}>
+              <div className="pagination-container" style={{
+                ...styles.paginationContainer,
+                position: 'static',
+                transform: 'none',
+                left: 'auto',
+                marginTop: '20px',
+                justifyContent: 'center'
+              }}>
                 {/* Previous Button */}
                 <button
                   className="page-btn prev-btn"
