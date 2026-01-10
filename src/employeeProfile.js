@@ -106,7 +106,7 @@ function EmployeeProfile() {
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
 
-  const API_URL = "http://localhost:5000";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
 
    useEffect(() => {
