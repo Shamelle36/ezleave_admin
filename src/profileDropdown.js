@@ -20,6 +20,7 @@ const ProfileDropdown = ({
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const profile = profileData || admin;
 
@@ -100,10 +101,28 @@ const ProfileDropdown = ({
   const handleProfileClick = () => { setShowProfileModal(true); setShowProfileMenu(false); };
   const handleSettingsClick = () => { setShowSettingsModal(true); setShowProfileMenu(false); };
   const handleLogoutClick = () => { setShowLogoutModal(true); setShowProfileMenu(false); };
+  const handleNotificationClick = () => { 
+    setShowNotifications(!showNotifications); 
+    setShowProfileMenu(false);
+    // If you want to trigger the notification modal instead of inline dropdown:
+    // setShowNotificationModal(true);
+  };
+
+  // Count unread notifications
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
     <div className="profile-container">
       <div className="profile-wrapper">
+        {/* Notification Icon */}
+        <div className="notification-container" onClick={handleNotificationClick}>
+          <FontAwesomeIcon icon={faBell} className="notification-icon" />
+          {unreadCount > 0 && (
+            <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+          )}
+        </div>
+
+        {/* Profile Section */}
         <div className="profile-info" onClick={() => setShowProfileMenu(!showProfileMenu)}>
           <img
             src={profile?.profile_picture || "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"}
@@ -116,6 +135,41 @@ const ProfileDropdown = ({
           </div>
         </div>
 
+        {/* Notifications Dropdown */}
+        {showNotifications && (
+          <div className="notifications-dropdown">
+            <div className="notifications-header">
+              <h3>Notifications</h3>
+              {unreadCount > 0 && (
+                <span className="unread-count">{unreadCount} unread</span>
+              )}
+            </div>
+            <div className="notifications-list">
+              {notifications.length > 0 ? (
+                notifications.slice(0, 5).map(notification => (
+                  <div 
+                    key={notification.id} 
+                    className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
+                  >
+                    <div className="notification-message">{notification.message}</div>
+                    <div className="notification-time">
+                      {new Date(notification.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="no-notifications">No notifications</div>
+              )}
+            </div>
+            {notifications.length > 5 && (
+              <div className="view-all-notifications" onClick={() => setShowNotificationModal(true)}>
+                View all notifications
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Profile Dropdown */}
         {showProfileMenu && (
           <div className="profile-dropdown">
             <button className="dropdown-item" onClick={handleProfileClick}>
