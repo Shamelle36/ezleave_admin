@@ -1062,7 +1062,7 @@ function EmployeeProfile() {
                 style={styles.reactivateBtn}
                 onClick={handleReactivateEmployee}
               >
-                <FontAwesomeIcon icon={faRedo} /> Reactivate
+                <FontAwesomeIcon icon={faRedo} /> Activate
               </button>
             )}
             <button 
