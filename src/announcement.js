@@ -373,7 +373,7 @@ const [isMobileView, setIsMobileView] = useState(false);
     setLoading(prev => ({ ...prev, post: true }));
 
     try {
-      const res = await fetch("http://localhost:5000/api/announcements", {
+      const res = await fetch(`${API_URL}/api/announcements`, {
         method: "POST",
         body: formData,
       });
@@ -423,7 +423,7 @@ const [isMobileView, setIsMobileView] = useState(false);
       // Only append images
       images.forEach((img) => formData.append("images", img));
 
-      const res = await fetch(`http://localhost:5000/api/announcements/${editingAnnouncement.id}`, {
+      const res = await fetch(`${API_URL}/api/announcements/${editingAnnouncement.id}`, {
         method: "PUT",
         body: formData,
       });
@@ -448,7 +448,7 @@ const [isMobileView, setIsMobileView] = useState(false);
     setLoading(prev => ({ ...prev, delete: true }));
 
     try {
-      const res = await fetch(`http://localhost:5000/api/announcements/${editingAnnouncement.id}`, {
+      const res = await fetch(`${API_URL}/api/announcements/${editingAnnouncement.id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete announcement");
