@@ -1155,17 +1155,6 @@ const fetchLocalHolidays = async () => {
                 <FontAwesomeIcon icon={faFileContract} style={{marginRight: '10px'}} />
                 Terms & Conditions Management
               </button>
-
-              <button 
-                style={styles.settingsSectionButton}
-                onClick={() => {
-                  setShowSettingsModal(false);
-                  setShowTimeSettingsModal(true);
-                }}
-              >
-                <FontAwesomeIcon icon={faClock} style={{marginRight: '10px'}} />
-                Attendance Time Settings
-              </button>
               
               {/* Local Holiday Settings Button */}
               <button 
@@ -1317,250 +1306,6 @@ const fetchLocalHolidays = async () => {
         </div>
       )}
 
-      {/* Time Settings Modal */}
-      {showTimeSettingsModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.timeSettingsModalContent}>
-            <div style={styles.timeSettingsModalHeader}>
-              <h2 style={styles.timeSettingsModalTitle}>
-                <FontAwesomeIcon icon={faClock} /> Attendance Time Settings
-              </h2>
-              <button 
-                style={styles.closeButton}
-                onClick={() => {
-                  setShowTimeSettingsModal(false);
-                  setEditingDay(null);
-                }}
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            </div>
-
-            <div style={styles.timeSettingsContent}>
-              <p style={styles.timeSettingsDescription}>
-                Set the official working hours for each day of the week. 
-                Employees checking in after the start time will be marked as late.
-              </p>
-
-              {isLoadingTimeSettings ? (
-                <div style={styles.loadingContainer}>
-                  <p>Loading time settings...</p>
-                </div>
-              ) : (
-                <>
-                  <div style={styles.timeSettingsGrid}>
-                    {[
-                      { key: 'monday', label: 'Monday' },
-                      { key: 'tuesday', label: 'Tuesday' },
-                      { key: 'wednesday', label: 'Wednesday' },
-                      { key: 'thursday', label: 'Thursday' },
-                      { key: 'friday', label: 'Friday' },
-                      { key: 'saturday', label: 'Saturday' },
-                      { key: 'sunday', label: 'Sunday' }
-                    ].map(({ key, label }) => {
-                      const config = attendanceTimeSettings[key] || {};
-                      const isActive = config.is_active !== undefined ? config.is_active : true;
-                      const startTime = config.start || '';
-                      const endTime = config.end || '';
-                      const isTimeSet = startTime && endTime;
-                      
-                      return (
-                        <div key={key} style={{
-                          ...styles.timeSettingCard,
-                          opacity: isActive ? 1 : 0.7,
-                          borderColor: isActive ? '#e9ecef' : '#ccc'
-                        }}>
-                          <div style={styles.timeSettingHeader}>
-                            <div>
-                              <h4 style={styles.dayName}>
-                                {label}
-                              </h4>
-                              {!isActive && (
-                                <span style={styles.inactiveBadge}>INACTIVE</span>
-                              )}
-                            </div>
-                            {editingDay === key ? (
-                              <button 
-                                style={styles.saveTimeButton}
-                                onClick={() => setEditingDay(null)}
-                              >
-                                Done
-                              </button>
-                            ) : (
-                              <button 
-                                style={styles.editTimeButton}
-                                onClick={() => setEditingDay(key)}
-                                disabled={!isActive}
-                              >
-                                {isTimeSet ? 'Edit' : 'Add'}
-                              </button>
-                            )}
-                          </div>
-                          
-                          {editingDay === key ? (
-                            <div style={styles.timeInputs}>
-                              <div style={styles.timeInputGroup}>
-                                <label style={styles.timeLabel}>Start Time</label>
-                                <input
-                                  type="time"
-                                  value={startTime}
-                                  onChange={(e) => {
-                                    setAttendanceTimeSettings(prev => ({
-                                      ...prev,
-                                      [key]: { 
-                                        ...prev[key], 
-                                        start: e.target.value,
-                                        end: endTime || '17:00',
-                                        is_active: true
-                                      }
-                                    }));
-                                  }}
-                                  style={styles.timeInput}
-                                />
-                              </div>
-                              <div style={styles.timeInputGroup}>
-                                <label style={styles.timeLabel}>End Time</label>
-                                <input
-                                  type="time"
-                                  value={endTime}
-                                  onChange={(e) => {
-                                    setAttendanceTimeSettings(prev => ({
-                                      ...prev,
-                                      [key]: { 
-                                        ...prev[key], 
-                                        end: e.target.value,
-                                        start: startTime || '08:00',
-                                        is_active: true
-                                      }
-                                    }));
-                                  }}
-                                  style={styles.timeInput}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={styles.timeDisplay}>
-                              {isTimeSet ? (
-                                <>
-                                  <div style={styles.timeSlot}>
-                                    <FontAwesomeIcon icon={faArrowRight} style={styles.timeIcon} />
-                                    <span style={styles.timeText}>Start: {startTime}</span>
-                                  </div>
-                                  <div style={styles.timeSlot}>
-                                    <FontAwesomeIcon icon={faArrowLeft} style={styles.timeIcon} />
-                                    <span style={styles.timeText}>End: {endTime}</span>
-                                  </div>
-                                </>
-                              ) : (
-                                <div style={styles.noTimeSet}>
-                                  <FontAwesomeIcon icon={faClock} style={styles.noTimeIcon} />
-                                  <span style={styles.noTimeText}>Time not set</span>
-                                  <button 
-                                    style={styles.addTimeButton}
-                                    onClick={() => setEditingDay(key)}
-                                  >
-                                    <FontAwesomeIcon icon={faPlus} /> Add Time
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div style={styles.timeSettingsActions}>
-                    <button 
-                      style={styles.saveAllButton}
-                      onClick={async () => {
-                        try {
-                          const settingsToSave = {};
-                          const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                          
-                          days.forEach(day => {
-                            const config = attendanceTimeSettings[day] || {};
-                            if (config.start && config.end) {
-                              settingsToSave[day] = {
-                                start: config.start,
-                                end: config.end,
-                                is_active: config.is_active !== false
-                              };
-                            }
-                          });
-                          
-                          if (Object.keys(settingsToSave).length === 0) {
-                            alert('Please add at least one time setting');
-                            return;
-                          }
-                          
-                          console.log('Saving settings:', settingsToSave);
-                          
-                          const response = await fetch(`${API_URL}/api/attendance/settings/time`, {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(settingsToSave)
-                          });
-
-                          if (response.ok) {
-                            alert('Attendance time settings saved successfully!');
-                            setShowTimeSettingsModal(false);
-                            setEditingDay(null);
-                            
-                            const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
-                            if (refreshResponse.ok) {
-                              const data = await refreshResponse.json();
-                              setAttendanceTimeSettings(data);
-                            }
-                          } else {
-                            const errorData = await response.json();
-                            alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
-                          }
-                        } catch (error) {
-                          console.error('Error saving time settings:', error);
-                          alert('Error saving settings. Check console.');
-                        }
-                      }}
-                    >
-                      Save All Settings
-                    </button>
-                    <button 
-                      style={styles.resetButton}
-                      onClick={async () => {
-                        if (window.confirm('Are you sure you want to reset all time settings to default?')) {
-                          try {
-                            const response = await fetch(`${API_URL}/api/attendance/settings/time/reset`, {
-                              method: 'POST'
-                            });
-
-                            if (response.ok) {
-                              alert('Settings reset to default successfully!');
-                              const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
-                              if (refreshResponse.ok) {
-                                const data = await refreshResponse.json();
-                                setAttendanceTimeSettings(data);
-                              }
-                            } else {
-                              alert('Failed to reset settings');
-                            }
-                          } catch (error) {
-                            console.error('Error resetting settings:', error);
-                            alert('Error resetting settings');
-                          }
-                        }
-                      }}
-                    >
-                       Reset to Default
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Local Holiday Modal */}
       {showLocalHolidayModal && (
@@ -3189,16 +2934,18 @@ const styles = {
     padding: '20px',
     alignItems: 'flex-start',
     gap: '20px',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap', // Changed from 'wrap' to 'nowrap'
+    width: '100%',
   },
   tableContainer: {
-    flex: '1',
+    flex: '1 1 auto', // Changed from '1' to '1 1 auto'
     backgroundColor: '#fff',
     borderRadius: '12px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    padding: '10px',
+    padding: '15px',
     minWidth: '300px',
-    maxWidth: '580px',
+    // REMOVED: maxWidth: '580px',
+    width: '100%', // Added
     boxSizing: 'border-box',
     minHeight: '300px',
     overflowX: 'auto',

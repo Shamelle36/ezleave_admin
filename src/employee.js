@@ -4573,7 +4573,12 @@ const styles = {
   },
   content: {
     marginLeft: '300px',
-    marginTop: '80px'
+    marginTop: '80px',
+    width: 'calc(100% - 300px)', // Add this
+    padding: '20px', // Add padding
+    boxSizing: 'border-box', // Add this
+    overflowX: 'auto', // Allow horizontal scrolling if needed
+    minHeight: 'calc(100vh - 80px)', // Full height minus header
   },
   buttons: {
     display: 'flex',
@@ -4603,8 +4608,22 @@ const styles = {
     borderRadius: '5px',
     border: 'none',
     marginTop: '20px',
-    width: '1200px',
+    width: '100%', // Changed from 1200px to 100%
+    maxWidth: '100%', // Ensure it doesn't overflow
+    boxSizing: 'border-box',
   },
+
+  directory: {
+    borderRadius: '5px',
+    border: 'none',
+    marginTop: '20px',
+    width: '100%', // Make it responsive
+    padding: '15px',
+    boxSizing: 'border-box',
+    backgroundColor: '#fff', // Optional: add background
+    minHeight: 'calc(100vh - 150px)', // Adjust based on your needs
+  },
+
   firstRow: {
     justifyContent: 'space-between',
     display: 'flex',
@@ -4804,14 +4823,13 @@ const styles = {
 
 
   cardGrid: {
-    display: 'flex',
-    gap: '2rem',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    maxWidth: '1200px',
-    margin: '0 auto',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', // Responsive grid
+    gap: '1.5rem',
+    width: '100%',
     boxSizing: 'border-box',
   },
+  
   card: {
     backgroundColor: '#fff',
     borderRadius: '10px',
