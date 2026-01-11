@@ -560,7 +560,7 @@ const rejectionReasons = [
 ];
 
 
-  const API_URL = "http://localhost:5000";
+  const API_URL = "https://ezleave-admin-api.onrender.com";
 
       // Add this useEffect near your other useEffect hooks
 useEffect(() => {
