@@ -1300,10 +1300,10 @@ const styles = {
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
   },
   mainContent: { 
-    marginLeft: "300px", 
-    flex: 1, 
-    marginTop: "80px",
-    maxWidth: "calc(100% - 280px)",
+    marginLeft: '300px', // Adjusted to account for the sidebar width
+    backgroundColor: '#F8F8F8',
+    marginTop: '80px', 
+    overflow: 'hidden',
     marginRight: '20px'
   },
   

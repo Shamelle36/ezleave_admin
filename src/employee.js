@@ -4613,6 +4613,12 @@ const styles = {
     boxSizing: 'border-box',
   },
 
+  tableContainer: {
+    flex: 1,
+    width: '100%',
+    overflow: 'auto'
+  },
+
   directory: {
     borderRadius: '5px',
     border: 'none',
@@ -4680,6 +4686,7 @@ const styles = {
     maxWidth: '100%',
     marginBottom: '20px',
     marginTop: '20px',
+    minWidth: '1100px'
   },
   employeeTable: {
     backgroundColor: '#f5f7f9',
@@ -4689,7 +4696,8 @@ const styles = {
     width: '100%',
     borderCollapse: 'separate',
     borderSpacing: '0',
-    overflow: 'hidden',
+    overflow: 'auto',
+    minWidth: '1100px'
   },
   columnName: {
     padding: '10px',
@@ -4829,7 +4837,7 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box',
   },
-  
+
   card: {
     backgroundColor: '#fff',
     borderRadius: '10px',

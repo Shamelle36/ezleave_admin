@@ -2974,11 +2974,13 @@ const styles = {
   row3: {
     display: 'flex',
     flexDirection: 'row',
-    padding: '20px',
-    justifyContent: 'space-around',
-    alignItems: 'flex-start',
+    padding: '0 20px 20px 20px', // Changed to remove top padding
+    justifyContent: 'space-between', // Changed from 'space-around'
+    alignItems: 'stretch', // Changed from 'flex-start'
     gap: '20px',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap', // Changed from 'wrap'
+    width: '100%',
+    boxSizing: 'border-box',
   },
   chartContainer: {
     backgroundColor: '#fff',
@@ -2991,7 +2993,6 @@ const styles = {
     flexDirection: 'column',
     flex: '1 1 300px',
     minWidth: '280px',
-    maxWidth: '400px',
     boxSizing: 'border-box',
   },
   pieAndLegend: {
@@ -3012,9 +3013,7 @@ const styles = {
     borderRadius: '10px',
     boxShadow: '0 0 10px rgba(0,0,0,0.1)',
     border: '1px solid #e0e0e0',
-    flex: '1 1 350px',
     minWidth: '300px',
-    maxWidth: '450px',
     boxSizing: 'border-box',
   },
   header5: {
@@ -3022,6 +3021,7 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '10px',
+    gap: '50px'
   },
   title: {
     margin: 0,
@@ -3035,7 +3035,7 @@ const styles = {
     color: '#000',
     fontWeight: '600',
     cursor: 'pointer',
-    fontSize: '15px',
+    fontSize: '12px',
   },
   openDropdown: {
     position: 'absolute',
@@ -3056,7 +3056,6 @@ const styles = {
     padding: '15px',
     flex: '1 1 350px',
     minWidth: '300px',
-    maxWidth: '550px',
     boxSizing: 'border-box',
   },
   notificationList: {
