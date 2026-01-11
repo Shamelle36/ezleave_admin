@@ -2,13 +2,12 @@ import express from "express";
 import ExcelJS from "exceljs";
 import fs from "fs";
 import path from "path";
-import puppeteer from "puppeteer"; // Keep using regular puppeteer
+import puppeteer from "puppeteer-core"; // Changed from puppeteer to puppeteer-core
+import chromium from "@sparticuz/chromium"; // Add this package
 
 const router = express.Router();
 
 router.post("/export-pdf", async (req, res) => {
-  let browser = null;
-  
   try {
     const { employee, leaveCards } = req.body;
 
@@ -244,108 +243,53 @@ router.post("/export-pdf", async (req, res) => {
 </html>
 `;
 
-    // 3️⃣ Convert HTML → PDF using Puppeteer with Render compatibility
+    // 3️⃣ Convert HTML → PDF using Puppeteer-core with Chromium for Render.com
     const tempPdfPath = tempExcelPath.replace(".xlsx", ".pdf");
     
-    // Configure Puppeteer for both local and Render
-    const launchOptions = {
-      headless: 'new', // Use new headless mode
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', // Important for Render
-        '--disable-gpu',
-        '--single-process',
-        '--no-zygote',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-software-rasterizer',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-      ],
-      timeout: 30000,
-    };
-
-    // On Render, use the installed Chrome
-    if (process.env.RENDER || process.env.NODE_ENV === 'production') {
-      // Render has Chrome installed at this path
-      launchOptions.executablePath = '/usr/bin/chromium-browser';
+    // Configure Chromium for Render.com
+    let browser;
+    if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+      // Production mode on Render.com
+      const executablePath = await chromium.executablePath();
+      
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: executablePath,
+        headless: chromium.headless,
+      });
+    } else {
+      // Development mode (local)
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
     }
-
-    console.log('Launching Puppeteer with options:', { 
-      headless: launchOptions.headless,
-      env: process.env.NODE_ENV,
-      isRender: !!process.env.RENDER 
-    });
-
-    browser = await puppeteer.launch(launchOptions);
     
     const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
     
-    // Set viewport to match Letter size
-    await page.setViewport({ width: 1120, height: 1580, deviceScaleFactor: 2 });
-    
-    // Set content with proper wait
-    await page.setContent(html, { 
-      waitUntil: ['networkidle0', 'domcontentloaded'],
-      timeout: 30000 
-    });
-
-    // Generate PDF buffer directly (avoid file system when possible)
     const pdfBuffer = await page.pdf({
       format: "Letter",
       printBackground: true,
       landscape: false,
       margin: { top: "0", bottom: "0", left: "0", right: "0" },
-      preferCSSPageSize: true,
-      timeout: 30000,
     });
+    
+    await browser.close();
 
-    // 4️⃣ Send back PDF directly from buffer
+    // 4️⃣ Send back PDF (stream buffer directly instead of writing to file)
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${employee.last_name}, ${employee.first_name}.pdf"`);
     res.send(pdfBuffer);
 
-    // 5️⃣ Cleanup Excel file
-    try { 
-      fs.unlinkSync(tempExcelPath); 
-    } catch(e) { 
-      console.log("Cleanup Excel error:", e.message);
-    }
+    // cleanup
+    try { fs.unlinkSync(tempExcelPath); } catch(e){/*ignore*/ }
+    // No need to delete tempPdfPath since we're not creating it anymore
 
   } catch (error) {
     console.error("❌ Export failed:", error);
-    
-    // Log specific Puppeteer errors
-    if (error.message.includes('Failed to launch chrome') || error.message.includes('executable')) {
-      console.error('Chrome executable not found. Check Render Chrome installation.');
-    }
-    
-    if (error.message.includes('ENOENT')) {
-      console.error('File system error - temp directory issue');
-    }
-    
-    // Provide error response
-    const errorMessage = process.env.NODE_ENV === 'production' 
-      ? "PDF generation service is temporarily unavailable. Please try again or download the Excel version."
-      : error.message;
-    
-    res.status(500).json({ 
-      error: "PDF generation failed",
-      message: errorMessage,
-      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
-    });
-    
-  } finally {
-    // Always close browser to prevent memory leaks
-    if (browser) {
-      try {
-        await browser.close();
-        console.log('Browser closed successfully');
-      } catch (e) {
-        console.error("Error closing browser:", e);
-      }
-    }
+    res.status(500).send("Internal Server Error");
   }
 });
 
