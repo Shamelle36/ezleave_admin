@@ -42,7 +42,10 @@ import {
   faLock,
   faArchive,
   faRedo,
-  faHistory
+  faHistory,
+  faInfoCircle,
+  faEye,
+  faCheckCircle
 } from "@fortawesome/free-solid-svg-icons";
 import "react-calendar/dist/Calendar.css";
 import "./dashboardCalendar.css";
@@ -122,6 +125,8 @@ function EmployeeProfile() {
     sortOrder: 'desc'
   });
   const [leaveHistorySummary, setLeaveHistorySummary] = useState(null);
+  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [showLeaveDetails, setShowLeaveDetails] = useState(false);
 
   const API_URL = "https://ezleave-admin-api.onrender.com";
 
@@ -160,6 +165,180 @@ useEffect(() => {
     fetchLeaveHistory();
   }
 }, [activeTab, id]);
+
+// Add this function to render leave details modal
+const renderLeaveDetailsModal = () => {
+  if (!selectedLeave) return null;
+
+  return (
+    <div style={styles.modalOverlay}>
+      <div style={styles.leaveDetailsModal}>
+        <div style={styles.leaveDetailsHeader}>
+          <h3 style={styles.leaveDetailsTitle}>
+            <FontAwesomeIcon icon={faInfoCircle} style={{ marginRight: '10px' }} />
+            Leave Application Details
+          </h3>
+          <button 
+            onClick={() => {
+              setSelectedLeave(null);
+              setShowLeaveDetails(false);
+            }} 
+            style={styles.closeModalBtn}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+        </div>
+
+        <div style={styles.leaveDetailsContent}>
+          {/* Basic Information */}
+          <div style={styles.detailsSection}>
+            <h4 style={styles.detailsSectionTitle}>Basic Information</h4>
+            <div style={styles.detailsGrid}>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Leave Type:</span>
+                <span style={styles.detailValue}>
+                  <div style={styles.leaveTypeBadge}>
+                    {selectedLeave.leaveType}
+                  </div>
+                </span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Status:</span>
+                <span style={styles.detailValue}>
+                  <div style={{
+                    ...styles.statusBadge,
+                    backgroundColor: 
+                      selectedLeave.status === 'Approved' ? '#d4edda' :
+                      selectedLeave.status === 'Pending' ? '#fff3cd' :
+                      '#f8d7da',
+                    color: 
+                      selectedLeave.status === 'Approved' ? '#155724' :
+                      selectedLeave.status === 'Pending' ? '#856404' :
+                      '#721c24'
+                  }}>
+                    {selectedLeave.status}
+                  </div>
+                </span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Duration:</span>
+                <span style={styles.detailValue}>
+                  <div style={styles.durationBadge}>
+                    {selectedLeave.duration} days
+                  </div>
+                </span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Filing Date:</span>
+                <span style={styles.detailValue}>{selectedLeave.formattedFilingDate}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Leave Period */}
+          <div style={styles.detailsSection}>
+            <h4 style={styles.detailsSectionTitle}>Leave Period</h4>
+            <div style={styles.dateRangeDisplay}>
+              <div style={styles.dateBox}>
+                <div style={styles.dateLabel}>Start Date</div>
+                <div style={styles.dateValue}>{selectedLeave.formattedStartDate}</div>
+              </div>
+              <div style={styles.dateArrow}>→</div>
+              <div style={styles.dateBox}>
+                <div style={styles.dateLabel}>End Date</div>
+                <div style={styles.dateValue}>{selectedLeave.formattedEndDate}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Approval Details */}
+          <div style={styles.detailsSection}>
+            <h4 style={styles.detailsSectionTitle}>Approval Details</h4>
+            <div style={styles.approvalGrid}>
+              <div style={styles.approvalItem}>
+                <div style={styles.approvalLabel}>Office Head:</div>
+                <div style={{
+                  ...styles.approvalStatus,
+                  color: selectedLeave.approvalStatus?.officeHead?.status === 'Approved' ? '#28a745' :
+                        selectedLeave.approvalStatus?.officeHead?.status === 'Rejected' ? '#dc3545' : '#6c757d'
+                }}>
+                  {selectedLeave.approvalStatus?.officeHead?.status || 'Pending'}
+                </div>
+                {selectedLeave.approvalStatus?.officeHead?.date && (
+                  <div style={styles.approvalDate}>
+                    {new Date(selectedLeave.approvalStatus.officeHead.date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+              
+              <div style={styles.approvalItem}>
+                <div style={styles.approvalLabel}>HR/Admin:</div>
+                <div style={{
+                  ...styles.approvalStatus,
+                  color: selectedLeave.approvalStatus?.hr?.status === 'Approved' ? '#28a745' :
+                        selectedLeave.approvalStatus?.hr?.status === 'Rejected' ? '#dc3545' : '#6c757d'
+                }}>
+                  {selectedLeave.approvalStatus?.hr?.status || 'Pending'}
+                </div>
+                {selectedLeave.approvalStatus?.hr?.date && (
+                  <div style={styles.approvalDate}>
+                    {new Date(selectedLeave.approvalStatus.hr.date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+              
+              <div style={styles.approvalItem}>
+                <div style={styles.approvalLabel}>Mayor:</div>
+                <div style={{
+                  ...styles.approvalStatus,
+                  color: selectedLeave.approvalStatus?.mayor?.status === 'Approved' ? '#28a745' :
+                        selectedLeave.approvalStatus?.mayor?.status === 'Rejected' ? '#dc3545' : '#6c757d'
+                }}>
+                  {selectedLeave.approvalStatus?.mayor?.status || 'Pending'}
+                </div>
+                {selectedLeave.approvalStatus?.mayor?.date && (
+                  <div style={styles.approvalDate}>
+                    {new Date(selectedLeave.approvalStatus.mayor.date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {selectedLeave.approver && (
+              <div style={styles.approverInfo}>
+                <div style={styles.approverLabel}>Final Approver:</div>
+                <div style={styles.approverName}>{selectedLeave.approver}</div>
+                {selectedLeave.approvalDate && (
+                  <div style={styles.approverDate}>
+                    Approved on: {new Date(selectedLeave.approvalDate).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Details & Remarks */}
+          <div style={styles.detailsSection}>
+            <h4 style={styles.detailsSectionTitle}>Details & Remarks</h4>
+            {selectedLeave.details && (
+              <div style={styles.textBox}>
+                <div style={styles.textBoxLabel}>Leave Details:</div>
+                <div style={styles.textBoxContent}>{selectedLeave.details}</div>
+              </div>
+            )}
+            
+            {selectedLeave.remarks && (
+              <div style={styles.textBox}>
+                <div style={styles.textBoxLabel}>Remarks:</div>
+                <div style={styles.textBoxContent}>{selectedLeave.remarks}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
    useEffect(() => {
       const fetchInitialProfile = async () => {
@@ -1713,7 +1892,7 @@ useEffect(() => {
                       </div>
                       <div style={styles.summaryCard}>
                         <div style={{...styles.summaryCardIcon, color: '#28a745'}}>
-                          <FontAwesomeIcon icon={faCalendarCheck} />
+                          <FontAwesomeIcon icon={faCheckCircle} />
                         </div>
                         <div>
                           <h4 style={styles.summaryCardTitle}>Approved</h4>
@@ -1776,15 +1955,6 @@ useEffect(() => {
                       <option value="Special Privilege Leave">Special Privilege Leave</option>
                     </select>
                     
-                    <input 
-                      type="number"
-                      placeholder="Year"
-                      value={leaveHistoryFilters.year}
-                      onChange={(e) => setLeaveHistoryFilters(prev => ({...prev, year: e.target.value}))}
-                      style={styles.yearInput}
-                      disabled={isEmployeeInactive && role !== "admin"}
-                    />
-                    
                     <button 
                       onClick={() => fetchLeaveHistory()}
                       style={styles.refreshBtn}
@@ -1808,11 +1978,9 @@ useEffect(() => {
                             <tr>
                               <th style={styles.historyTh}>Leave Type</th>
                               <th style={styles.historyTh}>Filing Date</th>
-                              <th style={styles.historyTh}>Leave Period</th>
-                              <th style={styles.historyTh}>Duration</th>
+                              <th style={styles.historyTh}>Duration (Days)</th>
                               <th style={styles.historyTh}>Status</th>
-                              <th style={styles.historyTh}>Approver</th>
-                              <th style={styles.historyTh}>Remarks</th>
+                              <th style={styles.historyTh}>Action</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1825,13 +1993,6 @@ useEffect(() => {
                                 </td>
                                 <td style={styles.historyTd}>
                                   {leave.formattedFilingDate}
-                                </td>
-                                <td style={styles.historyTd}>
-                                  <div style={styles.dateRange}>
-                                    {leave.formattedStartDate}
-                                    <span style={{ margin: '0 4px' }}>→</span>
-                                    {leave.formattedEndDate}
-                                  </div>
                                 </td>
                                 <td style={styles.historyTd}>
                                   <div style={styles.durationBadge}>
@@ -1854,10 +2015,17 @@ useEffect(() => {
                                   </div>
                                 </td>
                                 <td style={styles.historyTd}>
-                                  {leave.approver || '-'}
-                                </td>
-                                <td style={styles.historyTd}>
-                                  {leave.remarks || '-'}
+                                  <button 
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setShowLeaveDetails(true);
+                                    }}
+                                    style={styles.viewDetailsBtn}
+                                    title="View Details"
+                                    disabled={isEmployeeInactive && role !== "admin"}
+                                  >
+                                    <FontAwesomeIcon icon={faEye} /> View Details
+                                  </button>
                                 </td>
                               </tr>
                             ))}
@@ -1903,6 +2071,9 @@ useEffect(() => {
                       <p>No leave applications found for this employee.</p>
                     </div>
                   )}
+                  
+                  {/* Leave Details Modal */}
+                  {showLeaveDetails && renderLeaveDetailsModal()}
                 </div>
               )}
 
@@ -3265,6 +3436,283 @@ pageInfo: {
   color: '#475569',
   fontWeight: '500',
 },
+
+// Add these styles to your existing styles object
+
+// View Details Button
+viewDetailsBtn: {
+  padding: '6px 12px',
+  backgroundColor: 'rgb(40, 167, 69)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '4px',
+  fontSize: '12px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  transition: 'all 0.2s ease',
+  '&:hover': {
+    backgroundColor: '#0056b3',
+  },
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  }
+},
+
+// Leave Details Modal Styles
+leaveDetailsModal: {
+  backgroundColor: '#fff',
+  borderRadius: '12px',
+  padding: '24px',
+  width: '600px',
+  maxWidth: '90vw',
+  maxHeight: '80vh',
+  overflowY: 'auto',
+  boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+},
+
+leaveDetailsHeader: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '20px',
+  paddingBottom: '16px',
+  borderBottom: '1px solid #e2e8f0',
+},
+
+leaveDetailsTitle: {
+  fontSize: '18px',
+  fontWeight: '700',
+  color: '#111',
+  margin: 0,
+  display: 'flex',
+  alignItems: 'center',
+},
+
+leaveDetailsContent: {
+  marginBottom: '24px',
+},
+
+detailsSection: {
+  marginBottom: '24px',
+  paddingBottom: '16px',
+  borderBottom: '1px solid #f1f5f9',
+  '&:last-child': {
+    borderBottom: 'none',
+    marginBottom: 0,
+  }
+},
+
+detailsSectionTitle: {
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#333',
+  marginBottom: '16px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+},
+
+detailsGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+  gap: '16px',
+},
+
+detailItem: {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+},
+
+detailLabel: {
+  fontSize: '12px',
+  color: '#666',
+  fontWeight: '500',
+  textTransform: 'uppercase',
+},
+
+detailValue: {
+  fontSize: '14px',
+  color: '#333',
+  fontWeight: '500',
+},
+
+dateRangeDisplay: {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '20px',
+  backgroundColor: '#ffffff',
+  padding: '16px',
+  borderRadius: '8px',
+  border: 'none',
+  boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.42)'
+},
+
+dateBox: {
+  textAlign: 'center',
+  flex: 1,
+},
+
+dateLabel: {
+  fontSize: '12px',
+  color: '#666',
+  marginBottom: '4px',
+  fontWeight: '500',
+},
+
+dateValue: {
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#333',
+},
+
+dateArrow: {
+  fontSize: '20px',
+  color: '#666',
+  fontWeight: '300',
+},
+
+approvalGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+  gap: '16px',
+  marginBottom: '16px',
+},
+
+approvalItem: {
+  backgroundColor: '#ffffff',
+  padding: '12px',
+  borderRadius: '8px',
+  border: 'none',
+  boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.42)'
+
+},
+
+approvalLabel: {
+  fontSize: '12px',
+  color: '#666',
+  marginBottom: '4px',
+  fontWeight: '500',
+},
+
+approvalStatus: {
+  fontSize: '14px',
+  fontWeight: '600',
+  marginBottom: '4px',
+},
+
+approvalDate: {
+  fontSize: '11px',
+  color: '#94a3b8',
+  fontStyle: 'italic',
+},
+
+approverInfo: {
+  backgroundColor: '#ffffff',
+  padding: '12px',
+  borderRadius: '8px',
+  border: 'none',
+  boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.42)'
+
+},
+
+approverLabel: {
+  fontSize: '12px',
+  color: '#166534',
+  marginBottom: '4px',
+  fontWeight: '500',
+},
+
+approverName: {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#166534',
+  marginBottom: '2px',
+},
+
+approverDate: {
+  fontSize: '11px',
+  color: '#166534',
+  fontStyle: 'italic',
+},
+
+textBox: {
+  backgroundColor: '#ffffff',
+  padding: '12px',
+  borderRadius: '8px',
+  border: 'none',
+  boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.42)',
+  marginBottom: '12px',
+  '&:last-child': {
+    marginBottom: 0,
+  }
+},
+
+textBoxLabel: {
+  fontSize: '12px',
+  color: '#666',
+  marginBottom: '8px',
+  fontWeight: '500',
+  textTransform: 'uppercase',
+},
+
+textBoxContent: {
+  fontSize: '14px',
+  color: '#333',
+  lineHeight: '1.5',
+  whiteSpace: 'pre-wrap',
+},
+
+timestampGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+  gap: '12px',
+},
+
+timestampItem: {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+},
+
+timestampLabel: {
+  fontSize: '12px',
+  color: '#666',
+  fontWeight: '500',
+},
+
+timestampValue: {
+  fontSize: '13px',
+  color: '#333',
+  fontFamily: 'monospace',
+},
+
+leaveDetailsFooter: {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  paddingTop: '20px',
+},
+
+closeDetailsBtn: {
+  padding: '10px 20px',
+  backgroundColor: '#6c757d',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '6px',
+  fontSize: '14px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  '&:hover': {
+    backgroundColor: '#545b62',
+  }
+},
+
 };
 
 // Add CSS animation for spinner
