@@ -41,7 +41,8 @@ import {
   faCalculator,
   faLock,
   faArchive,
-  faRedo
+  faRedo,
+  faHistory
 } from "@fortawesome/free-solid-svg-icons";
 import "react-calendar/dist/Calendar.css";
 import "./dashboardCalendar.css";
@@ -106,8 +107,59 @@ function EmployeeProfile() {
     { name: "User Management", icon: faUserCog, to: "/userManagement" },
   ];
 
+  // Add to your existing useState declarations:
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [loadingLeaveHistory, setLoadingLeaveHistory] = useState(false);
+  const [leaveHistoryFilters, setLeaveHistoryFilters] = useState({
+    status: '',
+    leaveType: '',
+    year: '',
+    startDate: '',
+    endDate: '',
+    page: 1,
+    limit: 10,
+    sortBy: 'date_filing',
+    sortOrder: 'desc'
+  });
+  const [leaveHistorySummary, setLeaveHistorySummary] = useState(null);
+
   const API_URL = "https://ezleave-admin-api.onrender.com";
 
+// Add this function to fetch leave history
+const fetchLeaveHistory = async (filters = leaveHistoryFilters) => {
+  if (!id) return;
+  
+  setLoadingLeaveHistory(true);
+  try {
+    const params = new URLSearchParams();
+    Object.keys(filters).forEach(key => {
+      if (filters[key]) {
+        params.append(key, filters[key]);
+      }
+    });
+    
+    const response = await fetch(
+      `${API_URL}/api/employees/${id}/leaveHistory`
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      setLeaveHistory(data.leaveHistory || []);
+      setLeaveHistorySummary(data.summary || null);
+    }
+  } catch (err) {
+    console.error("❌ Error fetching leave history:", err);
+  } finally {
+    setLoadingLeaveHistory(false);
+  }
+};
+
+// Call this function when the component mounts or when activeTab changes
+useEffect(() => {
+  if (activeTab === "leave-history" && id) {
+    fetchLeaveHistory();
+  }
+}, [activeTab, id]);
 
    useEffect(() => {
       const fetchInitialProfile = async () => {
@@ -1246,6 +1298,13 @@ function EmployeeProfile() {
                 >
                   Leave Balances
                 </button>
+                <button 
+                  style={tabButtonStyle(activeTab === "leave-history", isEmployeeInactive && role !== "admin")} 
+                  onClick={() => setActiveTab("leave-history")}
+                  disabled={isEmployeeInactive && role !== "admin"}
+                >
+                  Leave History
+                </button>
               </div>
 
               {/* Overview */}
@@ -1636,6 +1695,217 @@ function EmployeeProfile() {
                   )}
                 </div>
               )}
+
+              {/* Leave History Tab */}
+              {activeTab === "leave-history" && (
+                <div className="leaveHistoryContainer" style={styles.leaveHistoryContainer}>
+                  {/* Summary Cards */}
+                  {leaveHistorySummary && (
+                    <div className="summaryCards" style={styles.summaryCards}>
+                      <div style={styles.summaryCard}>
+                        <div style={styles.summaryCardIcon}>
+                          <FontAwesomeIcon icon={faHistory} />
+                        </div>
+                        <div>
+                          <h4 style={styles.summaryCardTitle}>Total Leaves</h4>
+                          <p style={styles.summaryCardValue}>{leaveHistorySummary.totalLeaves}</p>
+                        </div>
+                      </div>
+                      <div style={styles.summaryCard}>
+                        <div style={{...styles.summaryCardIcon, color: '#28a745'}}>
+                          <FontAwesomeIcon icon={faCalendarCheck} />
+                        </div>
+                        <div>
+                          <h4 style={styles.summaryCardTitle}>Approved</h4>
+                          <p style={styles.summaryCardValue}>{leaveHistorySummary.approvedLeaves}</p>
+                        </div>
+                      </div>
+                      <div style={styles.summaryCard}>
+                        <div style={{...styles.summaryCardIcon, color: '#ffc107'}}>
+                          <FontAwesomeIcon icon={faClock} />
+                        </div>
+                        <div>
+                          <h4 style={styles.summaryCardTitle}>Pending</h4>
+                          <p style={styles.summaryCardValue}>{leaveHistorySummary.pendingLeaves}</p>
+                        </div>
+                      </div>
+                      <div style={styles.summaryCard}>
+                        <div style={{...styles.summaryCardIcon, color: '#dc3545'}}>
+                          <FontAwesomeIcon icon={faTimesCircle} />
+                        </div>
+                        <div>
+                          <h4 style={styles.summaryCardTitle}>Rejected</h4>
+                          <p style={styles.summaryCardValue}>{leaveHistorySummary.rejectedLeaves}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Filters */}
+                  <div className="historyFilters" style={styles.historyFilters}>
+                    <select 
+                      value={leaveHistoryFilters.status}
+                      onChange={(e) => {
+                        setLeaveHistoryFilters(prev => ({...prev, status: e.target.value, page: 1}));
+                        fetchLeaveHistory({...leaveHistoryFilters, status: e.target.value, page: 1});
+                      }}
+                      style={styles.filterSelect}
+                      disabled={isEmployeeInactive && role !== "admin"}
+                    >
+                      <option value="">All Status</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                    
+                    <select 
+                      value={leaveHistoryFilters.leaveType}
+                      onChange={(e) => {
+                        setLeaveHistoryFilters(prev => ({...prev, leaveType: e.target.value, page: 1}));
+                        fetchLeaveHistory({...leaveHistoryFilters, leaveType: e.target.value, page: 1});
+                      }}
+                      style={styles.filterSelect}
+                      disabled={isEmployeeInactive && role !== "admin"}
+                    >
+                      <option value="">All Leave Types</option>
+                      <option value="Vacation Leave">Vacation Leave</option>
+                      <option value="Sick Leave">Sick Leave</option>
+                      <option value="Mandatory/Forced Leave">Mandatory/Forced Leave</option>
+                      <option value="Maternity Leave">Maternity Leave</option>
+                      <option value="Paternity Leave">Paternity Leave</option>
+                      <option value="Special Privilege Leave">Special Privilege Leave</option>
+                    </select>
+                    
+                    <input 
+                      type="number"
+                      placeholder="Year"
+                      value={leaveHistoryFilters.year}
+                      onChange={(e) => setLeaveHistoryFilters(prev => ({...prev, year: e.target.value}))}
+                      style={styles.yearInput}
+                      disabled={isEmployeeInactive && role !== "admin"}
+                    />
+                    
+                    <button 
+                      onClick={() => fetchLeaveHistory()}
+                      style={styles.refreshBtn}
+                      disabled={isEmployeeInactive && role !== "admin"}
+                    >
+                      <FontAwesomeIcon icon={faRedo} /> Refresh
+                    </button>
+                  </div>
+
+                  {/* Leave History Table */}
+                  {loadingLeaveHistory ? (
+                    <div style={styles.loadingMessage}>
+                      <div style={styles.loadingSpinner}></div>
+                      Loading leave history...
+                    </div>
+                  ) : leaveHistory.length > 0 ? (
+                    <>
+                      <div className="historyTableWrapper" style={styles.historyTableWrapper}>
+                        <table style={styles.historyTable}>
+                          <thead>
+                            <tr>
+                              <th style={styles.historyTh}>Leave Type</th>
+                              <th style={styles.historyTh}>Filing Date</th>
+                              <th style={styles.historyTh}>Leave Period</th>
+                              <th style={styles.historyTh}>Duration</th>
+                              <th style={styles.historyTh}>Status</th>
+                              <th style={styles.historyTh}>Approver</th>
+                              <th style={styles.historyTh}>Remarks</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {leaveHistory.map((leave, index) => (
+                              <tr key={leave.id} style={styles.historyTr}>
+                                <td style={styles.historyTd}>
+                                  <div style={styles.leaveTypeBadge}>
+                                    {leave.leaveType}
+                                  </div>
+                                </td>
+                                <td style={styles.historyTd}>
+                                  {leave.formattedFilingDate}
+                                </td>
+                                <td style={styles.historyTd}>
+                                  <div style={styles.dateRange}>
+                                    {leave.formattedStartDate}
+                                    <span style={{ margin: '0 4px' }}>→</span>
+                                    {leave.formattedEndDate}
+                                  </div>
+                                </td>
+                                <td style={styles.historyTd}>
+                                  <div style={styles.durationBadge}>
+                                    {leave.duration} days
+                                  </div>
+                                </td>
+                                <td style={styles.historyTd}>
+                                  <div style={{
+                                    ...styles.statusBadge,
+                                    backgroundColor: 
+                                      leave.status === 'Approved' ? '#d4edda' :
+                                      leave.status === 'Pending' ? '#fff3cd' :
+                                      '#f8d7da',
+                                    color: 
+                                      leave.status === 'Approved' ? '#155724' :
+                                      leave.status === 'Pending' ? '#856404' :
+                                      '#721c24'
+                                  }}>
+                                    {leave.status}
+                                  </div>
+                                </td>
+                                <td style={styles.historyTd}>
+                                  {leave.approver || '-'}
+                                </td>
+                                <td style={styles.historyTd}>
+                                  {leave.remarks || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination */}
+                      <div style={styles.paginationControls}>
+                        <button 
+                          onClick={() => {
+                            const newPage = Math.max(1, leaveHistoryFilters.page - 1);
+                            setLeaveHistoryFilters(prev => ({...prev, page: newPage}));
+                            fetchLeaveHistory({...leaveHistoryFilters, page: newPage});
+                          }}
+                          disabled={leaveHistoryFilters.page === 1 || (isEmployeeInactive && role !== "admin")}
+                          style={styles.pageBtn}
+                        >
+                          <FontAwesomeIcon icon={faChevronLeft} /> Previous
+                        </button>
+                        
+                        <span style={styles.pageInfo}>
+                          Page {leaveHistoryFilters.page}
+                        </span>
+                        
+                        <button 
+                          onClick={() => {
+                            const newPage = leaveHistoryFilters.page + 1;
+                            setLeaveHistoryFilters(prev => ({...prev, page: newPage}));
+                            fetchLeaveHistory({...leaveHistoryFilters, page: newPage});
+                          }}
+                          disabled={leaveHistory.length < leaveHistoryFilters.limit || (isEmployeeInactive && role !== "admin")}
+                          style={styles.pageBtn}
+                        >
+                          Next <FontAwesomeIcon icon={faChevronRight} />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={styles.noRecords}>
+                      <FontAwesomeIcon icon={faHistory} style={styles.noRecordsIcon} />
+                      <h3>No Leave History</h3>
+                      <p>No leave applications found for this employee.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </>
           )}
         </div>
@@ -2790,6 +3060,211 @@ leaveCardTableTd: {
     color: '#fff', 
     cursor: 'pointer' 
   },
+
+  // Add these styles to your styles object
+
+// Leave History Styles
+leaveHistoryContainer: {
+  width: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '20px',
+},
+
+summaryCards: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '12px',
+  marginBottom: '20px',
+},
+
+summaryCard: {
+  backgroundColor: '#fff',
+  borderRadius: '8px',
+  padding: '15px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+  border: '1px solid #e6e6e6',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '12px',
+},
+
+summaryCardIcon: {
+  fontSize: '24px',
+  color: '#009205',
+  width: '40px',
+  height: '40px',
+  borderRadius: '8px',
+  backgroundColor: '#f0fdf4',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+summaryCardTitle: {
+  fontSize: '12px',
+  color: '#666',
+  margin: '0 0 4px 0',
+  fontWeight: '600',
+},
+
+summaryCardValue: {
+  fontSize: '20px',
+  fontWeight: '700',
+  color: '#111',
+  margin: 0,
+},
+
+historyFilters: {
+  display: 'flex',
+  gap: '10px',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  backgroundColor: '#fff',
+  padding: '12px',
+  borderRadius: '8px',
+  border: '1px solid #e6e6e6',
+},
+
+filterSelect: {
+  padding: '8px 12px',
+  borderRadius: '6px',
+  border: '1px solid #ddd',
+  fontSize: '13px',
+  minWidth: '140px',
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  }
+},
+
+yearInput: {
+  padding: '8px 12px',
+  borderRadius: '6px',
+  border: '1px solid #ddd',
+  fontSize: '13px',
+  width: '100px',
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  }
+},
+
+refreshBtn: {
+  padding: '8px 16px',
+  backgroundColor: '#009205',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '13px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  }
+},
+
+historyTableWrapper: {
+  backgroundColor: '#fff',
+  borderRadius: '8px',
+  border: '1px solid #e6e6e6',
+  overflowX: 'auto',
+},
+
+historyTable: {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: '13px',
+},
+
+historyTh: {
+  padding: '12px 16px',
+  backgroundColor: '#f8fafc',
+  fontWeight: '600',
+  color: '#334155',
+  borderBottom: '1px solid #e2e8f0',
+  textAlign: 'left',
+  whiteSpace: 'nowrap',
+},
+
+historyTr: {
+  backgroundColor: '#fff',
+  borderBottom: '1px solid #f1f5f9',
+  '&:hover': {
+    backgroundColor: '#f8fafc',
+  }
+},
+
+historyTd: {
+  padding: '12px 16px',
+  color: '#475569',
+  borderBottom: '1px solid #f1f5f9',
+  verticalAlign: 'middle',
+},
+
+leaveTypeBadge: {
+  padding: '4px 8px',
+  backgroundColor: '#f0f9ff',
+  color: '#0369a1',
+  borderRadius: '4px',
+  fontSize: '12px',
+  fontWeight: '500',
+  display: 'inline-block',
+},
+
+dateRange: {
+  display: 'flex',
+  alignItems: 'center',
+  fontSize: '12px',
+  color: '#475569',
+},
+
+durationBadge: {
+  padding: '4px 8px',
+  backgroundColor: '#f1f5f9',
+  color: '#334155',
+  borderRadius: '4px',
+  fontSize: '12px',
+  fontWeight: '500',
+  display: 'inline-block',
+},
+
+paginationControls: {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: '20px',
+  padding: '16px',
+  backgroundColor: '#fff',
+  borderRadius: '8px',
+  border: '1px solid #e6e6e6',
+},
+
+pageBtn: {
+  padding: '8px 16px',
+  backgroundColor: '#009205',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '13px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  }
+},
+
+pageInfo: {
+  fontSize: '14px',
+  color: '#475569',
+  fontWeight: '500',
+},
 };
 
 // Add CSS animation for spinner

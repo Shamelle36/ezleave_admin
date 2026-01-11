@@ -163,6 +163,7 @@ function Employees() {
   const [trainingProgress, setTrainingProgress] = useState(0);
 
   
+  
 
   // Reasons for making employee inactive
   const inactiveReasons = [
