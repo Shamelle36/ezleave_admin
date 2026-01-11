@@ -43,7 +43,8 @@ import {
   faEdit,
   faPlus,
   faSave,
-  faFileImport
+  faFileImport,
+  faSlidersH
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -173,6 +174,13 @@ const [newLeaveType, setNewLeaveType] = useState({
 
 const [allLeaveTypes, setAllLeaveTypes] = useState([]);
 const [loadingLeaveTypes, setLoadingLeaveTypes] = useState(false);
+const [showAddModal, setShowAddModal] = useState(false);
+
+// Add near your other state declarations
+const [editingLeaveType, setEditingLeaveType] = useState(null);
+const [showEditModal, setShowEditModal] = useState(false);
+const [showDeleteModal, setShowDeleteModal] = useState(false);
+const [deletingLeaveType, setDeletingLeaveType] = useState(null);
 
 const fetchAllLeaveTypes = async () => {
   try {
@@ -195,6 +203,120 @@ const fetchAllLeaveTypes = async () => {
   } finally {
     setLoadingLeaveTypes(false);
   }
+};
+
+// Edit leave type function
+const handleEditLeaveType = async (abbreviation, currentData) => {
+  try {
+    setLoadingLeaveTypes(true);
+    
+    const response = await fetch(`${API_URL}/api/employees/leave-types/${abbreviation}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        newAbbreviation: editingLeaveType.newAbbreviation,
+        name: editingLeaveType.name,
+        days: editingLeaveType.days
+      })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      alert(`✅ ${data.message}`);
+      
+      // Update local state
+      setAllLeaveTypes(prev => prev.map(type => 
+        type.abbreviation === abbreviation ? {
+          ...type,
+          abbreviation: editingLeaveType.newAbbreviation,
+          name: editingLeaveType.name,
+          days: editingLeaveType.days
+        } : type
+      ));
+      
+      // Update leaveTypeMap
+      if (abbreviation !== editingLeaveType.newAbbreviation) {
+        setLeaveTypeMap(prev => {
+          const newMap = { ...prev };
+          // Remove old entry and add new one
+          delete newMap[currentData.name];
+          newMap[editingLeaveType.name] = editingLeaveType.newAbbreviation;
+          return newMap;
+        });
+      }
+      
+      // Close modal and reset
+      setShowEditModal(false);
+      setEditingLeaveType(null);
+    } else {
+      alert(`❌ ${data.error}`);
+    }
+  } catch (error) {
+    console.error('Error editing leave type:', error);
+    alert('Error editing leave type. Please try again.');
+  } finally {
+    setLoadingLeaveTypes(false);
+  }
+};
+
+// Delete leave type function
+const handleDeleteLeaveType = async () => {
+  if (!deletingLeaveType) return;
+
+  try {
+    setLoadingLeaveTypes(true);
+    
+    const response = await fetch(`${API_URL}/api/employees/leave-types/${deletingLeaveType.abbreviation}`, {
+      method: 'DELETE'
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      alert(`✅ ${data.message}`);
+      
+      // Update local state
+      setAllLeaveTypes(prev => prev.filter(type => 
+        type.abbreviation !== deletingLeaveType.abbreviation
+      ));
+      
+      // Update leaveTypeMap
+      setLeaveTypeMap(prev => {
+        const newMap = { ...prev };
+        delete newMap[deletingLeaveType.name];
+        return newMap;
+      });
+      
+      // Close modal and reset
+      setShowDeleteModal(false);
+      setDeletingLeaveType(null);
+    } else {
+      alert(`❌ ${data.error}`);
+    }
+  } catch (error) {
+    console.error('Error deleting leave type:', error);
+    alert('Error deleting leave type. Please try again.');
+  } finally {
+    setLoadingLeaveTypes(false);
+  }
+};
+
+// Function to open edit modal
+const openEditModal = (leaveType) => {
+  setEditingLeaveType({
+    abbreviation: leaveType.abbreviation,
+    newAbbreviation: leaveType.abbreviation,
+    name: leaveType.name,
+    days: leaveType.days
+  });
+  setShowEditModal(true);
+};
+
+// Function to open delete modal
+const openDeleteModal = (leaveType) => {
+  setDeletingLeaveType(leaveType);
+  setShowDeleteModal(true);
 };
 
 useEffect(() => {
@@ -438,7 +560,7 @@ const rejectionReasons = [
 ];
 
 
-  const API_URL = "https://ezleave-admin-api.onrender.com";
+  const API_URL = "http://localhost:5000";
 
       // Add this useEffect near your other useEffect hooks
 useEffect(() => {
@@ -2151,7 +2273,7 @@ const addNewLeaveType = async (leaveTypeData) => {
     localStorage.setItem('leaveTypes', JSON.stringify(updatedLeaveTypeMap));
     
     // Then add to all employees
-    const response = await fetch(`${API_URL}/api/employees/add-leave-type-to-all`, {
+    const response = await fetch(`${API_URL}/api/employees/leave-types/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2190,14 +2312,18 @@ const handleAddLeaveType = async () => {
   }
 
   // Check if abbreviation already exists
-  const existingAbbr = Object.values(leaveTypeMap).find(abbr => abbr === newLeaveType.abbreviation);
+  const existingAbbr = Object.values(leaveTypeMap).find(
+    abbr => abbr === newLeaveType.abbreviation
+  );
   if (existingAbbr) {
     alert(`Abbreviation "${newLeaveType.abbreviation}" already exists. Please use a different abbreviation.`);
     return;
   }
 
   // Check if name already exists
-  const existingName = Object.keys(leaveTypeMap).find(name => name.toLowerCase() === newLeaveType.name.toLowerCase());
+  const existingName = Object.keys(leaveTypeMap).find(
+    name => name.toLowerCase() === newLeaveType.name.toLowerCase()
+  );
   if (existingName) {
     alert(`Leave type "${newLeaveType.name}" already exists.`);
     return;
@@ -2205,31 +2331,48 @@ const handleAddLeaveType = async () => {
 
   // Show confirmation
   if (window.confirm(`Add "${newLeaveType.name}" to ALL employees with ${newLeaveType.days} days entitlement?`)) {
+    setLoadingLeaveTypes(true); // 🔹 START LOADING
+
     try {
-      const result = await addNewLeaveType({
-        leaveName: newLeaveType.name,
-        abbreviation: newLeaveType.abbreviation,
-        defaultEntitlement: parseInt(newLeaveType.days)
+      const response = await fetch(`${API_URL}/api/employees/leave-types/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newLeaveType.name,
+          abbreviation: newLeaveType.abbreviation,
+          days: parseInt(newLeaveType.days)
+        }),
       });
-      
-      if (result.success) {
-        // Clear form on success
+
+      const data = await response.json();
+
+      if (response.ok) {
         setNewLeaveType({
           name: '',
           abbreviation: '',
           days: 15
         });
-        
-        // Show success message
+
+        fetchAllLeaveTypes();
+
+        setLeaveTypeMap(prev => ({
+          ...prev,
+          [newLeaveType.name]: newLeaveType.abbreviation
+        }));
+
         alert(`✅ Leave type "${newLeaveType.name}" added successfully!`);
+      } else {
+        alert(`❌ Failed to add leave type: ${data.error}`);
       }
-      
     } catch (error) {
       console.error('Error adding leave type:', error);
       alert('Error adding leave type. Please try again.');
+    } finally {
+      setLoadingLeaveTypes(false); // 🔹 STOP LOADING (success or error)
     }
   }
 };
+
 
   return (
     <div style={styles.dashboardContainer}>
@@ -2481,7 +2624,6 @@ const handleAddLeaveType = async () => {
                     style={tabButtonStyle(activeTab === 'leaveSettings')}
                     onClick={() => setActiveTab('leaveSettings')}
                 >
-                    <FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />
                     Leave Settings
                 </button>
               
@@ -3787,166 +3929,434 @@ const handleAddLeaveType = async () => {
 
 {activeTab === 'leaveSettings' && (
     <div style={styles.leaveSettingsContainer}>
+        {/* Header */}
         <div style={styles.settingsHeader}>
             <h2 style={styles.settingsTitle}>
-                <FontAwesomeIcon icon={faCog} style={{ marginRight: '10px' }} />
-                Leave Types Management
+                <FontAwesomeIcon icon={faCog} style={styles.settingsTitleIcon} />
+                Leave Settings
             </h2>
-            <p style={styles.settingsSubtitle}>
-                Configure leave types and set default entitlements
-            </p>
         </div>
 
-        {/* TWO COLUMN LAYOUT */}
-        <div style={styles.settingsLayout}>
-            {/* LEFT COLUMN: Existing Leave Types */}
-            <div style={styles.leftColumn}>
+        {/* Main Content Area */}
+        <div style={styles.settingsContent}>
+            {/* Left Panel - Existing Leave Types */}
+            <div style={styles.leftPanel}>
                 <div style={styles.sectionCard}>
                     <div style={styles.sectionHeader}>
-                        <h3 style={styles.sectionTitle}>Existing Leave Types</h3>
+                        <h3 style={styles.sectionTitle}>
+                            <FontAwesomeIcon icon={faCalendarAlt} style={styles.sectionIcon} />
+                            Leave Types
+                        </h3>
                         <span style={styles.countBadge}>
                             {allLeaveTypes.length} types
                         </span>
                     </div>
                     
+                    {/* Add New Button */}
+                    <div style={styles.addButtonContainer}>
+                        <button 
+                            style={styles.addNewBtn}
+                            onClick={() => setShowAddModal(true)}
+                        >
+                            <FontAwesomeIcon icon={faPlus} />
+                            Add New Leave Type
+                        </button>
+                    </div>
+                    
+                    {/* Leave Types List */}
                     <div style={styles.leaveTypesList}>
                         {loadingLeaveTypes ? (
-                            <div style={styles.loadingPreview}>
+                            <div style={styles.loadingState}>
+                                <div style={styles.loadingSpinnerSmall}></div>
                                 <p>Loading leave types...</p>
                             </div>
                         ) : allLeaveTypes.length > 0 ? (
-                            allLeaveTypes.map((leaveType) => (
-                                <div key={leaveType.id} style={styles.leaveTypeItem}>
-                                    <div style={styles.leaveTypeInfo}>
-                                        <div style={styles.leaveTypeCode}>
-                                            {leaveType.code || leaveType.abbreviation || 'N/A'}
-                                        </div>
-                                        <div>
-                                            <div style={styles.leaveTypeName}>{leaveType.name}</div>
-                                            <div style={styles.leaveTypeMeta}>
-                                                Default: {leaveType.days || 15} days/year
-                                            </div>
-                                        </div>
+                            <div style={styles.leaveTypesGrid}>
+                              {allLeaveTypes.map((leaveType) => (
+                                <div key={leaveType.abbreviation} style={styles.leaveTypeCard}>
+                                  <div style={styles.leaveTypeHeader}>
+                                    <div style={{
+                                      ...styles.leaveTypeColor,
+                                      backgroundColor: getLeaveColor(leaveType.name)
+                                    }}></div>
+                                    <div style={styles.leaveTypeCode}>
+                                      {leaveType.abbreviation}
                                     </div>
                                     <div style={styles.leaveTypeActions}>
-                                        <button 
-                                            style={styles.editBtn}
-                                            title="Edit leave type"
-                                            
-                                        >
-                                            <FontAwesomeIcon icon={faEdit} />
-                                        </button>
-                                        <button 
-                                            style={styles.deleteBtn}
-                                            title="Delete leave type"
-                                            
-                                        >
-                                            <FontAwesomeIcon icon={faTrash} />
-                                        </button>
+                                      <button 
+                                        style={styles.editBtn}
+                                        title="Edit"
+                                        onClick={() => openEditModal(leaveType)}
+                                      >
+                                        <FontAwesomeIcon icon={faEdit} />
+                                      </button>
+                                      <button 
+                                        style={styles.iconBtnDanger}
+                                        title="Delete"
+                                        onClick={() => openDeleteModal(leaveType)}
+                                      >
+                                        <FontAwesomeIcon icon={faTrash} />
+                                      </button>
                                     </div>
+                                  </div>
+                                  <div style={styles.leaveTypeBody}>
+                                    <h4 style={styles.leaveTypeName}>{leaveType.name}</h4>
+                                    <div style={styles.leaveTypeMeta}>
+                                      <div style={styles.metaItem}>
+                                        <FontAwesomeIcon icon={faClock} />
+                                        <span>{leaveType.days} days/year</span>
+                                      </div>
+                                      <div style={styles.metaItem}>
+                                        <FontAwesomeIcon icon={faUsers} />
+                                        <span>All employees</span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
-                            ))
+                              ))}
+                            </div>
                         ) : (
                             <div style={styles.emptyState}>
-                                <FontAwesomeIcon icon={faCalendarAlt} style={styles.emptyIcon} />
-                                <p style={styles.emptyText}>No leave types found</p>
+                                <FontAwesomeIcon icon={faCalendarAlt} size="3x" />
+                                <p style={styles.emptyText}>No leave types configured</p>
+                                <button 
+                                    style={styles.addFirstBtn}
+                                    onClick={() => setShowAddModal(true)}
+                                >
+                                    <FontAwesomeIcon icon={faPlus} />
+                                    Add Your First Leave Type
+                                </button>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: Add New Leave Type */}
-            <div style={styles.rightColumn}>
-                <div style={styles.sectionCard}>
-                    <h3 style={styles.sectionTitle}>
-                        <FontAwesomeIcon icon={faPlus} style={{ marginRight: '8px' }} />
-                        Add New Leave Type
-                    </h3>
-                    
-                    <div style={styles.addLeaveForm}>
-                        <div style={styles.formGroup}>
-                            <label style={styles.formLabel}>Leave Type Name *</label>
-                            <input 
-                                type="text" 
-                                style={styles.formInput}
-                                placeholder="e.g., Bereavement Leave, Mental Health Day"
-                                value={newLeaveType.name}
-                                onChange={(e) => setNewLeaveType({...newLeaveType, name: e.target.value})}
-                            />
-                        </div>
+        </div>
 
-                        <div style={styles.formRow}>
-                            <div style={styles.formGroup}>
-                                <label style={styles.formLabel}>Abbreviation *</label>
-                                <input 
-                                    type="text" 
-                                    style={styles.formInput}
-                                    placeholder="e.g., BL, MHD"
-                                    value={newLeaveType.abbreviation}
-                                    onChange={(e) => setNewLeaveType({...newLeaveType, abbreviation: e.target.value.toUpperCase()})}
-                                    maxLength="5"
-                                />
-                                <small style={styles.helperText}>Max 5 characters (e.g., VL, SL)</small>
-                            </div>
-                            
-                            <div style={styles.formGroup}>
-                                <label style={styles.formLabel}>Default Entitlement *</label>
-                                <div style={styles.inputWithUnit}>
+        {/* Add New Leave Type Modal */}
+        {showAddModal && (
+            <div style={styles.modalOverlay}>
+                <div style={styles.addModal}>
+                    <div style={styles.modalHeader}>
+                        <h3 style={styles.modalTitle}>
+                            <FontAwesomeIcon icon={faPlus} />
+                            Add New Leave Type
+                        </h3>
+                        <button 
+                            style={styles.closeModalBtn}
+                            onClick={() => setShowAddModal(false)}
+                        >
+                            <FontAwesomeIcon icon={faTimes} />
+                        </button>
+                    </div>
+                    
+                    <div style={styles.modalBody}>
+                        <div style={styles.modalForm}>
+                            <div style={styles.formRow}>
+                                <div style={styles.formGroup}>
+                                    <label style={styles.formLabel}>
+                                        Leave Type Name
+                                    </label>
                                     <input 
-                                        type="number" 
+                                        type="text"
                                         style={styles.formInput}
-                                        placeholder="0"
-                                        min="0"
-                                        max="365"
-                                        value={newLeaveType.days}
-                                        onChange={(e) => setNewLeaveType({...newLeaveType, days: parseInt(e.target.value) || 15})}
+                                        placeholder="e.g., Bereavement Leave"
+                                        value={newLeaveType.name}
+                                        onChange={(e) => setNewLeaveType({...newLeaveType, name: e.target.value})}
                                     />
-                                    <span style={styles.inputUnit}>days/year</span>
                                 </div>
                             </div>
-                        </div>
 
-                        <div style={styles.formActions}>
-                            <button 
-                                style={styles.clearBtn}
-                                onClick={() => setNewLeaveType({ name: '', abbreviation: '', days: 15 })}
-                            >
-                                <FontAwesomeIcon icon={faEraser} style={{ marginRight: '8px' }} />
-                                Clear Form
-                            </button>
-                            <button 
-                                style={styles.submitBtn}
-                                onClick={handleAddLeaveType}
-                                disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim() || loadingLeaveTypes}
-                            >
-                                {loadingLeaveTypes ? (
-                                    <>
-                                        <div style={{
-                                            display: 'inline-block',
-                                            width: '16px',
-                                            height: '16px',
-                                            border: '2px solid #ffffff',
-                                            borderTop: '2px solid transparent',
-                                            borderRadius: '50%',
-                                            animation: 'spin 1s linear infinite',
-                                            marginRight: '8px'
-                                        }}></div>
-                                        Adding...
-                                    </>
-                                ) : (
-                                    <>
-                                        <FontAwesomeIcon icon={faSave} style={{ marginRight: '8px' }} />
-                                        Save New Leave Type
-                                    </>
-                                )}
-                            </button>
+                            <div style={styles.formRow}>
+                                <div style={styles.formGroup}>
+                                    <label style={styles.formLabel}>
+                                        Abbreviation
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        style={styles.formInput}
+                                        placeholder="e.g., BL"
+                                        value={newLeaveType.abbreviation}
+                                        onChange={(e) => setNewLeaveType({...newLeaveType, abbreviation: e.target.value.toUpperCase()})}
+                                        maxLength="5"
+                                    />
+                                    <small style={styles.helperText}>
+                                        Short code (max 5 characters)
+                                    </small>
+                                </div>
+                                
+                                <div style={styles.formGroup}>
+                                    <label style={styles.formLabel}>
+                                        Default Entitlement
+                                    </label>
+                                    <div style={styles.inputWithUnit}>
+                                        <input 
+                                            type="number"
+                                            style={styles.formInput}
+                                            min="1"
+                                            max="365"
+                                            value={newLeaveType.days}
+                                            onChange={(e) => setNewLeaveType({...newLeaveType, days: parseInt(e.target.value)})}
+                                        />
+                                        <span style={styles.inputUnit}>days/year</span>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
+                    </div>
+
+                    <div style={styles.modalActions}>
+                        <button 
+                            style={styles.modalCancelBtn}
+                            onClick={() => {
+                                setShowAddModal(false);
+                                setNewLeaveType({ name: '', abbreviation: '', days: 15 });
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            style={styles.modalSubmitBtn}
+                            onClick={handleAddLeaveType}
+                            disabled={!newLeaveType.name.trim() || !newLeaveType.abbreviation.trim()}
+                        >
+                            {loadingLeaveTypes ? (
+                                <>
+                                    <div style={styles.spinnerSmall}></div>
+                                    Adding...
+                                </>
+                            ) : (
+                                <>
+                                    <FontAwesomeIcon icon={faSave} />
+                                    Add Leave Type
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
-        </div>
+        )}
     </div>
+)}
+
+{/* Edit Leave Type Modal */}
+{showEditModal && editingLeaveType && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.addModal}>
+      <div style={styles.modalHeader}>
+        <h3 style={styles.modalTitle}>
+          <FontAwesomeIcon icon={faEdit} />
+          Edit Leave Type
+        </h3>
+        <button 
+          style={styles.closeModalBtn}
+          onClick={() => {
+            setShowEditModal(false);
+            setEditingLeaveType(null);
+          }}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+      </div>
+      
+      <div style={styles.modalBody}>
+        <div style={styles.modalForm}>
+          <div style={styles.formRow}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>
+                Leave Type Name
+              </label>
+              <input 
+                type="text"
+                style={styles.formInput}
+                placeholder="e.g., Bereavement Leave"
+                value={editingLeaveType.name}
+                onChange={(e) => setEditingLeaveType({
+                  ...editingLeaveType, 
+                  name: e.target.value
+                })}
+              />
+            </div>
+          </div>
+
+          <div style={styles.formRow}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>
+                Abbreviation
+              </label>
+              <input 
+                type="text"
+                style={styles.formInput}
+                placeholder="e.g., BL"
+                value={editingLeaveType.newAbbreviation}
+                onChange={(e) => setEditingLeaveType({
+                  ...editingLeaveType, 
+                  newAbbreviation: e.target.value.toUpperCase()
+                })}
+                maxLength="5"
+              />
+              <small style={styles.helperText}>
+                Short code (max 5 characters)
+              </small>
+            </div>
+            
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>
+                Default Entitlement
+              </label>
+              <div style={styles.inputWithUnit}>
+                <input 
+                  type="number"
+                  style={styles.formInput}
+                  min="1"
+                  max="365"
+                  value={editingLeaveType.days}
+                  onChange={(e) => setEditingLeaveType({
+                    ...editingLeaveType, 
+                    days: parseInt(e.target.value)
+                  })}
+                />
+                <span style={styles.inputUnit}>days/year</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>
+              Current Abbreviation
+            </label>
+            <div style={styles.currentAbbreviation}>
+              {editingLeaveType.abbreviation}
+              <small style={styles.helperText}>
+                Changing this will update all existing records
+              </small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={styles.modalActions}>
+        <button 
+          style={styles.modalCancelBtn}
+          onClick={() => {
+            setShowEditModal(false);
+            setEditingLeaveType(null);
+          }}
+        >
+          Cancel
+        </button>
+        <button 
+          style={styles.modalSubmitBtn}
+          onClick={() => {
+            const leaveTypeData = allLeaveTypes.find(
+              lt => lt.abbreviation === editingLeaveType.abbreviation
+            );
+            handleEditLeaveType(editingLeaveType.abbreviation, leaveTypeData);
+          }}
+          disabled={!editingLeaveType.name.trim() || !editingLeaveType.newAbbreviation.trim()}
+        >
+          {loadingLeaveTypes ? (
+            <>
+              <div style={styles.spinnerSmall}></div>
+              Updating...
+            </>
+          ) : (
+            <>
+              <FontAwesomeIcon icon={faSave} />
+              Update Leave Type
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Delete Confirmation Modal */}
+{showDeleteModal && deletingLeaveType && (
+  <div style={styles.modalOverlay}>
+    <div style={styles.deleteModal}>
+      <div style={styles.modalHeader}>
+        <h3 style={styles.modalTitle}>
+          <FontAwesomeIcon icon={faExclamationTriangle} />
+          Delete Leave Type
+        </h3>
+        <button 
+          style={styles.closeModalBtn}
+          onClick={() => {
+            setShowDeleteModal(false);
+            setDeletingLeaveType(null);
+          }}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+      </div>
+      
+      <div style={styles.modalBody}>
+        <div style={styles.warningSection}>
+          <div style={styles.warningIcon}>
+            <FontAwesomeIcon icon={faExclamationTriangle} size="3x" />
+          </div>
+          <h4 style={styles.warningTitle}>
+            Are you sure you want to delete this leave type?
+          </h4>
+          <div style={styles.leaveTypeInfo}>
+            <div style={styles.infoRow}>
+              <span style={styles.infoLabel}>Name:</span>
+              <span style={styles.infoValue}>{deletingLeaveType.name}</span>
+            </div>
+            <div style={styles.infoRow}>
+              <span style={styles.infoLabel}>Abbreviation:</span>
+              <span style={styles.infoValue}>{deletingLeaveType.abbreviation}</span>
+            </div>
+            <div style={styles.infoRow}>
+              <span style={styles.infoLabel}>Days/Year:</span>
+              <span style={styles.infoValue}>{deletingLeaveType.days}</span>
+            </div>
+          </div>
+          
+          <div style={styles.warningAlert}>
+            <FontAwesomeIcon icon={faWarning} />
+            <p style={styles.warningText}>
+              This action will permanently delete this leave type from ALL employees.
+              This cannot be undone!
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div style={styles.modalActions}>
+        <button 
+          style={styles.modalCancelBtn}
+          onClick={() => {
+            setShowDeleteModal(false);
+            setDeletingLeaveType(null);
+          }}
+        >
+          Cancel
+        </button>
+        <button 
+          style={styles.modalDeleteBtn}
+          onClick={handleDeleteLeaveType}
+          disabled={loadingLeaveTypes}
+        >
+          {loadingLeaveTypes ? (
+            <>
+              <div style={styles.spinnerSmall}></div>
+              Deleting...
+            </>
+          ) : (
+            <>
+              <FontAwesomeIcon icon={faTrash} />
+              Delete Permanently
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
 )}
 
              </div>
@@ -4581,7 +4991,7 @@ const styles = {
         display: 'flex', 
         flexDirection: 'row'
     },
-      btn1: {
+    btn1: {
     padding: '10px 10px',
     borderRadius: '10px',
     fontWeight: '600',
@@ -7288,299 +7698,484 @@ legendText: {
   color: '#666',
 },
 
-// Add/Update these styles - NO DOTS in property names
 leaveSettingsContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: '12px',
+    borderRadius: '16px',
     padding: '30px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-},
-settingsHeader: {
-    marginBottom: '30px',
-    paddingBottom: '20px',
-    borderBottom: '1px solid #E5E7EB'
-},
-settingsTitle: {
-    fontSize: '24px',
+    boxShadow: '0 2px 16px rgba(0, 0, 0, 0.08)',
+    minHeight: 'calc(100vh - 200px)',
+  },
+  settingsHeader: {
+  },
+  settingsTitle: {
+    fontSize: '28px',
     fontWeight: '700',
-    color: '#1F2937',
-    margin: '0 0 8px 0'
-},
-settingsSubtitle: {
-    fontSize: '14px',
-    color: '#6B7280',
-    margin: 0
-},
-settingsLayout: {
+    color: '#1a1a1a',
+    margin: '0 0 8px 0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  settingsTitleIcon: {
+    color: '#5ab049',
+  },
+  settingsSubtitle: {
+    fontSize: '15px',
+    color: '#666',
+    margin: 0,
+  },
+  settingsContent: {
     display: 'flex',
     gap: '30px',
-    flexWrap: 'wrap'
-},
-leftColumn: {
+    flexWrap: 'wrap',
+  },
+  leftPanel: {
     flex: 2,
-    minWidth: '400px'
-},
-rightColumn: {
+    minWidth: '500px',
+  },
+  rightPanel: {
     flex: 1,
-    minWidth: '400px'
-},
-sectionCard: {
-    backgroundColor: '#F9FAFB',
+    minWidth: '350px',
+  },
+  sectionCard: {
+    backgroundColor: '#ffffff',
     borderRadius: '12px',
     padding: '25px',
-    marginBottom: '25px',
-    border: '1px solid #E5E7EB'
-},
-sectionHeader: {
+    border: '1px solid #e8e8e8',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+  },
+  sectionHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px'
-},
-sectionTitle: {
+    marginBottom: '25px',
+  },
+  sectionTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#1F2937',
-    margin: '0 0 15px 0'
-},
-subsectionTitle: {
+    color: '#2d2d2d',
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  sectionIcon: {
+    color: '#5ab049',
+  },
+  countBadge: {
+    backgroundColor: '#e8f5e9',
+    color: '#2e7d32',
+    padding: '6px 14px',
+    borderRadius: '20px',
     fontSize: '14px',
     fontWeight: '600',
-    color: '#4B5563',
-    margin: '0 0 12px 0',
-    paddingBottom: '8px',
-    borderBottom: '1px solid #E5E7EB'
-},
-countBadge: {
-    backgroundColor: '#E5E7EB',
-    color: '#374151',
-    padding: '4px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600'
-},
-leaveTypesList: {
-    maxHeight: '500px',
-    overflowY: 'auto',
-    paddingRight: '10px'
-},
-leaveTypeItem: {
+  },
+  addButtonContainer: {
+    marginBottom: '25px',
+  },
+  addNewBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#5ab049',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(90, 176, 73, 0.3)',
+    '&:hover': {
+      backgroundColor: '#4a9c3a',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(90, 176, 73, 0.4)',
+    },
+  },
+  leaveTypesList: {
+    minHeight: '200px',
+  },
+  loadingState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '60px 20px',
+    color: '#666',
+  },
+  loadingSpinnerSmall: {
+    border: '3px solid #f3f3f3',
+    borderTop: '3px solid #5ab049',
+    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
+    animation: 'spin 1s linear infinite',
+    marginBottom: '15px',
+  },
+  leaveTypesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '20px',
+  },
+  leaveTypeCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px solid #e8e8e8',
+    overflow: 'hidden',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)',
+    '&:hover': {
+      transform: 'translateY(-2px)',
+      boxShadow: '0 8px 20px rgba(0, 0, 0, 0.1)',
+      borderColor: '#5ab04940',
+    },
+  },
+  leaveTypeHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '15px',
-    marginBottom: '10px',
-    backgroundColor: '#ffffff',
-    borderRadius: '10px',
-    border: '1px solid #E5E7EB',
-    transition: 'all 0.2s ease'
-},
-leaveTypeInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '15px'
-},
-leaveTypeCode: {
-    backgroundColor: '#5ab049ff',
-    color: '#ffffff',
-    width: '45px',
-    height: '45px',
-    borderRadius: '10px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: '700',
+    backgroundColor: '#f8f9fa',
+    borderBottom: '1px solid #e8e8e8',
+  },
+  leaveTypeColor: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '6px',
+    backgroundColor: '#5ab049',
+  },
+  leaveTypeCode: {
+    flex: 1,
+    marginLeft: '12px',
     fontSize: '16px',
-    boxShadow: '0 2px 4px rgba(90, 176, 73, 0.3)'
-},
-leaveTypeName: {
-    fontSize: '15px',
+    fontWeight: '700',
+    color: '#2d2d2d',
+  },
+  leaveTypeActions: {
+    display: 'flex',
+    gap: '8px',
+  },
+  editBtn: {
+    backgroundColor: '#f8f9fa',
+    color: '#666',
+    border: '1px solid #ddd',
+    width: '32px',
+    height: '32px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#e9ecef',
+      color: '#5ab049',
+    },
+  },
+  iconBtnDanger: {
+    backgroundColor: '#f8f9fa',
+    color: '#666',
+    border: '1px solid #ddd',
+    width: '32px',
+    height: '32px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#fde8e8',
+      color: '#dc2626',
+    },
+  },
+  leaveTypeBody: {
+    padding: '20px',
+  },
+  leaveTypeName: {
+    fontSize: '16px',
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: '4px'
-},
-leaveTypeMeta: {
-    fontSize: '13px',
-    color: '#6B7280'
-},
-leaveTypeActions: {
-    display: 'flex',
-    gap: '10px'
-},
-editBtn: {
-    backgroundColor: '#3B82F6',
-    color: '#ffffff',
-    border: 'none',
-    width: '36px',
-    height: '36px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease'
-},
-deleteBtn: {
-    backgroundColor: '#EF4444',
-    color: '#ffffff',
-    border: 'none',
-    width: '36px',
-    height: '36px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease'
-},
-globalSettings: {
+    color: '#1a1a1a',
+    margin: '0 0 15px 0',
+  },
+  leaveTypeMeta: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px'
-},
-settingItem: {
-    paddingBottom: '15px',
-    borderBottom: '1px solid #E5E7EB'
-},
-settingLabel: {
+    gap: '10px',
+  },
+  metaItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     fontSize: '14px',
-    color: '#374151',
-    fontWeight: '500',
-    marginBottom: '5px',
-    cursor: 'pointer'
-},
-settingNote: {
-    fontSize: '12px',
-    color: '#6B7280',
-    marginLeft: '26px',
-    display: 'block'
-},
-smallSelect: {
+    color: '#666',
+  },
+  emptyState: {
+    textAlign: 'center',
+    padding: '60px 20px',
+    color: '#999',
+  },
+  emptyText: {
+    fontSize: '16px',
+    margin: '15px 0 25px 0',
+  },
+  addFirstBtn: {
+    padding: '12px 24px',
+    backgroundColor: '#5ab049',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '10px',
+    transition: 'all 0.2s ease',
+  },
+  settingsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '25px',
+  },
+  settingItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingBottom: '25px',
+    borderBottom: '1px solid #f0f0f0',
+    '&:last-child': {
+      borderBottom: 'none',
+      paddingBottom: 0,
+    },
+  },
+  settingInfo: {
+    flex: 2,
+  },
+  settingTitle: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#2d2d2d',
+    margin: '0 0 6px 0',
+  },
+  settingDescription: {
+    fontSize: '13px',
+    color: '#777',
+    margin: 0,
+    lineHeight: 1.5,
+  },
+  settingControl: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    justifyContent: 'flex-end',
+  },
+  numberInput: {
+    width: '80px',
     padding: '8px 12px',
-    border: '1px solid #D1D5DB',
+    border: '1px solid #ddd',
     borderRadius: '6px',
     fontSize: '14px',
-    backgroundColor: '#ffffff',
-    marginLeft: '10px',
-    minWidth: '100px'
-},
-addLeaveForm: {
-    marginTop: '10px'
-},
-formGroup: {
-    marginBottom: '20px'
-},
-formLabel: {
-    display: 'block',
+    textAlign: 'center',
+  },
+  inputUnit: {
     fontSize: '14px',
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: '8px'
-},
-formInput: {
-    width: '100%',
-    padding: '12px',
-    border: '1px solid #D1D5DB',
-    borderRadius: '8px',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-    transition: 'all 0.2s ease'
-},
-inputWithUnit: {
-    position: 'relative'
-},
-inputUnit: {
+    color: '#666',
+    minWidth: '40px',
+  },
+  switch: {
+    position: 'relative',
+    display: 'inline-block',
+    width: '50px',
+    height: '26px',
+  },
+  slider: {
     position: 'absolute',
-    right: '12px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    fontSize: '14px',
-    color: '#6B7280'
-},
-formSelect: {
-    width: '100%',
-    padding: '12px',
-    border: '1px solid #D1D5DB',
-    borderRadius: '8px',
-    fontSize: '14px',
-    backgroundColor: '#ffffff',
     cursor: 'pointer',
-    transition: 'all 0.2s ease'
-},
-formRow: {
-    display: 'flex',
-    gap: '20px',
-    marginBottom: '20px'
-},
-helperText: {
-    fontSize: '12px',
-    color: '#6B7280',
-    marginTop: '6px',
-    display: 'block'
-},
-checkboxGroup: {
-    backgroundColor: '#ffffff',
-    padding: '20px',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#ccc',
+    transition: '.4s',
+    borderRadius: '34px',
+    '&:before': {
+      position: 'absolute',
+      content: '""',
+      height: '18px',
+      width: '18px',
+      left: '4px',
+      bottom: '4px',
+      backgroundColor: 'white',
+      transition: '.4s',
+      borderRadius: '50%',
+    },
+  },
+  saveSettingsBtnContainer: {
+    marginTop: '30px',
+    textAlign: 'right',
+  },
+  saveSettingsBtn: {
+    padding: '12px 28px',
+    backgroundColor: '#2d2d2d',
+    color: 'white',
+    border: 'none',
     borderRadius: '8px',
-    border: '1px solid #E5E7EB',
-    marginBottom: '20px'
-},
-checkboxLabel: {
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '10px',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#1a1a1a',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    },
+  },
+  // Modal Styles
+  addModal: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    width: '500px',
+    maxWidth: '90vw',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '25px 30px',
+    backgroundColor: '#5ab049',
+    color: 'white',
+  },
+  modalTitle: {
+    fontSize: '20px',
+    fontWeight: '600',
+    margin: 0,
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    fontSize: '14px',
-    color: '#374151',
+  },
+  closeModalBtn: {
+    backgroundColor: 'transparent',
+    color: 'white',
+    border: 'none',
+    fontSize: '20px',
     cursor: 'pointer',
-    padding: '8px 0',
-    transition: 'all 0.2s ease'
-},
-checkbox: {
+    padding: '5px',
+    borderRadius: '4px',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    },
+  },
+  modalBody: {
+    padding: '30px',
+  },
+  modalForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  formRow: {
+    display: 'flex',
+    gap: '20px',
+  },
+  formGroup: {
+    flex: 1,
+  },
+  formLabel: {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#2d2d2d',
+    marginBottom: '8px',
+  },
+  formInput: {
+    width: '100%',
+    padding: '12px 16px',
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    fontSize: '15px',
+    transition: 'all 0.2s ease',
+    boxSizing: 'border-box',
+    '&:focus': {
+      outline: 'none',
+      borderColor: '#5ab049',
+      boxShadow: '0 0 0 3px rgba(90, 176, 73, 0.1)',
+    },
+  },
+  helperText: {
+    fontSize: '12px',
+    color: '#888',
+    marginTop: '6px',
+    display: 'block',
+  },
+  inputWithUnit: {
+    position: 'relative',
+  },
+  formTextarea: {
+    width: '100%',
+    padding: '12px 16px',
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    fontSize: '15px',
+    fontFamily: 'inherit',
+    resize: 'vertical',
+    minHeight: '80px',
+    transition: 'all 0.2s ease',
+    boxSizing: 'border-box',
+    '&:focus': {
+      outline: 'none',
+      borderColor: '#5ab049',
+      boxShadow: '0 0 0 3px rgba(90, 176, 73, 0.1)',
+    },
+  },
+  checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '14px',
+    color: '#2d2d2d',
+    cursor: 'pointer',
+  },
+  checkbox: {
     width: '18px',
     height: '18px',
-    cursor: 'pointer'
-},
-formTextarea: {
-    width: '100%',
-    padding: '12px',
-    border: '1px solid #D1D5DB',
-    borderRadius: '8px',
-    fontSize: '14px',
-    resize: 'vertical',
-    minHeight: '100px',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-    transition: 'all 0.2s ease'
-},
-formActions: {
+    cursor: 'pointer',
+  },
+  modalActions: {
     display: 'flex',
     gap: '15px',
     justifyContent: 'flex-end',
-    marginTop: '30px',
-    paddingTop: '20px',
-    borderTop: '1px solid #E5E7EB'
-},
-clearBtn: {
-    padding: '12px 20px',
-    backgroundColor: '#6B7280',
-    color: '#ffffff',
-    border: 'none',
+    padding: '20px 30px',
+    backgroundColor: '#f8f9fa',
+    borderTop: '1px solid #e8e8e8',
+  },
+  modalCancelBtn: {
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    color: '#666',
+    border: '1px solid #ddd',
     borderRadius: '8px',
-    fontSize: '14px',
+    fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    transition: 'all 0.2s ease'
-},
-submitBtn: {
-    padding: '12px 24px',
-    backgroundColor: '#5ab049ff',
-    color: '#ffffff',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#f8f9fa',
+      borderColor: '#ccc',
+    },
+  },
+  modalSubmitBtn: {
+    padding: '12px 28px',
+    backgroundColor: '#5ab049',
+    color: 'white',
     border: 'none',
     borderRadius: '8px',
     fontSize: '15px',
@@ -7588,86 +8183,128 @@ submitBtn: {
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    transition: 'all 0.2s ease'
+    gap: '10px',
+    transition: 'all 0.2s ease',
+    '&:hover:not(:disabled)': {
+      backgroundColor: '#4a9c3a',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(90, 176, 73, 0.3)',
+    },
+    '&:disabled': {
+      backgroundColor: '#ccc',
+      cursor: 'not-allowed',
+    },
+  },
+  spinnerSmall: {
+    display: 'inline-block',
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTop: '2px solid white',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+  },
+
+  // Add these to your styles object
+currentAbbreviation: {
+  padding: '12px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+  fontSize: '14px',
+  fontWeight: '500',
+  color: '#333',
+  marginBottom: '5px',
 },
-importExportSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px'
+deleteModal: {
+  backgroundColor: '#ffffff',
+  borderRadius: '16px',
+  width: '500px',
+  maxWidth: '90vw',
+  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+  overflow: 'hidden',
 },
-importBox: {
-    textAlign: 'center',
-    padding: '25px',
-    border: '2px dashed #D1D5DB',
-    borderRadius: '10px',
-    backgroundColor: '#ffffff',
-    transition: 'all 0.2s ease'
+warningSection: {
+  textAlign: 'center',
+  padding: '20px',
 },
-exportBox: {
-    textAlign: 'center',
-    padding: '25px',
-    border: '2px dashed #D1D5DB',
-    borderRadius: '10px',
-    backgroundColor: '#ffffff',
-    transition: 'all 0.2s ease'
+warningIcon: {
+  color: '#dc3545',
+  marginBottom: '20px',
 },
-importIcon: {
-    color: '#3B82F6',
-    marginBottom: '12px'
+warningTitle: {
+  fontSize: '18px',
+  fontWeight: '600',
+  color: '#dc3545',
+  marginBottom: '20px',
 },
-exportIcon: {
-    color: '#10B981',
-    marginBottom: '12px'
+leaveTypeInfo: {
+  backgroundColor: '#f8f9fa',
+  padding: '15px',
+  borderRadius: '8px',
+  marginBottom: '20px',
+  textAlign: 'left',
 },
-importText: {
-    fontSize: '14px',
-    color: '#6B7280',
-    margin: '0 0 15px 0'
+infoRow: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  marginBottom: '10px',
+  paddingBottom: '10px',
+  borderBottom: '1px solid #e0e0e0',
+  '&:last-child': {
+    borderBottom: 'none',
+    marginBottom: 0,
+  },
 },
-exportText: {
-    fontSize: '14px',
-    color: '#6B7280',
-    margin: '0 0 15px 0'
+infoLabel: {
+  fontSize: '14px',
+  color: '#666',
+  fontWeight: '500',
 },
-fileInput: {
-    width: '100%',
-    marginBottom: '15px',
-    padding: '10px',
-    border: '1px solid #D1D5DB',
-    borderRadius: '6px',
-    backgroundColor: '#ffffff'
+infoValue: {
+  fontSize: '14px',
+  color: '#333',
+  fontWeight: '600',
 },
-downloadTemplateBtn: {
-    padding: '10px 20px',
-    backgroundColor: '#3B82F6',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    transition: 'all 0.2s ease'
+warningAlert: {
+  backgroundColor: '#fff3cd',
+  border: '1px solid #ffc107',
+  borderRadius: '8px',
+  padding: '15px',
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: '10px',
+  marginTop: '20px',
 },
-exportBtn: {
-    padding: '10px 20px',
-    backgroundColor: '#10B981',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    transition: 'all 0.2s ease'
-}
+warningText: {
+  fontSize: '14px',
+  color: '#856404',
+  margin: 0,
+  lineHeight: 1.5,
+},
+modalDeleteBtn: {
+  padding: '12px 28px',
+  backgroundColor: '#dc3545',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  fontSize: '15px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  transition: 'all 0.2s ease',
+  '&:hover:not(:disabled)': {
+    backgroundColor: '#c82333',
+    transform: 'translateY(-1px)',
+    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+  },
+  '&:disabled': {
+    backgroundColor: '#ccc',
+    cursor: 'not-allowed',
+  },
+},
 
 };
 

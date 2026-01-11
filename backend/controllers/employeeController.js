@@ -801,51 +801,47 @@ export const updateLeaveEntitlement = async (req, res) => {
 };
 
 // 📌 Add new leave type to all employees
-// 📌 Add new leave type to all employees who already have leave entitlements
-export const addLeaveTypeToAllEmployees = async (req, res) => {
+export const addLeaveType = async (req, res) => {
   try {
-    const { leaveType, days } = req.body;
+    const { name, abbreviation, days } = req.body;
     const year = new Date().getFullYear();
 
-    if (!leaveType || days === undefined) {
+    if (!name || !abbreviation || days === undefined) {
       return res.status(400).json({ 
-        error: "Leave type and days are required" 
+        success: false,
+        error: "Leave name, abbreviation, and days are required" 
       });
     }
 
-    console.log(`📝 Adding new leave type "${leaveType}" to employees with existing leave entitlements...`);
+    console.log(`📝 Adding new leave type "${name}" (${abbreviation}) to employees...`);
 
-    // Get DISTINCT employees who already have leave entitlements
-    const employees = await sql`
-      SELECT DISTINCT user_id as id 
-      FROM leave_entitlements 
-      WHERE year = ${year}
-      ORDER BY user_id
+    // First, check if leave type abbreviation already exists in leave_entitlements
+    const existingType = await sql`
+      SELECT DISTINCT leave_type FROM leave_entitlements 
+      WHERE leave_type = ${abbreviation} 
+      LIMIT 1;
     `;
 
-    console.log(`✅ Found ${employees.length} employees with existing leave entitlements`);
-
-    // If no employees found, you might want to get employees from employee_list
-    // who should have leave entitlements based on their status
-    if (employees.length === 0) {
-      console.log("⚠️ No employees found with existing leave entitlements. Checking eligible employees...");
-      
-      // Option 1: Get employees from employee_list based on employment status
-      const eligibleStatuses = ["Temporary", "Permanent", "Contractual", "Casual", "Coterminous"];
-      
-      const eligibleEmployees = await sql`
-        SELECT id FROM employee_list 
-        WHERE employment_status = ANY(${eligibleStatuses})
-      `;
-      
-      console.log(`✅ Found ${eligibleEmployees.length} eligible employees from employee_list`);
-      employees = eligibleEmployees;
+    if (existingType.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Leave type with abbreviation "${abbreviation}" already exists`
+      });
     }
 
+    // Get ALL eligible employees from employee_list
+    const eligibleStatuses = ["Temporary", "Permanent", "Contractual", "Casual", "Coterminous", "Job Order"];
+    
+    const employees = await sql`
+      SELECT id FROM employee_list 
+      WHERE employment_status = ANY(${eligibleStatuses})
+      ORDER BY id
+    `;
+
+    console.log(`✅ Found ${employees.length} eligible employees from employee_list`);
+
     let addedCount = 0;
-    let updatedCount = 0;
     let skippedCount = 0;
-    let errors = [];
 
     // Add leave type to each employee
     for (const employee of employees) {
@@ -861,69 +857,227 @@ export const addLeaveTypeToAllEmployees = async (req, res) => {
             updated_at
           ) VALUES (
             ${employee.id},
-            ${leaveType},
+            ${abbreviation},
             ${year},
             ${days},
             0,
             NOW(),
             NOW()
           )
-          ON CONFLICT (user_id, leave_type, year) 
-          DO UPDATE SET 
-            total_days = ${days},
-            updated_at = NOW()
-          RETURNING id
+          ON CONFLICT (user_id, leave_type, year) DO NOTHING
+          RETURNING *;
         `;
         
-        if (result && result.length > 0) {
-          if (result[0].id) {
-            addedCount++;
-          } else {
-            updatedCount++;
-          }
+        if (result.length > 0) {
+          addedCount++;
+        } else {
+          skippedCount++;
         }
         
       } catch (error) {
         console.error(`Error adding leave type for employee ${employee.id}:`, error);
         skippedCount++;
-        errors.push({ 
-          employeeId: employee.id, 
-          error: error.message 
-        });
       }
     }
 
-    console.log(`✅ Leave type "${leaveType}" added to ${addedCount} employees, updated for ${updatedCount}, skipped ${skippedCount}`);
+    console.log(`✅ Leave type "${name}" (${abbreviation}) added to ${addedCount} employees, skipped ${skippedCount}`);
 
     res.status(200).json({
       success: true,
-      message: `Leave type "${leaveType}" added to ${addedCount} employees`,
+      message: `Leave type "${name}" added successfully`,
+      data: {
+        name: name,
+        abbreviation: abbreviation,
+        days: days
+      },
       stats: {
         added: addedCount,
-        updated: updatedCount,
         skipped: skippedCount,
         total: employees.length
-      },
-      errors: errors.length > 0 ? errors : undefined
+      }
     });
 
   } catch (error) {
-    console.error("❌ Error adding leave type to all employees:", error);
+    console.error("❌ Error adding leave type:", error);
     res.status(500).json({ 
-      error: "Failed to add leave type to all employees",
+      success: false,
+      error: "Failed to add leave type",
       details: error.message 
     });
   }
 };
 
-// controllers/employeeController.js
+// 📌 Update leave type (abbreviation and total_days)
+export const updateLeaveType = async (req, res) => {
+  try {
+    const { oldAbbreviation } = req.params;
+    const { newAbbreviation, name, days } = req.body;
+
+    // Validate input
+    if (!newAbbreviation || days === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: "New abbreviation and days are required"
+      });
+    }
+
+    // Check if old leave type exists
+    const existingType = await sql`
+      SELECT DISTINCT leave_type FROM leave_entitlements 
+      WHERE leave_type = ${oldAbbreviation} 
+      LIMIT 1
+    `;
+
+    if (existingType.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Leave type "${oldAbbreviation}" not found`
+      });
+    }
+
+    // Check if new abbreviation is different from old one and if it already exists
+    if (newAbbreviation !== oldAbbreviation) {
+      const duplicateAbbr = await sql`
+        SELECT DISTINCT leave_type FROM leave_entitlements 
+        WHERE leave_type = ${newAbbreviation} 
+        LIMIT 1
+      `;
+
+      if (duplicateAbbr.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Abbreviation "${newAbbreviation}" is already in use`
+        });
+      }
+
+      // Update abbreviation in leave_entitlements
+      await sql`
+        UPDATE leave_entitlements 
+        SET leave_type = ${newAbbreviation}
+        WHERE leave_type = ${oldAbbreviation}
+      `;
+    }
+
+    // Update total_days for all employees with this leave type
+    if (days !== undefined) {
+      await sql`
+        UPDATE leave_entitlements 
+        SET total_days = ${days},
+            updated_at = NOW()
+        WHERE leave_type = ${newAbbreviation !== oldAbbreviation ? newAbbreviation : oldAbbreviation}
+      `;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Leave type updated successfully",
+      data: {
+        oldAbbreviation: oldAbbreviation,
+        newAbbreviation: newAbbreviation,
+        name: name,
+        days: days
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating leave type:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to update leave type",
+      details: error.message 
+    });
+  }
+};
+
+// 📌 Delete leave type permanently
+export const deleteLeaveType = async (req, res) => {
+  try {
+    const { abbreviation } = req.params;
+    
+    // Check if leave type exists
+    const existingType = await sql`
+      SELECT DISTINCT leave_type FROM leave_entitlements 
+      WHERE leave_type = ${abbreviation}
+      LIMIT 1
+    `;
+
+    if (existingType.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Leave type not found"
+      });
+    }
+
+    // Delete the leave type from leave_entitlements
+    await sql`
+      DELETE FROM leave_entitlements 
+      WHERE leave_type = ${abbreviation}
+    `;
+
+    res.status(200).json({
+      success: true,
+      message: "Leave type deleted successfully",
+      data: {
+        abbreviation: abbreviation,
+        deleted: true
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error deleting leave type:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to delete leave type",
+      details: error.message 
+    });
+  }
+};
+
+// 📌 Get leave type details
+export const getLeaveTypeDetails = async (req, res) => {
+  try {
+    const { abbreviation } = req.params;
+    
+    // Get leave type details from leave_entitlements
+    const result = await sql`
+      SELECT 
+        leave_type as abbreviation,
+        total_days as days,
+        COUNT(DISTINCT user_id) as employee_count
+      FROM leave_entitlements 
+      WHERE leave_type = ${abbreviation}
+      GROUP BY leave_type, total_days
+      LIMIT 1
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Leave type not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: result[0]
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching leave type details:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to fetch leave type details",
+      details: error.message 
+    });
+  }
+};
 
 // 📌 Get all distinct leave types from leave_entitlements
 export const getAllLeaveTypes = async (req, res) => {
   try {
     // Fetch distinct leave types from leave_entitlements
     const leaveTypes = await sql`
-      SELECT DISTINCT leave_type 
+      SELECT DISTINCT leave_type, total_days
       FROM leave_entitlements 
       ORDER BY leave_type;
     `;
@@ -950,10 +1104,11 @@ export const getAllLeaveTypes = async (req, res) => {
       "WL": "Wellness Leave"
     };
 
-    // Transform to include both code and full name
+    // Transform to include both code and full name (remove status field)
     const formattedLeaveTypes = leaveTypes.map(type => ({
-      code: type.leave_type,
-      name: leaveTypeFullNameMap[type.leave_type] || type.leave_type
+      abbreviation: type.leave_type,
+      name: leaveTypeFullNameMap[type.leave_type] || type.leave_type,
+      days: type.total_days
     }));
 
     res.json({
