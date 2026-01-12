@@ -181,6 +181,23 @@ const [editingLeaveType, setEditingLeaveType] = useState(null);
 const [showEditModal, setShowEditModal] = useState(false);
 const [showDeleteModal, setShowDeleteModal] = useState(false);
 const [deletingLeaveType, setDeletingLeaveType] = useState(null);
+const [showRequestModal, setShowRequestModal] = useState(false);
+const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
+
+
+const openRequestModal = (request) => {
+  setSelectedRequestForModal(request);
+  setShowRequestModal(true);
+  
+  // Also set the selected request for the desktop view
+  setSelectedRequest(request);
+};
+
+// Add this function to close the modal
+const closeRequestModal = () => {
+  setShowRequestModal(false);
+  setSelectedRequestForModal(null);
+};
 
 const fetchAllLeaveTypes = async () => {
   try {
@@ -2972,8 +2989,14 @@ const handleAddLeaveType = async () => {
                                 filteredRequests.map((req) => (
                                 <tr
                                     key={req.id}
-                                    onClick={() => setSelectedRequest(req)}
-                                    style={{ 
+                                    onClick={() => {
+                                        if (window.innerWidth <= 768) {
+                                          openRequestModal(req);
+                                        } else {
+                                          setSelectedRequest(req);
+                                        }
+                                      }}
+                                      style={{ 
                                     ...styles.leaveRequestsRow,
                                     backgroundColor: selectedRequest?.id === req.id ? '#f0f9ff' : 'transparent'
                                     }}
@@ -3027,6 +3050,309 @@ const handleAddLeaveType = async () => {
                         </table>
                         </div>
                     </div>
+
+                    {/* Mobile Request Modal */}
+                    {showRequestModal && selectedRequestForModal && (
+                      <div style={styles.mobileModalOverlay} onClick={closeRequestModal}>
+                        <div style={styles.mobileRequestModal} onClick={(e) => e.stopPropagation()}>
+                          {/* Modal Header */}
+                          <div style={styles.mobileModalHeader}>
+                            <h3 style={styles.mobileModalTitle}>Leave Request Details</h3>
+                            <button 
+                              style={styles.mobileCloseButton}
+                              onClick={closeRequestModal}
+                            >
+                              <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                          </div>
+                          
+                          {/* Modal Content - Reuse the right section content */}
+                          <div style={styles.mobileModalContent}>
+                            {/* EMPLOYEE HEADER */}
+                            <div style={styles.employeeHeader}>
+                              <div style={styles.employeeCard}>
+                                <img
+                                  src={selectedRequestForModal.profile_picture || "/default-avatar.png"}
+                                  alt="profile"
+                                  style={styles.profilePicture}
+                                />
+                                <div style={styles.employeeInfo}>
+                                  <h3 style={styles.employeeName}>
+                                    {selectedRequestForModal.first_name} {selectedRequestForModal.middle_name} {selectedRequestForModal.last_name}
+                                  </h3>
+                                  <p style={styles.employeePosition}>{selectedRequestForModal.position}</p>
+                                  <div style={styles.employeeMeta}>
+                                    <span style={styles.employeeId}>ID: {selectedRequestForModal.id_number}</span>
+                                    <span style={styles.employeeDept}>{selectedRequestForModal.department}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* LEAVE DETAILS */}
+                            <div style={styles.detailsSection}>
+                              <h4 style={styles.sectionTitle}>Leave Details</h4>
+                              
+                              <div style={styles.detailsGrid}>
+                                <div style={styles.detailItem}>
+                                  <label style={styles.detailLabel}>Leave Type</label>
+                                  <span style={styles.detailValue}>{selectedRequestForModal.leave_type}</span>
+                                </div>
+                                <div style={styles.detailItem}>
+                                  <label style={styles.detailLabel}>Duration</label>
+                                  <span style={styles.detailValue}>
+                                    {selectedRequestForModal.inclusive_date_start} to {selectedRequestForModal.inclusive_date_end}
+                                  </span>
+                                </div>
+                                <div style={styles.detailItem}>
+                                  <label style={styles.detailLabel}>Total Days</label>
+                                  <span style={styles.detailValue}>
+                                    {selectedRequestForModal.number_of_days} day{selectedRequestForModal.number_of_days > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                <div style={styles.detailItem}>
+                                  <label style={styles.detailLabel}>Date Filed</label>
+                                  <span style={styles.detailValue}>
+                                    {new Date(selectedRequestForModal.date_filing).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* REASON SECTION */}
+                              <div style={styles.reasonSection}>
+                                <label style={styles.detailLabel}>Reason for Leave</label>
+                                <div style={styles.reasonBox}>
+                                  <p style={styles.reasonText}>
+                                    {selectedRequestForModal.reason || "No reason provided"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* APPROVAL PROGRESS */}
+                              <div style={styles.approvalSection}>
+                                <h4 style={styles.sectionTitle}>Approval Progress</h4>
+                                <div style={styles.approvalSteps}>
+                                  <div style={styles.approvalStep}>
+                                    <div style={{
+                                      ...styles.stepIndicator,
+                                      ...(selectedRequestForModal.office_head_status === 'Approved' ? styles.stepCompleted : 
+                                          selectedRequestForModal.office_head_status === 'Rejected' ? styles.stepRejected : 
+                                          styles.stepPending)
+                                    }}>
+                                      {selectedRequestForModal.office_head_status === 'Approved' ? '✓' : 
+                                      selectedRequestForModal.office_head_status === 'Rejected' ? '✗' : '1'}
+                                    </div>
+                                    <div style={styles.stepInfo}>
+                                      <span style={styles.stepTitle}>Office Head</span>
+                                      <span style={styles.stepStatus}>
+                                        {selectedRequestForModal.office_head_status || 'Pending'}
+                                        {selectedRequestForModal.office_head_date && ` • ${new Date(selectedRequestForModal.office_head_date).toLocaleDateString()}`}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div style={styles.approvalStep}>
+                                    <div style={{
+                                      ...styles.stepIndicator,
+                                      ...(selectedRequestForModal.hr_status === 'Approved' ? styles.stepCompleted : 
+                                          selectedRequestForModal.hr_status === 'Rejected' ? styles.stepRejected : 
+                                          selectedRequestForModal.office_head_status === 'Approved' ? styles.stepCurrent : 
+                                          styles.stepPending)
+                                    }}>
+                                      {selectedRequestForModal.hr_status === 'Approved' ? '✓' : 
+                                      selectedRequestForModal.hr_status === 'Rejected' ? '✗' : '2'}
+                                    </div>
+                                    <div style={styles.stepInfo}>
+                                      <span style={styles.stepTitle}>HR Department</span>
+                                      <span style={styles.stepStatus}>
+                                        {selectedRequestForModal.hr_status || 'Pending'}
+                                        {selectedRequestForModal.hr_date && ` • ${new Date(selectedRequestForModal.hr_date).toLocaleDateString()}`}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div style={styles.approvalStep}>
+                                    <div style={{
+                                      ...styles.stepIndicator,
+                                      ...(selectedRequestForModal.mayor_status === 'Approved' ? styles.stepCompleted : 
+                                          selectedRequestForModal.mayor_status === 'Rejected' ? styles.stepRejected : 
+                                          selectedRequestForModal.hr_status === 'Approved' ? styles.stepCurrent : 
+                                          styles.stepPending)
+                                    }}>
+                                      {selectedRequestForModal.mayor_status === 'Approved' ? '✓' : 
+                                      selectedRequestForModal.mayor_status === 'Rejected' ? '✗' : '3'}
+                                    </div>
+                                    <div style={styles.stepInfo}>
+                                      <span style={styles.stepTitle}>Mayor's Office</span>
+                                      <span style={styles.stepStatus}>
+                                        {selectedRequestForModal.mayor_status || 'Pending'}
+                                        {selectedRequestForModal.mayor_date && ` • ${new Date(selectedRequestForModal.mayor_date).toLocaleDateString()}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={styles.actionSection}>
+                                  {/* Check if leave has been approved or rejected */}
+                                  {(() => {
+                                    // Get the current admin
+                                    const admin = JSON.parse(localStorage.getItem("admin"));
+                                    const currentUserRole = admin?.role?.toLowerCase().replace("_", " ");
+                                    
+                                    // Check if the current user has already acted on this request
+                                    const userHasAlreadyActed = 
+                                      (currentUserRole === "office head" && selectedRequest.office_head_status && selectedRequest.office_head_status !== "Pending") ||
+                                      (currentUserRole === "admin" && selectedRequest.hr_status && selectedRequest.hr_status !== "Pending") ||
+                                      (currentUserRole === "mayor" && selectedRequest.mayor_status && selectedRequest.mayor_status !== "Pending");
+                                    
+                                    // Check if the current user can act on this request
+                                    const userCanAct = 
+                                      (currentUserRole === "office head" && (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
+                                      (currentUserRole === "admin" && selectedRequest.office_head_status === "Approved" && (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
+                                      (currentUserRole === "mayor" && selectedRequest.hr_status === "Approved" && (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending"));
+                                    
+                                    // If request is already fully approved/rejected OR user has already acted on it, show status
+                                    if (selectedRequest.status === "Approved" || selectedRequest.status === "Rejected" || userHasAlreadyActed) {
+                                      return (
+                                        <div style={styles.finalStatus}>
+                                          <div style={{
+                                            ...styles.finalStatusBadge,
+                                            ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
+                                                selectedRequest.status === 'Rejected' ? styles.statusRejected : 
+                                                selectedRequest.office_head_status === "Rejected" ? styles.statusRejected :
+                                                selectedRequest.hr_status === "Rejected" ? styles.statusRejected :
+                                                selectedRequest.mayor_status === "Rejected" ? styles.statusRejected :
+                                                styles.statusPending)
+                                          }}>
+                                            {selectedRequest.status || 'Processed'}
+                                          </div>
+                                          <p style={styles.finalStatusText}>
+                                            {selectedRequest.approver_name && (
+                                              <>Processed by {selectedRequest.approver_name}</>
+                                            )}
+                                            {selectedRequest.approver_date && (
+                                              <> on {new Date(selectedRequest.approver_date).toLocaleDateString()}</>
+                                            )}
+                                            {!selectedRequest.approver_name && !selectedRequest.approver_date && (
+                                              <>Leave has been processed</>
+                                            )}
+                                          </p>
+                                          {selectedRequest.remarks && (
+                                            <p style={styles.remarksText}>
+                                              <strong>Remarks:</strong> {selectedRequest.remarks}
+                                            </p>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                    
+                                    // If user can act and request hasn't been rejected by office head
+                                    if (selectedRequest.office_head_status !== "Rejected" && userCanAct) {
+                                      return (
+                                        <div className='actionButtons' style={styles.actionButtons}>
+                                          <button
+                                            style={styles.approveBtn}
+                                            className='approveBtn'
+                                            onClick={() => {
+                                              setActionType("approve");
+                                              setActionRemarks("Approved via dashboard");
+                                              // For office head, check overlapping leaves before proceeding
+                                              if (currentUserRole === "office head") {
+                                                handleApprove(selectedRequest.id, "Approved via dashboard");
+                                              } else {
+                                                // For mayor and admin, proceed directly
+                                                setDaysWithPay(selectedRequest.number_of_days || 0);
+                                                generationTriggerRef.current = true;
+                                                setIsGeneratingCSForm(true);
+                                              }
+                                            }}
+                                            disabled={overlapCheckLoading}
+                                          >
+                                            <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
+                                            {overlapCheckLoading ? "Checking..." : 
+                                              (currentUserRole === "office head" ? "Approve" : 
+                                              (currentUserRole === "mayor" || currentUserRole === "admin") ? "Approve with CS Form" : 
+                                              "Approve Request")}
+                                          </button>
+                                          <button
+                                            style={styles.rejectBtn}
+                                            className='rejectBtn'
+                                            onClick={() => {
+                                              setActionType("reject");
+                                              setActionRemarks("Pending rejection reason...");
+                                              handleReject(selectedRequest.id, "Pending rejection reason...");
+                                            }}
+                                          >
+                                            <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
+                                            {(currentUserRole === "mayor" || currentUserRole === "office head" || currentUserRole === "admin") 
+                                              ? "Reject" 
+                                              : "Reject Request"}
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    
+                                    // If head has rejected, show rejection message
+                                    if (selectedRequest.office_head_status === "Rejected") {
+                                      return (
+                                        <div style={styles.finalStatus}>
+                                          <div style={styles.statusRejected}>
+                                            Rejected by Office Head
+                                          </div>
+                                          <p style={styles.finalStatusText}>
+                                            This request was rejected by the Office Head and cannot be processed further.
+                                          </p>
+                                          {selectedRequest.remarks && (
+                                            <p style={styles.remarksText}>
+                                              <strong>Rejection Reason:</strong> {selectedRequest.remarks}
+                                            </p>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                    
+                                    // Otherwise, user cannot act (waiting for previous approval)
+                                    return (
+                                      <div style={styles.finalStatus}>
+                                        <div style={{
+                                          ...styles.finalStatusBadge,
+                                          ...styles.statusPending
+                                        }}>
+                                          Pending
+                                        </div>
+                                        <p style={styles.finalStatusText}>
+                                          {selectedRequest.office_head_status === "Approved" && currentUserRole === "admin" ? 
+                                            "Waiting for HR review" :
+                                          selectedRequest.hr_status === "Approved" && currentUserRole === "mayor" ? 
+                                            "Waiting for Mayor's review" :
+                                          selectedRequest.office_head_status === "Pending" && currentUserRole === "admin" ? 
+                                            "Waiting for Office Head approval" :
+                                          selectedRequest.hr_status === "Pending" && currentUserRole === "mayor" ? 
+                                            "Waiting for HR approval" :
+                                            "Awaiting next approval step"}
+                                        </p>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {selectedRequest?.cs_form_generated && (
+                                    <button
+                                      style={styles.viewPDFsBtn}
+                                      onClick={() => viewSavedPDFs(selectedRequest?.id)}
+                                      title="View saved PDF forms"
+                                      className='viewPDFsBtn1'
+                                    >
+                                      <FontAwesomeIcon icon={faFilePdf} />
+                                      View Saved PDFs
+                                    </button>
+                                  )}
+                                </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* RIGHT PANEL - IMPROVED DESIGN */}
                     <div className="rightSection" style={styles.rightSection}>
@@ -3158,149 +3484,149 @@ const handleAddLeaveType = async () => {
                             </div>
 
                           {/* ACTION BUTTONS - MODIFIED FOR MAYOR, OFFICE HEAD, AND HR ADMIN */}
-<div style={styles.actionSection}>
-  {/* Check if leave has been approved or rejected */}
-  {(() => {
-    // Get the current admin
-    const admin = JSON.parse(localStorage.getItem("admin"));
-    const currentUserRole = admin?.role?.toLowerCase().replace("_", " ");
-    
-    // Check if the current user has already acted on this request
-    const userHasAlreadyActed = 
-      (currentUserRole === "office head" && selectedRequest.office_head_status && selectedRequest.office_head_status !== "Pending") ||
-      (currentUserRole === "admin" && selectedRequest.hr_status && selectedRequest.hr_status !== "Pending") ||
-      (currentUserRole === "mayor" && selectedRequest.mayor_status && selectedRequest.mayor_status !== "Pending");
-    
-    // Check if the current user can act on this request
-    const userCanAct = 
-      (currentUserRole === "office head" && (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
-      (currentUserRole === "admin" && selectedRequest.office_head_status === "Approved" && (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
-      (currentUserRole === "mayor" && selectedRequest.hr_status === "Approved" && (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending"));
-    
-    // If request is already fully approved/rejected OR user has already acted on it, show status
-    if (selectedRequest.status === "Approved" || selectedRequest.status === "Rejected" || userHasAlreadyActed) {
-      return (
-        <div style={styles.finalStatus}>
-          <div style={{
-            ...styles.finalStatusBadge,
-            ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
-                selectedRequest.status === 'Rejected' ? styles.statusRejected : 
-                selectedRequest.office_head_status === "Rejected" ? styles.statusRejected :
-                selectedRequest.hr_status === "Rejected" ? styles.statusRejected :
-                selectedRequest.mayor_status === "Rejected" ? styles.statusRejected :
-                styles.statusPending)
-          }}>
-            {selectedRequest.status || 'Processed'}
-          </div>
-          <p style={styles.finalStatusText}>
-            {selectedRequest.approver_name && (
-              <>Processed by {selectedRequest.approver_name}</>
-            )}
-            {selectedRequest.approver_date && (
-              <> on {new Date(selectedRequest.approver_date).toLocaleDateString()}</>
-            )}
-            {!selectedRequest.approver_name && !selectedRequest.approver_date && (
-              <>Leave has been processed</>
-            )}
-          </p>
-          {selectedRequest.remarks && (
-            <p style={styles.remarksText}>
-              <strong>Remarks:</strong> {selectedRequest.remarks}
-            </p>
-          )}
-        </div>
-      );
-    }
-    
-    // If user can act and request hasn't been rejected by office head
-    if (selectedRequest.office_head_status !== "Rejected" && userCanAct) {
-      return (
-        <div className='actionButtons' style={styles.actionButtons}>
-          <button
-            style={styles.approveBtn}
-            className='approveBtn'
-            onClick={() => {
-              setActionType("approve");
-              setActionRemarks("Approved via dashboard");
-              // For office head, check overlapping leaves before proceeding
-              if (currentUserRole === "office head") {
-                handleApprove(selectedRequest.id, "Approved via dashboard");
-              } else {
-                // For mayor and admin, proceed directly
-                setDaysWithPay(selectedRequest.number_of_days || 0);
-                generationTriggerRef.current = true;
-                setIsGeneratingCSForm(true);
-              }
-            }}
-            disabled={overlapCheckLoading}
-          >
-            <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
-            {overlapCheckLoading ? "Checking..." : 
-              (currentUserRole === "office head" ? "Approve" : 
-              (currentUserRole === "mayor" || currentUserRole === "admin") ? "Approve with CS Form" : 
-              "Approve Request")}
-          </button>
-          <button
-            style={styles.rejectBtn}
-            className='rejectBtn'
-            onClick={() => {
-              setActionType("reject");
-              setActionRemarks("Pending rejection reason...");
-              handleReject(selectedRequest.id, "Pending rejection reason...");
-            }}
-          >
-            <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
-            {(currentUserRole === "mayor" || currentUserRole === "office head" || currentUserRole === "admin") 
-              ? "Reject" 
-              : "Reject Request"}
-          </button>
-        </div>
-      );
-    }
-    
-    // If head has rejected, show rejection message
-    if (selectedRequest.office_head_status === "Rejected") {
-      return (
-        <div style={styles.finalStatus}>
-          <div style={styles.statusRejected}>
-            Rejected by Office Head
-          </div>
-          <p style={styles.finalStatusText}>
-            This request was rejected by the Office Head and cannot be processed further.
-          </p>
-          {selectedRequest.remarks && (
-            <p style={styles.remarksText}>
-              <strong>Rejection Reason:</strong> {selectedRequest.remarks}
-            </p>
-          )}
-        </div>
-      );
-    }
-    
-    // Otherwise, user cannot act (waiting for previous approval)
-    return (
-      <div style={styles.finalStatus}>
-        <div style={{
-          ...styles.finalStatusBadge,
-          ...styles.statusPending
-        }}>
-          Pending
-        </div>
-        <p style={styles.finalStatusText}>
-          {selectedRequest.office_head_status === "Approved" && currentUserRole === "admin" ? 
-            "Waiting for HR review" :
-          selectedRequest.hr_status === "Approved" && currentUserRole === "mayor" ? 
-            "Waiting for Mayor's review" :
-          selectedRequest.office_head_status === "Pending" && currentUserRole === "admin" ? 
-            "Waiting for Office Head approval" :
-          selectedRequest.hr_status === "Pending" && currentUserRole === "mayor" ? 
-            "Waiting for HR approval" :
-            "Awaiting next approval step"}
-        </p>
-      </div>
-    );
-  })()}
-</div>
+                        <div style={styles.actionSection}>
+                          {/* Check if leave has been approved or rejected */}
+                          {(() => {
+                            // Get the current admin
+                            const admin = JSON.parse(localStorage.getItem("admin"));
+                            const currentUserRole = admin?.role?.toLowerCase().replace("_", " ");
+                            
+                            // Check if the current user has already acted on this request
+                            const userHasAlreadyActed = 
+                              (currentUserRole === "office head" && selectedRequest.office_head_status && selectedRequest.office_head_status !== "Pending") ||
+                              (currentUserRole === "admin" && selectedRequest.hr_status && selectedRequest.hr_status !== "Pending") ||
+                              (currentUserRole === "mayor" && selectedRequest.mayor_status && selectedRequest.mayor_status !== "Pending");
+                            
+                            // Check if the current user can act on this request
+                            const userCanAct = 
+                              (currentUserRole === "office head" && (!selectedRequest.office_head_status || selectedRequest.office_head_status === "Pending")) ||
+                              (currentUserRole === "admin" && selectedRequest.office_head_status === "Approved" && (!selectedRequest.hr_status || selectedRequest.hr_status === "Pending")) ||
+                              (currentUserRole === "mayor" && selectedRequest.hr_status === "Approved" && (!selectedRequest.mayor_status || selectedRequest.mayor_status === "Pending"));
+                            
+                            // If request is already fully approved/rejected OR user has already acted on it, show status
+                            if (selectedRequest.status === "Approved" || selectedRequest.status === "Rejected" || userHasAlreadyActed) {
+                              return (
+                                <div style={styles.finalStatus}>
+                                  <div style={{
+                                    ...styles.finalStatusBadge,
+                                    ...(selectedRequest.status === 'Approved' ? styles.statusApproved : 
+                                        selectedRequest.status === 'Rejected' ? styles.statusRejected : 
+                                        selectedRequest.office_head_status === "Rejected" ? styles.statusRejected :
+                                        selectedRequest.hr_status === "Rejected" ? styles.statusRejected :
+                                        selectedRequest.mayor_status === "Rejected" ? styles.statusRejected :
+                                        styles.statusPending)
+                                  }}>
+                                    {selectedRequest.status || 'Processed'}
+                                  </div>
+                                  <p style={styles.finalStatusText}>
+                                    {selectedRequest.approver_name && (
+                                      <>Processed by {selectedRequest.approver_name}</>
+                                    )}
+                                    {selectedRequest.approver_date && (
+                                      <> on {new Date(selectedRequest.approver_date).toLocaleDateString()}</>
+                                    )}
+                                    {!selectedRequest.approver_name && !selectedRequest.approver_date && (
+                                      <>Leave has been processed</>
+                                    )}
+                                  </p>
+                                  {selectedRequest.remarks && (
+                                    <p style={styles.remarksText}>
+                                      <strong>Remarks:</strong> {selectedRequest.remarks}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            }
+                            
+                            // If user can act and request hasn't been rejected by office head
+                            if (selectedRequest.office_head_status !== "Rejected" && userCanAct) {
+                              return (
+                                <div className='actionButtons' style={styles.actionButtons}>
+                                  <button
+                                    style={styles.approveBtn}
+                                    className='approveBtn'
+                                    onClick={() => {
+                                      setActionType("approve");
+                                      setActionRemarks("Approved via dashboard");
+                                      // For office head, check overlapping leaves before proceeding
+                                      if (currentUserRole === "office head") {
+                                        handleApprove(selectedRequest.id, "Approved via dashboard");
+                                      } else {
+                                        // For mayor and admin, proceed directly
+                                        setDaysWithPay(selectedRequest.number_of_days || 0);
+                                        generationTriggerRef.current = true;
+                                        setIsGeneratingCSForm(true);
+                                      }
+                                    }}
+                                    disabled={overlapCheckLoading}
+                                  >
+                                    <FontAwesomeIcon icon={faCheckCircle} style={styles.iconApprove} />
+                                    {overlapCheckLoading ? "Checking..." : 
+                                      (currentUserRole === "office head" ? "Approve" : 
+                                      (currentUserRole === "mayor" || currentUserRole === "admin") ? "Approve with CS Form" : 
+                                      "Approve Request")}
+                                  </button>
+                                  <button
+                                    style={styles.rejectBtn}
+                                    className='rejectBtn'
+                                    onClick={() => {
+                                      setActionType("reject");
+                                      setActionRemarks("Pending rejection reason...");
+                                      handleReject(selectedRequest.id, "Pending rejection reason...");
+                                    }}
+                                  >
+                                    <FontAwesomeIcon icon={faTimesCircle} style={styles.iconReject} />
+                                    {(currentUserRole === "mayor" || currentUserRole === "office head" || currentUserRole === "admin") 
+                                      ? "Reject" 
+                                      : "Reject Request"}
+                                  </button>
+                                </div>
+                              );
+                            }
+                            
+                            // If head has rejected, show rejection message
+                            if (selectedRequest.office_head_status === "Rejected") {
+                              return (
+                                <div style={styles.finalStatus}>
+                                  <div style={styles.statusRejected}>
+                                    Rejected by Office Head
+                                  </div>
+                                  <p style={styles.finalStatusText}>
+                                    This request was rejected by the Office Head and cannot be processed further.
+                                  </p>
+                                  {selectedRequest.remarks && (
+                                    <p style={styles.remarksText}>
+                                      <strong>Rejection Reason:</strong> {selectedRequest.remarks}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            }
+                            
+                            // Otherwise, user cannot act (waiting for previous approval)
+                            return (
+                              <div style={styles.finalStatus}>
+                                <div style={{
+                                  ...styles.finalStatusBadge,
+                                  ...styles.statusPending
+                                }}>
+                                  Pending
+                                </div>
+                                <p style={styles.finalStatusText}>
+                                  {selectedRequest.office_head_status === "Approved" && currentUserRole === "admin" ? 
+                                    "Waiting for HR review" :
+                                  selectedRequest.hr_status === "Approved" && currentUserRole === "mayor" ? 
+                                    "Waiting for Mayor's review" :
+                                  selectedRequest.office_head_status === "Pending" && currentUserRole === "admin" ? 
+                                    "Waiting for Office Head approval" :
+                                  selectedRequest.hr_status === "Pending" && currentUserRole === "mayor" ? 
+                                    "Waiting for HR approval" :
+                                    "Awaiting next approval step"}
+                                </p>
+                              </div>
+                            );
+                          })()}
+                        </div>
 
                             </div>
                         </>
@@ -3394,26 +3720,29 @@ const handleAddLeaveType = async () => {
   </div>
 )}
 
-                    {/* CS FORM MODAL */}
 {showActualCSForm && csFormData && selectedRequest && (
-  <div style={styles.modalOverlay}>
-    <div style={styles.actualFormModal}>
-      <h3 style={styles.modalTitle}>CS Form No. 6 - Application for Leave</h3>
+  <div style={styles.modalOverlay} className="modal-overlay">
+    <div 
+      style={styles.actualFormModal} 
+      className="actualFormModal"
+      data-mobile-form={window.innerWidth <= 768 ? "true" : "false"}
+    >
+      <h3 style={styles.modalTitle} className="modalTitle">CS Form No. 6 - Application for Leave</h3>
       
-      <div style={styles.formModalLayout}>
+      <div style={styles.formModalLayout} className="formModalLayout">
         {/* LEFT SIDE - REJECTION/REASON SECTION */}
-        <div style={styles.leftControlPanel}>
-          <div style={styles.controlSection}>
-            <h4 style={styles.controlSectionTitle}>
+        <div style={styles.leftControlPanel} className="leftControlPanel">
+          <div style={styles.controlSection} className="controlSection">
+            <h4 style={styles.controlSectionTitle} className="controlSectionTitle">
               {actionType === "approve" ? "Approval Details" : "Disapproval Details"}
             </h4>
             
             {actionType === "reject" && (
-              <div style={styles.rejectionSection}>
-                <h5 style={styles.rejectionTitle}>Select Reason for Disapproval:</h5>
+              <div style={styles.rejectionSection} className="rejectionSection">
+                <h5 style={styles.rejectionTitle} className="rejectionTitle">Select Reason for Disapproval:</h5>
                 
                 {/* Button choices for rejection reasons */}
-                <div style={styles.rejectionButtonGrid}>
+                <div style={styles.rejectionButtonGrid} className="rejectionButtonGrid">
                   {rejectionReasons.map((reason, index) => (
                     <button
                       key={index}
@@ -3421,6 +3750,7 @@ const handleAddLeaveType = async () => {
                         ...styles.rejectionButton,
                         ...(rejectionReason === reason ? styles.rejectionButtonSelected : {})
                       }}
+                      className={`rejectionButton ${rejectionReason === reason ? 'rejectionButtonSelected' : ''}`}
                       onClick={() => {
                         handleRejectionReasonChange(reason);
                         if (reason !== "Other (specify below)") {
@@ -3431,12 +3761,13 @@ const handleAddLeaveType = async () => {
                         }
                       }}
                     >
-                      <div style={styles.rejectionButtonContent}>
-                        <div style={styles.rejectionButtonText}>{reason}</div>
+                      <div style={styles.rejectionButtonContent} className="rejectionButtonContent">
+                        <div style={styles.rejectionButtonText} className="rejectionButtonText">{reason}</div>
                         {rejectionReason === reason && (
                           <FontAwesomeIcon 
                             icon={faCheckCircle} 
                             style={styles.rejectionButtonIcon}
+                            className="rejectionButtonIcon"
                           />
                         )}
                       </div>
@@ -3446,10 +3777,11 @@ const handleAddLeaveType = async () => {
                 
                 {/* Custom reason input */}
                 {showCustomReasonInput && (
-                  <div style={styles.customReasonSection}>
-                    <label style={styles.customReasonLabel}>Specify reason:</label>
+                  <div style={styles.customReasonSection} className="customReasonSection">
+                    <label style={styles.customReasonLabel} className="customReasonLabel">Specify reason:</label>
                     <textarea
                       style={styles.customReasonTextarea}
+                      className="customReasonTextarea"
                       value={customRejectionReason}
                       onChange={(e) => {
                         setCustomRejectionReason(e.target.value);
@@ -3465,7 +3797,7 @@ const handleAddLeaveType = async () => {
                       rows={3}
                     />
                     {!customRejectionReason.trim() && (
-                      <p style={styles.validationError}>
+                      <p style={styles.validationError} className="validationError">
                         Please provide a reason for rejection
                       </p>
                     )}
@@ -3474,18 +3806,18 @@ const handleAddLeaveType = async () => {
                 
                 {/* Selected reason display */}
                 {rejectionReason && !showCustomReasonInput && (
-                  <div style={styles.selectedReasonDisplay}>
-                    <div style={styles.selectedReasonLabel}>Selected Reason:</div>
-                    <div style={styles.selectedReasonText}>{rejectionReason}</div>
+                  <div style={styles.selectedReasonDisplay} className="selectedReasonDisplay">
+                    <div style={styles.selectedReasonLabel} className="selectedReasonLabel">Selected Reason:</div>
+                    <div style={styles.selectedReasonText} className="selectedReasonText">{rejectionReason}</div>
                   </div>
                 )}
               </div>
             )}
             
             {actionType === "approve" && (
-              <div style={styles.daysWithPaySection}>
-                <h5 style={styles.controlSectionTitle}>Days with Pay:</h5>
-                <div style={styles.daysInputContainer}>
+              <div style={styles.daysWithPaySection} className="daysWithPaySection">
+                <h5 style={styles.controlSectionTitle} className="controlSectionTitle">Days with Pay:</h5>
+                <div style={styles.daysInputContainer} className="daysInputContainer">
                   <input
                     type="number"
                     min="0"
@@ -3502,24 +3834,24 @@ const handleAddLeaveType = async () => {
                       setFormGenerationTimeout(timeout);
                     }}
                     style={styles.daysInput}
+                    className="daysInput"
                   />
-                  <span style={styles.daysNote}>
+                  <span style={styles.daysNote} className="daysNote">
                     (Maximum: {selectedRequest.number_of_days || "N/A"} days requested)
                   </span>
                 </div>
               </div>
             )}
-            
-            
           </div>
         </div>
 
         {/* RIGHT SIDE - FORM PREVIEW */}
-        <div style={styles.rightFormPreview}>
-          <div style={styles.formPreviewHeader}>
-            <h4 style={styles.previewTitle}>Form Preview</h4>
+        <div style={styles.rightFormPreview} className="rightFormPreview">
+          <div style={styles.formPreviewHeader} className="formPreviewHeader">
+            <h4 style={styles.previewTitle} className="previewTitle">Form Preview</h4>
             <button
               style={styles.printFormBtn}
+              className="printFormBtn"
               onClick={() => {
                 const newWindow = window.open(csFormData.url);
                 if (newWindow) {
@@ -3534,25 +3866,26 @@ const handleAddLeaveType = async () => {
             </button>
           </div>
           
-          <div style={styles.formPreviewContainer}>
+          <div style={styles.formPreviewContainer} className="formPreviewContainer">
             {isTyping ? (
-              <div style={styles.typingIndicator}>
+              <div style={styles.typingIndicator} className="typingIndicator">
                 <p>Updating form preview...</p>
               </div>
             ) : isGeneratingForm ? (
-              <div style={styles.generatingPreview}>
-                <div style={styles.loadingSpinner}></div>
+              <div style={styles.generatingPreview} className="generatingPreview">
+                <div style={styles.loadingSpinner} className="loadingSpinner"></div>
                 <p>Generating form preview...</p>
               </div>
             ) : csFormData ? (
               <iframe 
                 src={csFormData.url} 
                 style={styles.formIframe}
+                className="formIframe"
                 title="CS Form No. 6"
                 key={csFormData.timestamp}
               />
             ) : (
-              <div style={styles.loadingPreview}>
+              <div style={styles.loadingPreview} className="loadingPreview">
                 <p>Generating form preview...</p>
               </div>
             )}
@@ -3561,73 +3894,73 @@ const handleAddLeaveType = async () => {
       </div>
 
       {/* ACTION BUTTONS AT BOTTOM */}
-   {/* ACTION BUTTONS AT BOTTOM */}
-<div style={styles.formActions}>
-  <button
-    style={styles.cancelBtn}
-    onClick={() => {
-      setShowActualCSForm(false);
-      setCsFormData(null);
-      setActionType(null);
-      setActionRemarks("");
-      setRejectionReason("");
-      setCustomRejectionReason("");
-      setShowCustomReasonInput(false);
-      setRealTimeFormData({
-        action_type: "",
-        action_remarks: "",
-        days_with_pay: 0
-      });
-      if (formGenerationTimeout) {
-        clearTimeout(formGenerationTimeout);
-      }
-    }}
-  >
-    Cancel
-  </button>
-  
-  <button
-    style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
-    onClick={() => {
-      if (actionType === "reject") {
-        if (!rejectionReason && !actionRemarks.trim()) {
-          alert("Please select or specify a reason for rejection");
-          return;
-        }
+      <div style={styles.formActions} className="formActions">
+        <button
+          style={styles.cancelBtn}
+          className="cancelBtn"
+          onClick={() => {
+            setShowActualCSForm(false);
+            setCsFormData(null);
+            setActionType(null);
+            setActionRemarks("");
+            setRejectionReason("");
+            setCustomRejectionReason("");
+            setShowCustomReasonInput(false);
+            setRealTimeFormData({
+              action_type: "",
+              action_remarks: "",
+              days_with_pay: 0
+            });
+            if (formGenerationTimeout) {
+              clearTimeout(formGenerationTimeout);
+            }
+          }}
+        >
+          Cancel
+        </button>
         
-        if (rejectionReason === "Other (specify below)" && !customRejectionReason.trim()) {
-          alert("Please specify the reason for rejection");
-          return;
-        }
-      }
-      handleConfirmApproval();
-    }}
-    disabled={
-      (actionType === "reject" && !actionRemarks.trim()) ||
-      loadingApprovalId === selectedRequest?.id ||
-      loadingRejectionId === selectedRequest?.id
-    }
-  >
-    {loadingApprovalId === selectedRequest?.id || loadingRejectionId === selectedRequest?.id ? (
-      <>
-        <div style={{
-          display: 'inline-block',
-          width: '16px',
-          height: '16px',
-          border: '2px solid #ffffff',
-          borderTop: '2px solid transparent',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-          marginRight: '8px'
-        }}></div>
-        Processing...
-      </>
-    ) : (
-      actionType === "approve" ? "Approve Request" : "Reject Request"
-    )}
-  </button>
-</div>
-
+        <button
+          style={actionType === "approve" ? styles.confirmApproveBtn : styles.confirmRejectBtn}
+          className={actionType === "approve" ? "confirmApproveBtn" : "confirmRejectBtn"}
+          onClick={() => {
+            if (actionType === "reject") {
+              if (!rejectionReason && !actionRemarks.trim()) {
+                alert("Please select or specify a reason for rejection");
+                return;
+              }
+              
+              if (rejectionReason === "Other (specify below)" && !customRejectionReason.trim()) {
+                alert("Please specify the reason for rejection");
+                return;
+              }
+            }
+            handleConfirmApproval();
+          }}
+          disabled={
+            (actionType === "reject" && !actionRemarks.trim()) ||
+            loadingApprovalId === selectedRequest?.id ||
+            loadingRejectionId === selectedRequest?.id
+          }
+        >
+          {loadingApprovalId === selectedRequest?.id || loadingRejectionId === selectedRequest?.id ? (
+            <>
+              <div style={{
+                display: 'inline-block',
+                width: '16px',
+                height: '16px',
+                border: '2px solid #ffffff',
+                borderTop: '2px solid transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginRight: '8px'
+              }}></div>
+              Processing...
+            </>
+          ) : (
+            actionType === "approve" ? "Approve Request" : "Reject Request"
+          )}
+        </button>
+      </div>
     </div>
   </div>
 )}
@@ -8304,6 +8637,74 @@ modalDeleteBtn: {
     backgroundColor: '#ccc',
     cursor: 'not-allowed',
   },
+},
+
+// Add these mobile-specific styles to your styles object
+mobileModalOverlay: {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 2000,
+  padding: '20px',
+  backdropFilter: 'blur(4px)',
+  overflow: 'hidden',
+},
+mobileRequestModal: {
+  backgroundColor: '#fff',
+  borderRadius: '16px',
+  width: '100%',
+  maxWidth: '500px',
+  maxHeight: '90vh',
+  overflow: 'hidden',
+  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+  animation: 'slideUp 0.3s ease-out',
+},
+mobileModalHeader: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '20px',
+  borderBottom: '1px solid #e0e0e0',
+  backgroundColor: '#f8f9fa',
+  position: 'sticky',
+  top: 0,
+  zIndex: 10,
+},
+mobileModalTitle: {
+  fontSize: '18px',
+  fontWeight: '600',
+  color: '#1F2937',
+  margin: 0,
+},
+mobileCloseButton: {
+  background: 'none',
+  border: 'none',
+  fontSize: '20px',
+  color: '#666',
+  cursor: 'pointer',
+  padding: '8px',
+  borderRadius: '50%',
+  width: '40px',
+  height: '40px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'all 0.2s ease',
+  '&:hover': {
+    backgroundColor: '#f0f0f0',
+  },
+},
+mobileModalContent: {
+  maxHeight: 'calc(90vh - 80px)',
+  overflowY: 'auto',
+  padding: '20px',
+  '-webkit-overflow-scrolling': 'touch',
 },
 
 };

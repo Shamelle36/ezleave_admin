@@ -453,15 +453,15 @@ useEffect(() => {
 
 const renderSignatureModal = () => {
   return (
-    <div className="modal-overlay" style={styles.modalOverlay}>
-      <div className="modal-content" style={{
+    <div className="modal-overlay signature-modal-overlay" style={styles.modalOverlay}>
+      <div className="modal-content signature-modal-content" style={{
         ...styles.modalContent,
         maxWidth: '800px',
         backgroundColor: '#fff',
         borderRadius: '10px',
         padding: '25px'
       }}>
-        <div style={{
+        <div className="signature-modal-header" style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -469,10 +469,10 @@ const renderSignatureModal = () => {
           borderBottom: '1px solid #eee',
           paddingBottom: '15px'
         }}>
-          <h3 style={{ margin: 0, color: '#2C3E50' }}>
+          <h3 className="signature-modal-title" style={{ margin: 0, color: '#2C3E50' }}>
             <FontAwesomeIcon icon={faSignature} style={{ marginRight: '10px' }} />
             E-Signature Management
-            <span style={{
+            <span className="signature-status-badge" style={{
               marginLeft: '10px',
               fontSize: '14px',
               fontWeight: 'normal',
@@ -482,6 +482,7 @@ const renderSignatureModal = () => {
             </span>
           </h3>
           <button
+            className="modal-close-btn"
             onClick={() => {
               setShowSignatureModal(false);
               setSelectedSignatureEmployee(null);
@@ -501,7 +502,7 @@ const renderSignatureModal = () => {
         </div>
 
         {/* Employee Info */}
-        <div style={{
+        <div className="signature-employee-info" style={{
           backgroundColor: '#f8f9fa',
           padding: '15px',
           borderRadius: '8px',
@@ -510,17 +511,17 @@ const renderSignatureModal = () => {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <div>
+          <div className="employee-details">
             <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
               {selectedSignatureEmployee.first_name} {selectedSignatureEmployee.last_name}
             </h4>
-            <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#6c757d' }}>
+            <div className="employee-meta" style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#6c757d' }}>
               <span>ID: {selectedSignatureEmployee.id_number}</span>
               <span>Department: {selectedSignatureEmployee.department}</span>
               <span>Position: {selectedSignatureEmployee.position}</span>
             </div>
           </div>
-          <div style={{
+          <div className="signature-status-indicator" style={{
             padding: '8px 16px',
             backgroundColor: employeeSignatures[selectedSignatureEmployee.id] ? '#d4edda' : '#f8d7da',
             color: employeeSignatures[selectedSignatureEmployee.id] ? '#155724' : '#721c24',
@@ -533,13 +534,13 @@ const renderSignatureModal = () => {
         </div>
 
         {/* Main Content */}
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
+        <div className="signature-content-container" style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
           {/* Left: Current Signature */}
-          <div style={{ flex: 1 }}>
+          <div className="current-signature-section" style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>Current Signature</h4>
             
             {/* Signature Preview */}
-            <div style={{
+            <div className="signature-preview-container" style={{
               border: '2px dashed #dee2e6',
               borderRadius: '8px',
               padding: '20px',
@@ -551,10 +552,11 @@ const renderSignatureModal = () => {
               marginTop: '10px'
             }}>
               {signaturePreview ? (
-                <div style={{ textAlign: 'center' }}>
+                <div className="signature-preview" style={{ textAlign: 'center' }}>
                   <img 
                     src={signaturePreview} 
                     alt="Signature" 
+                    className="signature-image"
                     style={{ 
                       maxWidth: '100%', 
                       maxHeight: '150px',
@@ -568,7 +570,7 @@ const renderSignatureModal = () => {
                   )}
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', color: '#6c757d' }}>
+                <div className="no-signature-placeholder" style={{ textAlign: 'center', color: '#6c757d' }}>
                   <FontAwesomeIcon icon={faSignature} size="3x" style={{ marginBottom: '10px' }} />
                   <p>No signature uploaded</p>
                   <p style={{ fontSize: '12px' }}>Upload a signature image</p>
@@ -578,12 +580,12 @@ const renderSignatureModal = () => {
           </div>
 
           {/* Right: Upload/Update */}
-          <div style={{ flex: 1 }}>
+          <div className="upload-signature-section" style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
               {signaturePreview ? 'Update Signature' : 'Upload Signature'}
             </h4>
             
-            <div style={{
+            <div className="upload-container" style={{
               border: '1px solid #ced4da',
               borderRadius: '8px',
               padding: '20px',
@@ -593,7 +595,7 @@ const renderSignatureModal = () => {
               flexDirection: 'column',
               justifyContent: 'center'
             }}>
-              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div className="upload-content" style={{ textAlign: 'center', marginBottom: '20px' }}>
                 <FontAwesomeIcon icon={faUpload} size="2x" style={{ color: '#6c757d', marginBottom: '10px' }} />
                 <p style={{ margin: '0 0 10px 0', color: '#495057' }}>
                   Drag & drop or click to browse
@@ -601,6 +603,7 @@ const renderSignatureModal = () => {
                 <input
                   type="file"
                   id="signature-upload"
+                  className="signature-file-input"
                   accept=".png,.jpg,.jpeg,.svg"
                   onChange={handleSignatureFileChange}
                   style={{ display: 'none' }}
@@ -608,6 +611,7 @@ const renderSignatureModal = () => {
                 />
                 <label
                   htmlFor="signature-upload"
+                  className="upload-signature-button"
                   style={{
                     display: 'inline-block',
                     padding: '10px 20px',
@@ -622,7 +626,7 @@ const renderSignatureModal = () => {
                   Browse Files
                 </label>
                 {newSignature && (
-                  <p style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
+                  <p className="file-selected-info" style={{ marginTop: '10px', fontSize: '12px', color: '#28a745' }}>
                     Selected: {newSignature.name}
                   </p>
                 )}
@@ -632,16 +636,17 @@ const renderSignatureModal = () => {
         </div>
 
         {/* Actions */}
-        <div style={{ 
+        <div className="signature-modal-actions" style={{ 
           display: 'flex', 
           justifyContent: 'space-between',
           gap: '10px',
           borderTop: '1px solid #eee',
           paddingTop: '20px'
         }}>
-          <div>
+          <div className="left-actions">
             {employeeSignatures[selectedSignatureEmployee.id] && (
               <button
+                className="delete-signature-btn"
                 style={{
                   padding: '10px 20px',
                   backgroundColor: '#dc3545',
@@ -662,8 +667,9 @@ const renderSignatureModal = () => {
             )}
           </div>
           
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="right-actions" style={{ display: 'flex', gap: '10px' }}>
             <button
+              className="cancel-signature-btn"
               style={{
                 padding: '10px 20px',
                 backgroundColor: '#6c757d',
@@ -685,6 +691,7 @@ const renderSignatureModal = () => {
             </button>
             
             <button
+              className="upload-signature-btn"
               style={{
                 padding: '10px 20px',
                 backgroundColor: newSignature ? '#28a745' : '#6c757d',
@@ -1672,17 +1679,17 @@ const handleEditSave = async () => {
 
       <div className="desktop-header" style={styles.header}>
         <div style={styles.headerRight}>
-          <ProfileDropdown
-            showSettingsModal={showSettingsModal}
-            setShowSettingsModal={setShowSettingsModal}
-            showProfileModal={showProfileModal}
-            setShowProfileModal={setShowProfileModal}
-            showLogoutModal={showLogoutModal}
-            setShowLogoutModal={setShowLogoutModal}
-            isMobile={false}
-            profileData={profileData}
-            admin={admin}
-          />
+            <ProfileDropdown
+              showSettingsModal={showSettingsModal}
+              setShowSettingsModal={setShowSettingsModal}
+              showProfileModal={showProfileModal}
+              setShowProfileModal={setShowProfileModal} // This controls ProfileModal
+              showLogoutModal={showLogoutModal}
+              setShowLogoutModal={setShowLogoutModal}
+              isMobile={false}
+              profileData={profileData} // Keep if you need to pass initial data
+              admin={admin} // Keep if you need to pass initial data
+            />
         </div>
       </div>
 
@@ -1725,475 +1732,19 @@ const handleEditSave = async () => {
         </button>
         <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
         <div className="mobile-header-right">
-          <ProfileDropdown
-            showSettingsModal={showSettingsModal}
-            setShowSettingsModal={setShowSettingsModal}
-            showProfileModal={showProfileModal}
-            setShowProfileModal={setShowProfileModal}
-            showLogoutModal={showLogoutModal}
-            setShowLogoutModal={setShowLogoutModal}
-            isMobile={true}
-          />
+           <ProfileDropdown
+              showSettingsModal={showSettingsModal}
+              setShowSettingsModal={setShowSettingsModal}
+              showProfileModal={showProfileModal}
+              setShowProfileModal={setShowProfileModal}
+              showLogoutModal={showLogoutModal}
+              setShowLogoutModal={setShowLogoutModal}
+              isMobile={true}
+              profileData={profileData}
+              admin={admin}
+            />
         </div>
       </div>
-
-      {/* Mobile Profile Dropdown */}
-      {showProfileMenu && (
-        <div className="mobile-profile-dropdown">
-          <button className="dropdown-item" style={styles.dropdownItem} onClick={() => setShowProfileModal(true)}>
-            <FontAwesomeIcon icon={faUserCog} className="dropdown-icon" style={styles.dropdownIcon} /> My Profile
-          </button>
-          <button className="dropdown-item" style={styles.dropdownItem}>
-            <FontAwesomeIcon icon={faCog} className="dropdown-icon" style={styles.dropdownIcon} /> Settings
-          </button>
-          <button
-            className="dropdown-item"
-            style={styles.dropdownItem}
-            onClick={() => setShowLogoutModal(true)}
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} className="dropdown-icon" style={styles.dropdownIcon} /> Logout
-          </button>
-        </div>
-      )}
-
-      {showSettingsModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.settingsModalContent}>
-            <div style={styles.settingsModalHeader}>
-              <h2 style={styles.settingsModalTitle}>
-                <FontAwesomeIcon icon={faCog} /> Settings
-              </h2>
-              <button 
-                style={styles.closeButton}
-                onClick={() => setShowSettingsModal(false)}
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            </div>
-      
-            <div style={styles.settingsSections}>
-              <button 
-                style={styles.settingsSectionButton}
-                onClick={() => {
-                  setShowSettingsModal(false);
-                  setShowTermsModal(true);
-                }}
-              >
-                <FontAwesomeIcon icon={faFileContract} style={{marginRight: '10px'}} />
-                Terms & Conditions Management
-              </button>
-      
-              <button 
-                style={styles.settingsSectionButton}
-                onClick={() => {
-                  setShowSettingsModal(false);
-                  setShowTimeSettingsModal(true);
-                }}
-              >
-                <FontAwesomeIcon icon={faClock} style={{marginRight: '10px'}} />
-                Attendance Time Settings
-              </button>
-              
-              <button style={styles.settingsSectionButton}>
-                <FontAwesomeIcon icon={faBell} style={{marginRight: '10px'}} />
-                Notification Settings
-              </button>
-              
-              <button style={styles.settingsSectionButton}>
-                <FontAwesomeIcon icon={faUserShield} style={{marginRight: '10px'}} />
-                Privacy & Security
-              </button>
-              
-              <button style={styles.settingsSectionButton}>
-                <FontAwesomeIcon icon={faUsers} style={{marginRight: '10px'}} />
-                User Permissions
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Terms & Conditions Modal */}
-      {showTermsModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.termsModalContent}>
-            <div style={styles.termsModalHeader}>
-              <h2 style={styles.termsModalTitle}>
-                <FontAwesomeIcon icon={faFileContract} /> Terms & Conditions
-              </h2>
-              <button 
-                style={styles.closeButton}
-                onClick={() => {
-                  setShowTermsModal(false);
-                  setIsEditingTerms(false);
-                }}
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            </div>
-      
-            {/* Active Version Info */}
-            <div style={styles.activeTermsCard}>
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                <h4>Active Version</h4>
-                {activeTermsVersion && (
-                  <span style={styles.activeBadge}>ACTIVE</span>
-                )}
-              </div>
-              {activeTermsVersion ? (
-                <div>
-                  <p><strong>Version:</strong> {activeTermsVersion.version}</p>
-                  <p><strong>Created:</strong> {new Date(activeTermsVersion.created_at).toLocaleDateString()}</p>
-                </div>
-              ) : (
-                <p>No active terms found</p>
-              )}
-            </div>
-      
-            {/* Terms Content */}
-            <div style={styles.termsContentSection}>
-              <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
-                <h4>Terms & Conditions Content</h4>
-                {!isEditingTerms ? (
-                  <button 
-                    style={styles.editButton}
-                    onClick={() => setIsEditingTerms(true)}
-                  >
-                    <FontAwesomeIcon icon={faEdit} /> Edit
-                  </button>
-                ) : (
-                  <div style={{display: 'flex', gap: '10px'}}>
-                    <button 
-                      style={styles.saveButton}
-                      onClick={saveTermsAndConditions}
-                    >
-                      <FontAwesomeIcon icon={faSave} /> Save
-                    </button>
-                    <button 
-                      style={styles.cancelButton}
-                      onClick={() => setIsEditingTerms(false)}
-                    >
-                      <FontAwesomeIcon icon={faTimes} /> Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-      
-              {isEditingTerms && (
-                <div style={{marginBottom: '15px'}}>
-                  <input
-                    type="text"
-                    placeholder="Version (e.g., v2.0)"
-                    value={newTermsVersion}
-                    onChange={(e) => setNewTermsVersion(e.target.value)}
-                    style={styles.versionInput}
-                  />
-                </div>
-              )}
-      
-              {isEditingTerms ? (
-                <textarea
-                  value={termsContent}
-                  onChange={(e) => setTermsContent(e.target.value)}
-                  style={styles.termsTextarea}
-                  rows={15}
-                  placeholder="Enter Terms & Conditions content here..."
-                />
-              ) : (
-                <div style={styles.termsViewer}>
-                  {termsContent || 'No Terms & Conditions content available.'}
-                </div>
-              )}
-            </div>
-      
-            {/* Version History */}
-            <div style={styles.versionHistory}>
-              <h4><FontAwesomeIcon icon={faHistory} /> Version History</h4>
-              <div style={{maxHeight: '200px', overflowY: 'auto'}}>
-                {termsVersions.map(version => (
-                  <div 
-                    key={version.id} 
-                    style={{
-                      ...styles.versionItem,
-                      borderLeft: version.is_active ? '4px solid #009205' : '4px solid #ccc'
-                    }}
-                  >
-                    <div style={{flex: 1}}>
-                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                        <strong>Version {version.version}</strong>
-                        {version.is_active && <span style={styles.activeBadge}>ACTIVE</span>}
-                      </div>
-                      <p style={{fontSize: '12px', color: '#666', margin: '5px 0'}}>
-                        Created: {new Date(version.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div style={{display: 'flex', gap: '5px'}}>
-                      {!version.is_active && (
-                        <>
-                          <button 
-                            style={styles.smallButton}
-                            onClick={() => activateTermsVersion(version.id)}
-                          >
-                            Activate
-                          </button>
-                          <button 
-                            style={{...styles.smallButton, background: '#dc3545'}}
-                            onClick={() => deleteTermsVersion(version.id)}
-                          >
-                            <FontAwesomeIcon icon={faTrash} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {showTimeSettingsModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.timeSettingsModalContent}>
-            <div style={styles.timeSettingsModalHeader}>
-              <h2 style={styles.timeSettingsModalTitle}>
-                <FontAwesomeIcon icon={faClock} /> Attendance Time Settings
-              </h2>
-              <button 
-                style={styles.closeButton}
-                onClick={() => {
-                  setShowTimeSettingsModal(false);
-                  setEditingDay(null);
-                }}
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            </div>
-      
-            <div style={styles.timeSettingsContent}>
-              <p style={styles.timeSettingsDescription}>
-                Set the official working hours for each day of the week. 
-                Employees checking in after the start time will be marked as late.
-              </p>
-      
-              {isLoadingTimeSettings ? (
-                <div style={styles.loadingContainer}>
-                  <p>Loading time settings...</p>
-                </div>
-              ) : (
-                <>
-                  <div style={styles.timeSettingsGrid}>
-                    {[
-                      { key: 'monday', label: 'Monday (Early Start)' },
-                      { key: 'tuesday', label: 'Tuesday' },
-                      { key: 'wednesday', label: 'Wednesday' },
-                      { key: 'thursday', label: 'Thursday' },
-                      { key: 'friday', label: 'Friday' },
-                      { key: 'saturday', label: 'Saturday' },
-                      { key: 'sunday', label: 'Sunday' }
-                    ].map(({ key, label }) => {
-                      const config = attendanceTimeSettings[key] || {};
-                      const isActive = config.is_active !== undefined ? config.is_active : true;
-                      const startTime = config.start || '';
-                      const endTime = config.end || '';
-                      const isTimeSet = startTime && endTime;
-                      
-                      return (
-                        <div key={key} style={{
-                          ...styles.timeSettingCard,
-                          opacity: isActive ? 1 : 0.7,
-                          borderColor: isActive ? '#e9ecef' : '#ccc'
-                        }}>
-                          <div style={styles.timeSettingHeader}>
-                            <div>
-                              <h4 style={styles.dayName}>
-                                {label}
-                              </h4>
-                              {!isActive && (
-                                <span style={styles.inactiveBadge}>INACTIVE</span>
-                              )}
-                            </div>
-                            {editingDay === key ? (
-                              <button 
-                                style={styles.saveTimeButton}
-                                onClick={() => setEditingDay(null)}
-                              >
-                                Done
-                              </button>
-                            ) : (
-                              <button 
-                                style={styles.editTimeButton}
-                                onClick={() => setEditingDay(key)}
-                                disabled={!isActive}
-                              >
-                                {isTimeSet ? 'Edit' : 'Add'}
-                              </button>
-                            )}
-                          </div>
-                          
-                          {editingDay === key ? (
-                            <div style={styles.timeInputs}>
-                              <div style={styles.timeInputGroup}>
-                                <label style={styles.timeLabel}>Start Time</label>
-                                <input
-                                  type="time"
-                                  value={startTime}
-                                  onChange={(e) => {
-                                    setAttendanceTimeSettings(prev => ({
-                                      ...prev,
-                                      [key]: { 
-                                        ...prev[key], 
-                                        start: e.target.value,
-                                        end: endTime || '17:00',
-                                        is_active: true
-                                      }
-                                    }));
-                                  }}
-                                  style={styles.timeInput}
-                                />
-                              </div>
-                              <div style={styles.timeInputGroup}>
-                                <label style={styles.timeLabel}>End Time</label>
-                                <input
-                                  type="time"
-                                  value={endTime}
-                                  onChange={(e) => {
-                                    setAttendanceTimeSettings(prev => ({
-                                      ...prev,
-                                      [key]: { 
-                                        ...prev[key], 
-                                        end: e.target.value,
-                                        start: startTime || '08:00',
-                                        is_active: true
-                                      }
-                                    }));
-                                  }}
-                                  style={styles.timeInput}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={styles.timeDisplay}>
-                              {isTimeSet ? (
-                                <>
-                                  <div style={styles.timeSlot}>
-                                    <FontAwesomeIcon icon={faArrowRight} style={styles.timeIcon} />
-                                    <span style={styles.timeText}>Start: {startTime}</span>
-                                  </div>
-                                  <div style={styles.timeSlot}>
-                                    <FontAwesomeIcon icon={faArrowLeft} style={styles.timeIcon} />
-                                    <span style={styles.timeText}>End: {endTime}</span>
-                                  </div>
-                                </>
-                              ) : (
-                                <div style={styles.noTimeSet}>
-                                  <FontAwesomeIcon icon={faClock} style={styles.noTimeIcon} />
-                                  <span style={styles.noTimeText}>Time not set</span>
-                                  <button 
-                                    style={styles.addTimeButton}
-                                    onClick={() => setEditingDay(key)}
-                                  >
-                                    <FontAwesomeIcon icon={faPlus} /> Add Time
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-      
-                  <div style={styles.timeSettingsActions}>
-                    <button 
-                      style={styles.saveAllButton}
-                      onClick={async () => {
-                        try {
-                          const settingsToSave = {};
-                          const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                          
-                          days.forEach(day => {
-                            const config = attendanceTimeSettings[day] || {};
-                            if (config.start && config.end) {
-                              settingsToSave[day] = {
-                                start: config.start,
-                                end: config.end,
-                                is_active: config.is_active !== false
-                              };
-                            }
-                          });
-                          
-                          if (Object.keys(settingsToSave).length === 0) {
-                            alert('Please add at least one time setting');
-                            return;
-                          }
-                          
-                          const response = await fetch(`${API_URL}/api/attendance/settings/time`, {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(settingsToSave)
-                          });
-      
-                          if (response.ok) {
-                            alert('Attendance time settings saved successfully!');
-                            setShowTimeSettingsModal(false);
-                            setEditingDay(null);
-                            
-                            const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
-                            if (refreshResponse.ok) {
-                              const data = await refreshResponse.json();
-                              setAttendanceTimeSettings(data);
-                            }
-                          } else {
-                            const errorData = await response.json();
-                            alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
-                          }
-                        } catch (error) {
-                          console.error('Error saving time settings:', error);
-                          alert('Error saving settings. Check console.');
-                        }
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faSave} /> Save All Settings
-                    </button>
-                    <button 
-                      style={styles.resetButton}
-                      onClick={async () => {
-                        if (window.confirm('Are you sure you want to reset all time settings to default?')) {
-                          try {
-                            const response = await fetch(`${API_URL}/api/attendance/settings/time/reset`, {
-                              method: 'POST'
-                            });
-      
-                            if (response.ok) {
-                              alert('Settings reset to default successfully!');
-                              const refreshResponse = await fetch(`${API_URL}/api/attendance/settings/time`);
-                              if (refreshResponse.ok) {
-                                const data = await refreshResponse.json();
-                                setAttendanceTimeSettings(data);
-                              }
-                            } else {
-                              alert('Failed to reset settings');
-                            }
-                          } catch (error) {
-                            console.error('Error resetting settings:', error);
-                            alert('Error resetting settings');
-                          }
-                        }
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faHistory} /> Reset to Default
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
@@ -2735,7 +2286,7 @@ const handleEditSave = async () => {
                                   <button 
                                     className="signature-btn" 
                                     style={{
-                                      ...styles.viewBtn,
+                                      ...styles.viewBtn1,
                                       backgroundColor: '#17a2b8',
                                       color: 'white',
                                       padding: '4px 8px',
@@ -4130,22 +3681,13 @@ const handleEditSave = async () => {
           </div>
         )}
 
-     {view === 'signatures' && (
-  <div className="signatures-view" style={styles.content1}>
+    {view === 'signatures' && (
+  <div className="list-view" style={styles.content1}>
 
     {showSignatureModal && selectedSignatureEmployee && renderSignatureModal()}
 
     <div className="filters-row" style={styles.firstRow}>
       <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px', width: '100%', justifyContent: 'space-between'}}>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            <FontAwesomeIcon icon={faSearch} style={{ 
-              position: 'absolute', 
-              left: '10px', 
-              top: '50%', 
-              transform: 'translateY(-50%)', 
-              color: '#666' 
-            }} />
             <input
               type="text"
               placeholder="Search employees by name, ID, or department..."
@@ -4158,7 +3700,6 @@ const handleEditSave = async () => {
                 paddingLeft: '35px'
               }}
             />
-          </div>
 
           {canFilterAllDepartments() ? (
             <select
@@ -4180,7 +3721,7 @@ const handleEditSave = async () => {
               ))}
             </select>
           ) : (
-            <div style={{
+            <div className="fixed-department" style={{
               padding: '8px 12px',
               borderRadius: '6px',
               border: '1px solid #ccc',
@@ -4219,8 +3760,8 @@ const handleEditSave = async () => {
           </select>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
+        <div className="stats-container" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="signature-stats" style={{
             display: 'flex',
             alignItems: 'center',
             gap: '15px',
@@ -4229,41 +3770,40 @@ const handleEditSave = async () => {
             borderRadius: '8px',
             border: '1px solid #dee2e6'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <div style={{
+            <div className="signed-stat" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div className="stat-dot signed" style={{
                 width: '12px',
                 height: '12px',
                 backgroundColor: '#28a745',
                 borderRadius: '50%'
               }}></div>
-              <span style={{ fontSize: '12px', color: '#495057' }}>
+              <span className="stat-text" style={{ fontSize: '12px', color: '#495057' }}>
                 Signed: {Object.values(employeeSignatures).filter(s => s).length}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <div style={{
+            <div className="missing-stat" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div className="stat-dot missing" style={{
                 width: '12px',
                 height: '12px',
                 backgroundColor: '#dc3545',
                 borderRadius: '50%'
               }}></div>
-              <span style={{ fontSize: '12px', color: '#495057' }}>
+              <span className="stat-text" style={{ fontSize: '12px', color: '#495057' }}>
                 Missing: {employeeRecord.filter(emp => emp.status === 'active').length - Object.values(employeeSignatures).filter(s => s).length}
               </span>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div className="signature-table-container" style={{ marginTop: '20px' }}>
-      <div style={{
+    <div className="table-container" style={{ marginTop: '20px' }}>
+      <div className="table-wrapper" style={{
         backgroundColor: '#fff',
         borderRadius: '10px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
         overflow: 'hidden'
       }}>
-        <table style={{
+        <table className="employee-table" style={{
           width: '100%',
           borderCollapse: 'collapse',
           fontFamily: 'Arial, sans-serif'
@@ -4274,14 +3814,14 @@ const handleEditSave = async () => {
               color: '#fff',
               textAlign: 'left'
             }}>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>No.</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Employee Name</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>ID Number</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Department</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Position</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>E-Signature Status</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Last Updated</th>
-              <th style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Actions</th>
+              <th className="column-no" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>No.</th>
+              <th className="column-name" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Employee Name</th>
+              <th className="column-id" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>ID Number</th>
+              <th className="column-department" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Department</th>
+              <th className="column-position" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Position</th>
+              <th className="column-status" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>E-Signature Status</th>
+              <th className="column-updated" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Last Updated</th>
+              <th className="column-actions" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -4298,22 +3838,22 @@ const handleEditSave = async () => {
               .filter(emp => filterEmploymentStatus ? emp.employment_status === filterEmploymentStatus : true)
               .slice((currentPage - 1) * listEmployeePerPage, currentPage * listEmployeePerPage)
               .map((emp, index) => (
-                <tr key={emp.id} style={{
+                <tr key={emp.id} className="signature-table-row" style={{
                   borderBottom: '1px solid #f0f0f0',
                   backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9',
                   transition: 'background-color 0.2s ease'
                 }}>
-                  <td style={{ padding: '15px', fontSize: '13px', color: '#333' }}>
+                  <td className="cell-no" style={{ padding: '15px', fontSize: '13px', color: '#333' }}>
                     {index + 1 + (currentPage - 1) * listEmployeePerPage}
                   </td>
-                  <td style={{ padding: '15px', fontSize: '13px', color: '#333', fontWeight: '500' }}>
+                  <td className="cell-name" style={{ padding: '15px', fontSize: '13px', color: '#333', fontWeight: '500' }}>
                     {emp.first_name} {emp.last_name}
                   </td>
-                  <td style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
+                  <td className="cell-id" style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
                     {emp.id_number || '—'}
                   </td>
-                  <td style={{ padding: '15px', fontSize: '13px', color: '#666', maxWidth: '200px' }}>
-                    <div style={{
+                  <td className="cell-department" style={{ padding: '15px', fontSize: '13px', color: '#666', maxWidth: '200px' }}>
+                    <div className="department-text" style={{
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis'
@@ -4321,12 +3861,12 @@ const handleEditSave = async () => {
                       {emp.department || '—'}
                     </div>
                   </td>
-                  <td style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
+                  <td className="cell-position" style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
                     {emp.position || '—'}
                   </td>
-                  <td style={{ padding: '15px' }}>
+                  <td className="cell-status" style={{ padding: '15px' }}>
                     {employeeSignatures[emp.id] ? (
-                      <div style={{
+                      <div className="status-badge signed" style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '8px',
@@ -4341,7 +3881,7 @@ const handleEditSave = async () => {
                         Signature Uploaded
                       </div>
                     ) : (
-                      <div style={{
+                      <div className="status-badge missing" style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '8px',
@@ -4357,12 +3897,13 @@ const handleEditSave = async () => {
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '15px', fontSize: '12px', color: '#666' }}>
+                  <td className="cell-updated" style={{ padding: '15px', fontSize: '12px', color: '#666' }}>
                     {employeeSignatures[emp.id] ? 'Recently uploaded' : 'Never'}
                   </td>
-                  <td style={{ padding: '15px' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                  <td className="cell-actions" style={{ padding: '15px' }}>
+                    <div className="action-buttons" style={{ display: 'flex', gap: '8px' }}>
                       <button
+                        className="action-button manage-signature-btn"
                         onClick={() => handleSignatureClick(emp)}
                         style={{
                           padding: '6px 12px',
@@ -4391,7 +3932,7 @@ const handleEditSave = async () => {
         </table>
         
         {employeeRecord.filter(emp => emp.status === 'active').length === 0 && (
-          <div style={{
+          <div className="empty-state" style={{
             textAlign: 'center',
             padding: '50px 20px',
             color: '#666'
@@ -4406,7 +3947,7 @@ const handleEditSave = async () => {
 
     {/* Pagination for Signature Management */}
     {employeeRecord.filter(emp => emp.status === 'active').length > 0 && (
-      <div className="pagination-container" style={{
+      <div className="pagination-container signature-pagination" style={{
         ...styles.paginationContainer,
         position: 'static',
         transform: 'none',
@@ -4483,8 +4024,8 @@ const handleEditSave = async () => {
       </div>
     )}
 
-  </div>
-)}
+      </div>
+    )}
 
       </div>
     </div>
@@ -4626,7 +4167,6 @@ const styles = {
     width: '100%', // Make it responsive
     padding: '15px',
     boxSizing: 'border-box',
-    backgroundColor: '#fff', // Optional: add background
     minHeight: 'calc(100vh - 150px)', // Adjust based on your needs
   },
 

@@ -72,6 +72,10 @@ function UserManagement() {
     role: "",
     profile_picture: "",
   });
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
@@ -449,9 +453,15 @@ function UserManagement() {
         <img src={require("./images/logo_ez.png")} alt="logo" className="mobile-logo" />
         <div className="mobile-header-right">
           <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
             showProfileModal={showProfileModal}
             setShowProfileModal={setShowProfileModal}
-            isMobile={true}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            showNotificationModal={showNotificationModal}
+            setShowNotificationModal={setShowNotificationModal}
+            isMobile={isMobileView}
             profileData={profileData}
             admin={admin}
           />
@@ -467,11 +477,15 @@ function UserManagement() {
       <div className="desktop-header attendance-desktop-header" style={styles.header}>
         <div style={styles.headerRight}>
           <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
             showProfileModal={showProfileModal}
             setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
             isMobile={false}
-            profileData={profileData}
-            admin={admin}
+            profileData={profileData} 
+            admin={admin} 
           />
         </div>
       </div>

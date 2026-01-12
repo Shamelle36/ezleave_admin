@@ -44,6 +44,282 @@
     display: none !important;
   }
 
+    .actualFormModal {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 10px !important;
+    padding: 15px !important;
+    max-height: 85vh !important;
+    border-radius: 10px !important;
+  }
+
+  .formModalLayout {
+    flex-direction: column !important;
+    gap: 15px !important;
+    max-height: calc(85vh - 120px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Mobile: Disapproval reason on TOP */
+  .leftControlPanel {
+    order: 1 !important; /* Force to appear first */
+    min-width: 100% !important;
+    width: 100% !important;
+    padding: 15px !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    margin-bottom: 15px !important;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 20px !important;
+  }
+
+  /* Mobile: Form preview BELOW the disapproval reason */
+  .rightFormPreview {
+    order: 2 !important; /* Force to appear second */
+    min-width: 100% !important;
+    width: 100% !important;
+    min-height: 300px !important;
+    max-height: 400px !important;
+  }
+
+  .formPreviewContainer {
+    min-height: 300px !important;
+    max-height: 350px !important;
+  }
+
+  .formIframe {
+    min-height: 300px !important;
+  }
+
+  /* Mobile: Rejection reasons grid - optimized for mobile */
+  .rejectionButtonGrid {
+    grid-template-columns: 1fr !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .rejectionButton {
+    padding: 12px !important;
+    font-size: 13px !important;
+    min-height: 50px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .rejectionButtonText {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Mobile: Days with pay input */
+  .daysInputContainer {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .daysInput {
+    width: 100% !important;
+    margin-bottom: 8px !important;
+    padding: 12px !important;
+    font-size: 16px !important; /* Larger for mobile typing */
+  }
+
+  .daysNote {
+    font-size: 11px !important;
+  }
+
+  /* Mobile: Form actions at bottom */
+  .formActions {
+    order: 3 !important; /* Force to appear last */
+    flex-direction: column-reverse !important;
+    gap: 10px !important;
+    padding-top: 15px !important;
+    border-top: 1px solid #e0e0e0;
+    margin-top: 10px !important;
+  }
+
+  .formActions button {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 14px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+  }
+
+  /* Mobile: Modal title */
+  .modalTitle {
+    font-size: 16px !important;
+    margin-bottom: 12px !important;
+    text-align: center !important;
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  /* Mobile: Preview header */
+  .formPreviewHeader {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    margin-bottom: 10px !important;
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .previewTitle {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+  }
+
+  .printFormBtn {
+    width: 100% !important;
+    justify-content: center !important;
+    margin-top: 5px !important;
+  }
+
+  /* Mobile: Control sections */
+  .controlSection {
+    padding-bottom: 15px !important;
+  }
+
+  .controlSectionTitle {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 15px !important;
+  }
+
+  .daysWithPaySection h5,
+  .rejectionTitle {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Mobile: Custom reason textarea */
+  .customReasonSection {
+    margin-top: 15px !important;
+    padding: 15px !important;
+    background-color: #fff !important;
+    border: 2px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+  }
+
+  .customReasonTextarea {
+    height: 80px !important;
+    font-size: 14px !important;
+    padding: 12px !important;
+    border: 1px solid #ccc !important;
+    border-radius: 6px !important;
+    width: 100% !important;
+    resize: vertical !important;
+  }
+
+  .customReasonLabel {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+    display: block !important;
+  }
+
+  /* Mobile: Selected reason display */
+  .selectedReasonDisplay {
+    padding: 12px !important;
+    background-color: #f0f9ff !important;
+    border: 1px solid #b8daff !important;
+    border-radius: 8px !important;
+    margin-top: 15px !important;
+  }
+
+  .selectedReasonLabel {
+    font-size: 11px !important;
+    color: #0066cc !important;
+    font-weight: 600 !important;
+    margin-bottom: 5px !important;
+    text-transform: uppercase !important;
+  }
+
+  .selectedReasonText {
+    font-size: 13px !important;
+    color: #333 !important;
+    font-weight: 500 !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Mobile: Typing indicator */
+  .typingIndicator,
+  .generatingPreview,
+  .loadingPreview {
+    padding: 30px !important;
+    font-size: 14px !important;
+    text-align: center !important;
+    color: #666 !important;
+  }
+
+  /* Mobile: Validation error styling */
+  .validationError {
+    color: #dc3545 !important;
+    font-size: 12px !important;
+    margin-top: 8px !important;
+    font-weight: 500 !important;
+  }
+
+  /* Mobile: View PDFs button */
+  .viewPDFsBtn1 {
+    width: 100% !important;
+    justify-content: center !important;
+    margin: 15px 0 0 0 !important;
+    padding: 12px !important;
+    background-color: #6f42c1 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+  }
+
+  /* Mobile: Cancel and action buttons */
+  .cancelBtn {
+    background-color: #6c757d !important;
+    color: white !important;
+  }
+
+  .confirmApproveBtn {
+    background-color: #28a745 !important;
+    color: white !important;
+  }
+
+  .confirmRejectBtn {
+    background-color: #dc3545 !important;
+    color: white !important;
+  }
+
+  /* Mobile: Loading spinner in buttons */
+  .formActions button:disabled {
+    opacity: 0.7 !important;
+    cursor: not-allowed !important;
+  }
+
+  /* Mobile: Make rejection buttons more touch-friendly */
+  .rejectionButtonContent {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+  }
+
+  .rejectionButtonIcon {
+    font-size: 18px !important;
+    color: #28a745 !important;
+  }
+
+  /* Mobile: Additional spacing for better touch */
+  .rejectionButtonSelected {
+    border-width: 3px !important;
+    border-color: #28a745 !important;
+  }
+
   .mobile-header-right {
     display: flex;
     align-items: center;
@@ -302,9 +578,155 @@
     gap: 15px !important;
   }
 
-  .leftSection, .rightSection {
+  .leftSection {
     width: 100% !important;
     margin-right: 0 !important;
+  }
+
+  .rightSection {
+    display: none !important;
+  }
+
+   .actualFormModal {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 10px !important;
+    padding: 15px !important;
+    max-height: 85vh !important;
+    border-radius: 10px !important;
+  }
+
+  .formModalLayout {
+    flex-direction: column !important;
+    gap: 15px !important;
+    max-height: calc(85vh - 120px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .leftControlPanel {
+    min-width: 100% !important;
+    width: 100% !important;
+    padding: 15px !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+  }
+
+  .rightFormPreview {
+    min-width: 100% !important;
+    width: 100% !important;
+    min-height: 300px !important;
+    max-height: 400px !important;
+  }
+
+  .formPreviewContainer {
+    min-height: 300px !important;
+    max-height: 350px !important;
+  }
+
+  .formIframe {
+    min-height: 300px !important;
+  }
+
+  /* Rejection reasons grid */
+  .rejectionButtonGrid {
+    grid-template-columns: 1fr !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+  }
+
+  .rejectionButton {
+    padding: 10px !important;
+    font-size: 13px !important;
+  }
+
+  .rejectionButtonText {
+    font-size: 11px !important;
+  }
+
+  /* Days with pay input */
+  .daysInputContainer {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .daysInput {
+    width: 100% !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Form actions */
+  .formActions {
+    flex-direction: column-reverse !important;
+    gap: 10px !important;
+    padding-top: 15px !important;
+  }
+
+  .formActions button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Modal title */
+  .modalTitle {
+    font-size: 16px !important;
+    margin-bottom: 12px !important;
+    text-align: center !important;
+  }
+
+  /* Preview header */
+  .formPreviewHeader {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .printFormBtn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Control sections */
+  .controlSection {
+    padding-bottom: 15px !important;
+  }
+
+  .controlSectionTitle {
+    font-size: 14px !important;
+  }
+
+  .daysWithPaySection h5,
+  .rejectionTitle {
+    font-size: 14px !important;
+  }
+
+  /* Custom reason textarea */
+  .customReasonTextarea {
+    height: 70px !important;
+    font-size: 13px !important;
+  }
+
+  /* Selected reason display */
+  .selectedReasonDisplay {
+    padding: 10px !important;
+  }
+
+  /* Typing indicator */
+  .typingIndicator,
+  .generatingPreview,
+  .loadingPreview {
+    padding: 20px !important;
+    font-size: 14px !important;
+  }
+
+  
+
+  .viewPDFsBtn1 {
+    width: 100% !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    margin-top: 10px !important;
   }
 
   /* Mobile Table Improvements */
@@ -440,6 +862,23 @@
       font-size: 22px !important;
     }
 
+     .actualFormModal {
+        padding: 12px !important;
+      }
+
+      .rejectionButtonText {
+        font-size: 11px !important;
+      }
+
+      .controlSectionTitle {
+        font-size: 14px !important;
+      }
+
+      .formActions button {
+        padding: 12px !important;
+        font-size: 14px !important;
+      }
+
     .tabContainer button {
       font-size: 12px !important;
       padding: 8px 10px !important;
@@ -476,6 +915,23 @@
     width: calc(100% - 280px) !important;
     padding: 20px !important;
     margin-top: 60px !important;
+  }
+
+  .actualFormModal[data-mobile-form="true"] .formModalLayout {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .actualFormModal[data-mobile-form="true"] .leftControlPanel {
+    order: 1 !important;
+  }
+
+  .actualFormModal[data-mobile-form="true"] .rightFormPreview {
+    order: 2 !important;
+  }
+
+  .actualFormModal[data-mobile-form="true"] .formActions {
+    order: 3 !important;
   }
 
   .summaryCards {

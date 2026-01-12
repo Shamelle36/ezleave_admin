@@ -57,6 +57,8 @@ function Announcement() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 const [isMobileView, setIsMobileView] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+const [showNotificationModal, setShowNotificationModal] = useState(false);
 
   // Loading states
   const [loading, setLoading] = useState({
@@ -493,15 +495,19 @@ const [isMobileView, setIsMobileView] = useState(false);
       </button>
       <img src={require('./images/logo_ez.png')} alt="logo" className="mobile-logo" />
       <div className="mobile-header-right">
-        <ProfileDropdown
-          showProfileModal={showProfileModal}
-          setShowProfileModal={setShowProfileModal}
-          showLogoutModal={showLogoutModal}
-          setShowLogoutModal={setShowLogoutModal}
-          isMobile={true}
-          profileData={profileData}
-          admin={admin}
-        />
+          <ProfileDropdown
+            showSettingsModal={showSettingsModal}
+            setShowSettingsModal={setShowSettingsModal}
+            showProfileModal={showProfileModal}
+            setShowProfileModal={setShowProfileModal}
+            showLogoutModal={showLogoutModal}
+            setShowLogoutModal={setShowLogoutModal}
+            showNotificationModal={showNotificationModal}
+            setShowNotificationModal={setShowNotificationModal}
+            isMobile={isMobileView}
+            profileData={profileData}
+            admin={admin}
+          />
       </div>
     </div>
 
@@ -514,14 +520,16 @@ const [isMobileView, setIsMobileView] = useState(false);
     <div className="desktop-header attendance-desktop-header" style={styles.header}>
       <div style={styles.headerRight}>
         <ProfileDropdown
+          showSettingsModal={showSettingsModal}
+          setShowSettingsModal={setShowSettingsModal}
           showProfileModal={showProfileModal}
           setShowProfileModal={setShowProfileModal}
           showLogoutModal={showLogoutModal}
           setShowLogoutModal={setShowLogoutModal}
           isMobile={false}
-          profileData={profileData}
-          admin={admin}
-        />
+          profileData={profileData} 
+          admin={admin} 
+          />
       </div>
     </div>
 

@@ -70,7 +70,9 @@ function Attendance() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
-  
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
     { name: "Employees", icon: faUsers, to: "/employee" },
@@ -94,6 +96,16 @@ function Attendance() {
     }
     return false;
   });
+
+  useEffect(() => {
+      const checkMobile = () => {
+        if (typeof window !== 'undefined') setIsMobileView(window.innerWidth <= 768);
+      };
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+  
 
   // Load admin data from localStorage on component mount
   useEffect(() => {
@@ -453,7 +465,9 @@ useEffect(() => {
             setShowProfileModal={setShowProfileModal}
             showLogoutModal={showLogoutModal}
             setShowLogoutModal={setShowLogoutModal}
-            isMobile={true}
+            showNotificationModal={showNotificationModal}
+            setShowNotificationModal={setShowNotificationModal}
+            isMobile={isMobileView}
             profileData={profileData}
             admin={admin}
           />
@@ -518,7 +532,7 @@ useEffect(() => {
       {/* Desktop Header */}
       <div className="desktop-header" style={styles.header}>
         <div style={styles.headerRight}>
-          <ProfileDropdown
+           <ProfileDropdown
             showSettingsModal={showSettingsModal}
             setShowSettingsModal={setShowSettingsModal}
             showProfileModal={showProfileModal}
@@ -526,8 +540,8 @@ useEffect(() => {
             showLogoutModal={showLogoutModal}
             setShowLogoutModal={setShowLogoutModal}
             isMobile={false}
-            profileData={profileData}
-            admin={admin}
+            profileData={profileData} 
+            admin={admin} 
           />
         </div>
       </div>
@@ -558,172 +572,6 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Profile Modal */}
-        {showProfileModal && (
-          <div style={styles.modalOverlayProfile} className="modal-overlay">
-            <div style={styles.modalContentProfile} className="modal-content">
-              <h2 style={styles.modalTitle}>My Profile</h2>
-
-              <div style={styles.profileSection}>
-                <div className="photo-container">
-                  <img
-                    src={
-                      profileData.profile_picture ||
-                      "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"
-                    }
-                    alt="Profile"
-                    className="modal-profile-image"
-                    style={styles.modalImage}
-                  />
-                  <div className="photo-overlay">
-                    <label htmlFor="profileUpload" className="change-photo-btn">
-                      {isUploading ? "Uploading..." : "Change Photo"}
-                    </label>
-
-                    <input
-                      id="profileUpload"
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      onChange={async (e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-
-                        setIsUploading(true);
-                        const formData = new FormData();
-                        formData.append("file", file);
-                        formData.append("upload_preset", "profile_picture");
-
-                        try {
-                          const res = await fetch(
-                            "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
-                            { method: "POST", body: formData }
-                          );
-                          const data = await res.json();
-
-                          if (data.secure_url) {
-                            setProfileData((prev) => ({
-                              ...prev,
-                              profile_picture: data.secure_url,
-                            }));
-                          } else {
-                            alert("Upload failed");
-                          }
-                        } catch (err) {
-                          console.error(err);
-                          alert("Upload error");
-                        } finally {
-                          setIsUploading(false);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.formSection}>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Full Name</label>
-                  <input
-                    type="text"
-                    value={profileData.full_name}
-                    onChange={(e) =>
-                      setProfileData({ ...profileData, full_name: e.target.value })
-                    }
-                    style={styles.input}
-                  />
-                </div>
-
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Email</label>
-                  <input
-                    type="text"
-                    value={profileData.email}
-                    disabled
-                    style={styles.inputDisabled}
-                  />
-                </div>
-
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Role</label>
-                  <input
-                    type="text"
-                    value={profileData.role}
-                    disabled
-                    style={styles.inputDisabled}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.modalButtons}>
-                <button
-                  style={styles.saveBtn}
-                  disabled={isUploading}
-                  onClick={async () => {
-                    if (!profileData.profile_picture) {
-                      alert("Please upload a profile image first.");
-                      return;
-                    }
-
-                    const storedUser = JSON.parse(localStorage.getItem("admin"));
-                    if (!storedUser) {
-                      alert("User not found in localStorage.");
-                      return;
-                    }
-
-                    const endpoint =
-                      storedUser.role === "office_head"
-                        ? `${API_URL}/api/authAdmin/update/${storedUser.id}`
-                        : `${API_URL}/api/auth/updateProfile/${storedUser.id}`;
-
-                    const body = {};
-                    if (profileData.full_name) body.full_name = profileData.full_name;
-                    if (profileData.profile_picture) body.profile_picture = profileData.profile_picture;
-                    if (profileData.department && storedUser.role === "office_head") body.department = profileData.department;
-                    if (profileData.email && storedUser.role !== "office_head") body.email = profileData.email;
-
-                    try {
-                      const res = await fetch(endpoint, {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(body),
-                      });
-
-                      const result = await res.json();
-
-                      if (res.ok) {
-                        alert("✅ Profile updated successfully!");
-                        setShowProfileModal(false);
-                        
-                        // Update localStorage with new data
-                        const updatedUser = { ...storedUser, ...result };
-                        localStorage.setItem("admin", JSON.stringify(updatedUser));
-                        setAdmin(updatedUser);
-                        setProfileData({
-                          full_name: result.full_name || result.name || "",
-                          email: result.email || "",
-                          role: result.role || "",
-                          profile_picture: result.profile_picture || ""
-                        });
-                      } else {
-                        alert(result.message || "Failed to update profile.");
-                      }
-                    } catch (err) {
-                      console.error("❌ Error updating profile:", err);
-                      alert("Error updating profile. See console.");
-                    }
-                  }}
-                >
-                  {isUploading ? "Uploading..." : "Save Changes"}
-                </button>
-
-                <button style={styles.cancelButton} onClick={() => setShowProfileModal(false)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="attendance-header-section" style={styles.header1}>
           <h1 className="attendance-title">Attendance</h1>
