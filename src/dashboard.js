@@ -1102,6 +1102,7 @@ const fetchLocalHolidays = async () => {
             isMobile={isMobileView}
             profileData={profileData}
             admin={admin}
+            setProfileData={setProfileData}
           />
         </div>
       </div>
@@ -1173,6 +1174,7 @@ const fetchLocalHolidays = async () => {
             isMobile={false}
             profileData={profileData} 
             admin={admin} 
+            setProfileData={setProfileData}
           />
         </div>
       </div>

@@ -195,6 +195,7 @@ export const generateCSForm = async (req, res) => {
         lr.hr_signature,
         lr.mayor_signature,
         lr.subtype,
+        lr.signature_url,
         
         -- Get earned values for current year
         (SELECT period FROM leave_cards WHERE employee_id = el.id AND period LIKE '%2025%' ORDER BY id DESC LIMIT 1) as period,
@@ -245,7 +246,8 @@ export const generateCSForm = async (req, res) => {
       vacation_leave_earned = "",
       sick_leave_earned = "",
       vacation_leave_balance = "",
-      sick_leave_balance = ""
+      sick_leave_balance = "",
+      signature_url= ""
     } = leaveApplication;
 
     // Determine if HR has approved - only then show leave credit values in 7.A
@@ -889,10 +891,19 @@ const mayorSignature = signature_method === "upload" && requesting_role === "may
               <span class="filled-data">${formattedInclusiveDates}</span>
             </td>
 
-            <td style="padding:6px; border-top: none;"> <!-- Reduced padding -->
+            <td style="padding:6px; border-top: none;">
               <div style="margin-bottom: 5px; font-size: 13px"><span class="checkbox">${commutationStatus === "Not Requested" ? "X" : ""}</span> Not Requested</div>
               <div style="font-size: 13px"><span class="checkbox">${commutationStatus === "Requested" ? "X" : ""}</span> Requested</div>
-              <div class="full-width-underline" style="margin-top: 15px;"></div> <!-- Reduced margin -->
+              <div style="text-align: center; margin-top: 15px; position: relative;">
+                ${signature_url ? `
+                  <img 
+                    src="${signature_url}" 
+                    style="max-width: 180px; max-height: 60px; object-fit: contain; position: relative; z-index: 2;"
+                    alt="Applicant Signature"
+                  />
+                ` : ''}
+                <div class="full-width-underline"></div>
+              </div>
               <div style="font-size: 13px" class="signature">(Signature of Applicant)</div>
             </td>
           </tr>
@@ -1145,10 +1156,10 @@ const mayorSignature = signature_method === "upload" && requesting_role === "may
     
     await page.setRequestInterception(true);
     page.on('request', (req) => {
-      if (req.resourceType() === 'image' || req.resourceType() === 'font' || req.resourceType() === 'stylesheet') {
+      if (req.resourceType() === 'font' || req.resourceType() === 'stylesheet') {
         req.abort();
       } else {
-        req.continue();
+        req.continue(); // Allow images and other resources
       }
     });
 

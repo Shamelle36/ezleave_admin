@@ -224,7 +224,6 @@
   .search-filters {
     flex-direction: column !important;
     gap: 10px !important;
-    width: 100% !important;
   }
 
   /* Search and Filters */
@@ -622,7 +621,7 @@
     margin-bottom: 15px !important;
   }
 
-  .signatures-view .search-filters {
+  .signatures-view {
     flex-direction: column !important;
     width: 100% !important;
     gap: 12px !important;

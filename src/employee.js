@@ -3687,7 +3687,7 @@ const handleEditSave = async () => {
     {showSignatureModal && selectedSignatureEmployee && renderSignatureModal()}
 
     <div className="filters-row" style={styles.firstRow}>
-      <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px', width: '100%', justifyContent: 'space-between'}}>
+      <div className="search-filters" style={{...styles.row1, display: 'flex', flexDirection: 'row', gap: '10px', justifyContent: 'space-between'}}>
             <input
               type="text"
               placeholder="Search employees by name, ID, or department..."
@@ -4105,7 +4105,6 @@ const styles = {
     marginBottom: '10px',
     gap: '2px',
     justifyContent: 'flex-start',
-    marginTop: '30px',
   },
   btnActive: {
     backgroundColor: '#A8FC0080',
@@ -4157,7 +4156,6 @@ const styles = {
   tableContainer: {
     flex: 1,
     width: '100%',
-    overflow: 'auto'
   },
 
   directory: {
@@ -4165,7 +4163,6 @@ const styles = {
     border: 'none',
     marginTop: '20px',
     width: '100%', // Make it responsive
-    padding: '15px',
     boxSizing: 'border-box',
     minHeight: 'calc(100vh - 150px)', // Adjust based on your needs
   },

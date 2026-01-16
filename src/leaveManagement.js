@@ -44,7 +44,12 @@ import {
   faPlus,
   faSave,
   faFileImport,
-  faSlidersH
+  faSlidersH,
+  faPen,
+  faPenToSquare,
+  faQuestionCircle,
+  faInfoCircle, 
+  faCheck
 } from '@fortawesome/free-solid-svg-icons';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -184,6 +189,8 @@ const [deletingLeaveType, setDeletingLeaveType] = useState(null);
 const [showRequestModal, setShowRequestModal] = useState(false);
 const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
 
+const [employeeSignatureUrl, setEmployeeSignatureUrl] = useState(null);
+const [employeeSignatureLoading, setEmployeeSignatureLoading] = useState(false);
 
 const openRequestModal = (request) => {
   setSelectedRequestForModal(request);
@@ -197,6 +204,87 @@ const openRequestModal = (request) => {
 const closeRequestModal = () => {
   setShowRequestModal(false);
   setSelectedRequestForModal(null);
+};
+
+const fetchEmployeeSignature = async (employeeId) => {
+  try {
+    setEmployeeSignatureLoading(true);
+    console.log("🔄 Fetching signature for employee ID:", employeeId);
+    
+    if (!employeeId) {
+      console.log("❌ No employee ID provided");
+      setEmployeeSignatureUrl(null);
+      return;
+    }
+
+    // Try multiple endpoints to get the signature
+    const endpoints = [
+      `${API_URL}/api/employees/${employeeId}/signature`,
+      `${API_URL}/api/employees/${employeeId}`,
+      `${API_URL}/api/employee/${employeeId}/signature`
+    ];
+
+    let signatureUrl = null;
+    let lastError = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Trying endpoint: ${endpoint}`);
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ Response from ${endpoint}:`, data);
+          
+          // Check for signature in different possible fields
+          if (data.signature_url) {
+            signatureUrl = data.signature_url;
+            break;
+          } else if (data.signature) {
+            signatureUrl = data.signature;
+            break;
+          } else if (data.employee?.signature_url) {
+            signatureUrl = data.employee.signature_url;
+            break;
+          } else if (data.employee?.signature) {
+            signatureUrl = data.employee.signature;
+            break;
+          } else if (data.profile_picture && data.profile_picture.includes('signature')) {
+            signatureUrl = data.profile_picture;
+            break;
+          }
+        } else {
+          console.log(`❌ Endpoint ${endpoint} failed: ${response.status}`);
+        }
+      } catch (error) {
+        lastError = error;
+        console.log(`❌ Error with endpoint ${endpoint}:`, error.message);
+      }
+    }
+
+    if (signatureUrl) {
+      console.log("✅ Found signature URL:", signatureUrl);
+      // Ensure the URL is absolute
+      if (signatureUrl.startsWith('/')) {
+        signatureUrl = `${API_URL}${signatureUrl}`;
+      }
+      setEmployeeSignatureUrl(signatureUrl);
+    } else {
+      console.log("⚠️ No signature found for employee", employeeId);
+      console.log("Last error:", lastError);
+      setEmployeeSignatureUrl(null);
+    }
+  } catch (error) {
+    console.error("❌ Error fetching employee signature:", error);
+    setEmployeeSignatureUrl(null);
+  } finally {
+    setEmployeeSignatureLoading(false);
+  }
 };
 
 const fetchAllLeaveTypes = async () => {
@@ -3730,8 +3818,141 @@ const handleAddLeaveType = async () => {
       <h3 style={styles.modalTitle} className="modalTitle">CS Form No. 6 - Application for Leave</h3>
       
       <div style={styles.formModalLayout} className="formModalLayout">
-        {/* LEFT SIDE - REJECTION/REASON SECTION */}
+        {/* LEFT SIDE - SIGNATURE COMPARISON AND REASON SECTION */}
         <div style={styles.leftControlPanel} className="leftControlPanel">
+          {/* SIGNATURE COMPARISON SECTION - NEW */}
+          <div style={styles.signatureComparisonSection} className="signatureComparisonSection">
+            <h4 style={styles.controlSectionTitle} className="controlSectionTitle">
+              <FontAwesomeIcon icon={faSignature} style={{ marginRight: '8px' }} />
+              Signature Verification
+            </h4>
+            
+            <div style={styles.signatureComparisonContainer} className="signatureComparisonContainer">
+              {/* Employee Signature from Employee List */}
+              <div style={styles.signatureColumn} className="signatureColumn">
+                <h5 style={styles.signatureColumnTitle} className="signatureColumnTitle">
+                  Employee's Registered Signature
+                </h5>
+                {employeeSignatureLoading ? (
+                  <div style={styles.signatureLoading} className="signatureLoading">
+                    <div style={styles.loadingSpinnerSmall}></div>
+                    <p>Loading employee signature...</p>
+                  </div>
+                ) : employeeSignatureUrl ? (
+                  <div style={styles.signatureDisplay} className="signatureDisplay">
+                    <img 
+                      src={employeeSignatureUrl} 
+                      alt="Employee Signature" 
+                      style={styles.signatureImage}
+                      className="signatureImage"
+                      onError={(e) => {
+                        console.error("Failed to load employee signature image");
+                        e.target.style.display = 'none';
+                        e.target.parentElement.innerHTML = '<p style="color: #999; font-style: italic;">No signature available</p>';
+                      }}
+                    />
+                    <p style={styles.signatureCaption} className="signatureCaption">
+                      From employee records
+                    </p>
+                  </div>
+                ) : (
+                  <div style={styles.noSignature} className="noSignature">
+                    <FontAwesomeIcon icon={faSignature} style={{ fontSize: '40px', color: '#ccc', marginBottom: '10px' }} />
+                    <p style={{ color: '#999', fontStyle: 'italic', fontSize: '14px' }}>
+                      No signature on file
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              {/* VS Separator */}
+              <div style={styles.signatureSeparator} className="signatureSeparator">
+                <div style={styles.separatorLine}></div>
+                <span style={styles.separatorText}>VS</span>
+                <div style={styles.separatorLine}></div>
+              </div>
+              
+              {/* Current CS Form Signature */}
+              <div style={styles.signatureColumn} className="signatureColumn">
+                <h5 style={styles.signatureColumnTitle} className="signatureColumnTitle">
+                  Current CS Form Signature
+                </h5>
+                <div style={styles.signatureDisplay} className="signatureDisplay">
+                  {signatureMethod === "upload" && uploadedSignaturePreview ? (
+                    <>
+                      <img 
+                        src={uploadedSignaturePreview} 
+                        alt="Current Signature" 
+                        style={styles.signatureImage}
+                        className="signatureImage"
+                      />
+                      <p style={styles.signatureCaption} className="signatureCaption">
+                        <FontAwesomeIcon icon={faUpload} /> Uploaded signature
+                      </p>
+                    </>
+                  ) : signatureMethod === "e-sign" && signatureImage ? (
+                    <>
+                      <img 
+                        src={signatureImage} 
+                        alt="Current Signature" 
+                        style={styles.signatureImage}
+                        className="signatureImage"
+                      />
+                      <p style={styles.signatureCaption} className="signatureCaption">
+                        <FontAwesomeIcon icon={faPen} /> E-signature
+                      </p>
+                    </>
+                  ) : signatureMethod === "traditional" ? (
+                    <>
+                      <div style={styles.traditionalSignaturePlaceholder} className="traditionalSignaturePlaceholder">
+                        <FontAwesomeIcon icon={faPenToSquare} style={{ fontSize: '30px', color: '#999', marginBottom: '10px' }} />
+                        <p style={{ color: '#666', fontSize: '14px', fontWeight: '500' }}>Traditional signature</p>
+                        <p style={{ color: '#999', fontSize: '12px' }}>(Physical signing on printed form)</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={styles.noSignatureSelected} className="noSignatureSelected">
+                      <FontAwesomeIcon icon={faQuestionCircle} style={{ fontSize: '40px', color: '#ccc', marginBottom: '10px' }} />
+                      <p style={{ color: '#999', fontStyle: 'italic', fontSize: '14px' }}>
+                        No signature selected yet
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Verification Instructions */}
+            <div style={styles.verificationInstructions} className="verificationInstructions">
+              <p style={styles.instructionsText} className="instructionsText">
+                <FontAwesomeIcon icon={faInfoCircle} style={{ marginRight: '8px', color: '#17a2b8' }} />
+                <strong>Verification Required:</strong> Compare the employee's registered signature (left) with the signature being used for this CS Form (right). 
+                Ensure they match before proceeding with approval/rejection.
+              </p>
+            </div>
+            
+            {/* Verification Buttons */}
+            <div style={styles.verificationButtons} className="verificationButtons">
+              <button
+                style={styles.signatureMatchBtn}
+                onClick={() => {
+                  alert("✓ Signature verified as matching. You may proceed.");
+                }}
+              >
+                <FontAwesomeIcon icon={faCheck} /> Signatures Match
+              </button>
+              <button
+                style={styles.signatureMismatchBtn}
+                onClick={() => {
+                  alert("⚠️ Signatures don't match! Please verify carefully or contact the employee.");
+                }}
+              >
+                <FontAwesomeIcon icon={faExclamationTriangle} /> Doesn't Match
+              </button>
+            </div>
+          </div>
+
+          {/* APPROVAL/REJECTION DETAILS SECTION */}
           <div style={styles.controlSection} className="controlSection">
             <h4 style={styles.controlSectionTitle} className="controlSectionTitle">
               {actionType === "approve" ? "Approval Details" : "Disapproval Details"}
@@ -3739,7 +3960,10 @@ const handleAddLeaveType = async () => {
             
             {actionType === "reject" && (
               <div style={styles.rejectionSection} className="rejectionSection">
-                <h5 style={styles.rejectionTitle} className="rejectionTitle">Select Reason for Disapproval:</h5>
+                <h5 style={styles.rejectionTitle} className="rejectionTitle">
+                  <FontAwesomeIcon icon={faTimesCircle} style={{ marginRight: '8px', color: '#dc3545' }} />
+                  Select Reason for Disapproval:
+                </h5>
                 
                 {/* Button choices for rejection reasons */}
                 <div style={styles.rejectionButtonGrid} className="rejectionButtonGrid">
@@ -3778,7 +4002,10 @@ const handleAddLeaveType = async () => {
                 {/* Custom reason input */}
                 {showCustomReasonInput && (
                   <div style={styles.customReasonSection} className="customReasonSection">
-                    <label style={styles.customReasonLabel} className="customReasonLabel">Specify reason:</label>
+                    <label style={styles.customReasonLabel} className="customReasonLabel">
+                      <FontAwesomeIcon icon={faEdit} style={{ marginRight: '8px' }} />
+                      Specify reason:
+                    </label>
                     <textarea
                       style={styles.customReasonTextarea}
                       className="customReasonTextarea"
@@ -3808,7 +4035,10 @@ const handleAddLeaveType = async () => {
                 {rejectionReason && !showCustomReasonInput && (
                   <div style={styles.selectedReasonDisplay} className="selectedReasonDisplay">
                     <div style={styles.selectedReasonLabel} className="selectedReasonLabel">Selected Reason:</div>
-                    <div style={styles.selectedReasonText} className="selectedReasonText">{rejectionReason}</div>
+                    <div style={styles.selectedReasonText} className="selectedReasonText">
+                      <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#28a745', marginRight: '8px' }} />
+                      {rejectionReason}
+                    </div>
                   </div>
                 )}
               </div>
@@ -3816,7 +4046,10 @@ const handleAddLeaveType = async () => {
             
             {actionType === "approve" && (
               <div style={styles.daysWithPaySection} className="daysWithPaySection">
-                <h5 style={styles.controlSectionTitle} className="controlSectionTitle">Days with Pay:</h5>
+                <h5 style={styles.controlSectionTitle} className="controlSectionTitle">
+                  <FontAwesomeIcon icon={faCalendarDay} style={{ marginRight: '8px' }} />
+                  Days with Pay:
+                </h5>
                 <div style={styles.daysInputContainer} className="daysInputContainer">
                   <input
                     type="number"
@@ -3848,7 +4081,10 @@ const handleAddLeaveType = async () => {
         {/* RIGHT SIDE - FORM PREVIEW */}
         <div style={styles.rightFormPreview} className="rightFormPreview">
           <div style={styles.formPreviewHeader} className="formPreviewHeader">
-            <h4 style={styles.previewTitle} className="previewTitle">Form Preview</h4>
+            <h4 style={styles.previewTitle} className="previewTitle">
+              <FontAwesomeIcon icon={faFilePdf} style={{ marginRight: '8px' }} />
+              Form Preview
+            </h4>
             <button
               style={styles.printFormBtn}
               className="printFormBtn"
@@ -3869,6 +4105,7 @@ const handleAddLeaveType = async () => {
           <div style={styles.formPreviewContainer} className="formPreviewContainer">
             {isTyping ? (
               <div style={styles.typingIndicator} className="typingIndicator">
+                <FontAwesomeIcon icon={faRefresh} spin style={{ marginRight: '8px' }} />
                 <p>Updating form preview...</p>
               </div>
             ) : isGeneratingForm ? (
@@ -3911,12 +4148,14 @@ const handleAddLeaveType = async () => {
               action_remarks: "",
               days_with_pay: 0
             });
+            // Clear employee signature
+            setEmployeeSignatureUrl(null);
             if (formGenerationTimeout) {
               clearTimeout(formGenerationTimeout);
             }
           }}
         >
-          Cancel
+          <FontAwesomeIcon icon={faTimes} /> Cancel
         </button>
         
         <button
@@ -3957,7 +4196,17 @@ const handleAddLeaveType = async () => {
               Processing...
             </>
           ) : (
-            actionType === "approve" ? "Approve Request" : "Reject Request"
+            <>
+              {actionType === "approve" ? (
+                <>
+                  <FontAwesomeIcon icon={faCheckCircle} /> Approve Request
+                </>
+              ) : (
+                <>
+                  <FontAwesomeIcon icon={faTimesCircle} /> Reject Request
+                </>
+              )}
+            </>
           )}
         </button>
       </div>
@@ -8705,6 +8954,149 @@ mobileModalContent: {
   overflowY: 'auto',
   padding: '20px',
   '-webkit-overflow-scrolling': 'touch',
+},
+
+signatureComparisonSection: {
+  marginBottom: '25px',
+  padding: '15px',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  border: '1px solid #dee2e6',
+},
+
+signatureComparisonContainer: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '20px',
+  marginBottom: '15px',
+},
+
+signatureColumn: {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+},
+
+signatureColumnTitle: {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#495057',
+  margin: '0 0 15px 0',
+  textAlign: 'center',
+},
+
+signatureDisplay: {
+  width: '100%',
+  height: '150px',
+  border: '2px solid #e0e0e0',
+  borderRadius: '8px',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '10px',
+  backgroundColor: '#fff',
+},
+
+signatureImage: {
+  maxWidth: '100%',
+  maxHeight: '100px',
+  objectFit: 'contain',
+  marginBottom: '10px',
+},
+
+signatureCaption: {
+  fontSize: '12px',
+  color: '#6c757d',
+  margin: '5px 0 0 0',
+  textAlign: 'center',
+},
+
+signatureSeparator: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '0 15px',
+},
+
+separatorLine: {
+  width: '1px',
+  height: '40px',
+  backgroundColor: '#dee2e6',
+},
+
+separatorText: {
+  padding: '8px 15px',
+  backgroundColor: '#6c757d',
+  color: '#fff',
+  borderRadius: '20px',
+  fontSize: '12px',
+  fontWeight: '600',
+  margin: '10px 0',
+},
+
+noSignature: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  color: '#999',
+},
+
+traditionalSignaturePlaceholder: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  color: '#666',
+},
+
+noSignatureSelected: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  color: '#999',
+},
+
+verificationInstructions: {
+  padding: '10px',
+  backgroundColor: '#e8f5e8',
+  borderRadius: '6px',
+  border: '1px solid #c3e6cb',
+  marginTop: '10px',
+},
+
+instructionsText: {
+  fontSize: '13px',
+  color: '#155724',
+  margin: '0',
+  lineHeight: '1.4',
+},
+
+signatureLoading: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  color: '#6c757d',
+},
+
+loadingSpinnerSmall: {
+  border: '2px solid #f3f3f3',
+  borderTop: '2px solid #5ab049',
+  borderRadius: '50%',
+  width: '20px',
+  height: '20px',
+  animation: 'spin 1s linear infinite',
+  marginBottom: '10px',
 },
 
 };

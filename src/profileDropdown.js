@@ -23,7 +23,9 @@ import {
   faStar,
   faEnvelope,
   faIdBadge,
-  faCalendar
+  faCalendar,
+  faSpinner,
+  faCamera
 } from "@fortawesome/free-solid-svg-icons";
 import "./ProfileDropdown.css";
 
@@ -35,13 +37,13 @@ const ProfileDropdown = ({
   showProfileModal,
   setShowProfileModal,
   showLogoutModal,
-  showNotificationModal,
-  setShowNotificationModal,
   setShowLogoutModal,
   isMobile = false,
   profileData,
   admin,
-  navigate
+  navigate,
+  setProfileData,
+  setAdmin
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -77,6 +79,9 @@ const ProfileDropdown = ({
     created_at: ""
   });
 
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [viewAllNotifications, setViewAllNotifications] = useState([]);
+
   const profile = profileData || admin;
 
   // Initialize temp profile data when profile changes
@@ -93,36 +98,18 @@ const ProfileDropdown = ({
     }
   }, [profile]);
 
-  // Fetch profile
+  // Fetch profile - Now relying on props from parent component
   useEffect(() => {
     const fetchProfile = async () => {
-      const userId = localStorage.getItem("userId");
-      const role = localStorage.getItem("userRole");
-      if (!userId || !role) return;
-
-      try {
-        let endpoint = "";
-
-        if (role === "admin") {
-          endpoint = `${API_URL}/api/auth/useradmin/${userId}`;
-        } else if (role === "office_head" || role === "mayor") {
-          endpoint = `${API_URL}/api/authAdmin/user/${userId}`;
-        }
-
-        const res = await fetch(endpoint);
-        if (!res.ok) throw new Error("Failed to fetch profile");
-        const data = await res.json();
-        // Note: profile is a function in props, should be setProfileData or setAdmin
-        // This might need adjustment based on your parent component
-      } catch (err) {
-        console.error("Error fetching profile:", err);
-        localStorage.removeItem("userId");
-        localStorage.removeItem("userRole");
+      // If we don't have profile data, the parent component should fetch it
+      if (!profile && !admin) {
+        console.warn("No profile data available - parent should fetch");
+        return;
       }
     };
 
     fetchProfile();
-  }, []);
+  }, [profile, admin]);
 
   // Fetch notifications
   useEffect(() => {
@@ -153,19 +140,150 @@ const ProfileDropdown = ({
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogout = async () => {
-    const userId = localStorage.getItem("userId");
-    const role = localStorage.getItem("userRole");
-    if (userId) {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, role }),
-      });
+  useEffect(() => {
+  const fetchAllNotifications = async () => {
+    if (showNotificationModal) {
+      try {
+        const leaveRes = await fetch(`${API_URL}/api/leave-requests`);
+        const leaveData = await leaveRes.json();
+
+        const allNotifications = leaveData
+          .filter(item => item.notification)
+          .map(item => ({
+            id: item.notification.id || `notif-${item.id}`,
+            type: item.notification.type || "leave_filed",
+            message: item.notification.message || `${item.first_name} ${item.last_name} filed a ${item.leave_type} request`,
+            createdAt: item.notification.created_at || new Date().toISOString(),
+            isRead: item.notification.is_read || false,
+            leaveId: item.id,
+            leaveType: item.leave_type,
+            status: item.status,
+            employeeName: `${item.first_name} ${item.last_name}`
+          }))
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        setViewAllNotifications(allNotifications);
+      } catch (err) {
+        console.error("Error fetching all notifications:", err);
+      }
     }
-    localStorage.removeItem("userId");
-    localStorage.removeItem("userRole");
-    window.location.href = "/";
+  };
+
+  fetchAllNotifications();
+}, [showNotificationModal]);
+
+const markAsRead = async (notificationId) => {
+  try {
+    // Update local state
+    setViewAllNotifications(prev => 
+      prev.map(notif => 
+        notif.id === notificationId ? { ...notif, isRead: true } : notif
+      )
+    );
+    
+    // Also update the main notifications list
+    setNotifications(prev => 
+      prev.map(notif => 
+        notif.id === notificationId ? { ...notif, isRead: true } : notif
+      )
+    );
+    
+    // You might want to call an API to mark as read on server
+    // await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
+    //   method: 'PUT'
+    // });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+};
+
+const markAllAsRead = async () => {
+  try {
+    // Update local state
+    setViewAllNotifications(prev => 
+      prev.map(notif => ({ ...notif, isRead: true }))
+    );
+    
+    // Also update the main notifications list
+    setNotifications(prev => 
+      prev.map(notif => ({ ...notif, isRead: true }))
+    );
+    
+    // You might want to call an API to mark all as read
+    // await fetch(`${API_URL}/api/notifications/mark-all-read`, {
+    //   method: 'PUT'
+    // });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+  }
+};
+
+const getNotificationIcon = (type, status) => {
+  switch (type) {
+    case 'leave_filed':
+      return status === 'approved' ? faCheckCircle : 
+             status === 'rejected' ? faTimes : 
+             faClock;
+    case 'announcement':
+      return faBell;
+    case 'reminder':
+      return faClock;
+    default:
+      return faBell;
+  }
+};
+
+const getNotificationColor = (type, status) => {
+  switch (type) {
+    case 'leave_filed':
+      return status === 'approved' ? '#28a745' : 
+             status === 'rejected' ? '#dc3545' : 
+             '#009205';
+    case 'announcement':
+      return '#007bff';
+    case 'reminder':
+      return '#17a2b8';
+    default:
+      return '#6c757d';
+  }
+};
+
+const getTimeAgo = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+  
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  return date.toLocaleDateString();
+};
+
+  const handleLogout = async () => {
+    try {
+      // Get user info from props instead of localStorage
+      const userId = profile?.id || admin?.id;
+      const userRole = profile?.role || admin?.role;
+      
+      if (userId && userRole) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, role: userRole }),
+        });
+      }
+      
+      // Clear any localStorage items if they exist
+      localStorage.removeItem("userId");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("token");
+      
+      window.location.href = "/";
+    } catch (error) {
+      console.error("Logout error:", error);
+      window.location.href = "/";
+    }
   };
 
   const handleProfileClick = () => { 
@@ -415,27 +533,42 @@ const ProfileDropdown = ({
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", "profile_picture");
-
+    
     try {
       const res = await fetch(
         "https://api.cloudinary.com/v1_1/dlrveckcz/image/upload",
-        { method: "POST", body: formData }
+        { 
+          method: "POST", 
+          body: formData 
+        }
       );
+      
+      if (!res.ok) {
+        throw new Error(`Upload failed with status: ${res.status}`);
+      }
+      
       const data = await res.json();
-
+      
       if (data.secure_url) {
+        // Update temp data immediately for preview
         setTempProfileData(prev => ({
           ...prev,
           profile_picture: data.secure_url,
         }));
+        
+        // Also update the parent component's data if needed
+        if (typeof setProfileData === 'function') {
+          setProfileData(prev => ({...prev, profile_picture: data.secure_url}));
+        }
+        
         return data.secure_url;
       } else {
-        alert("Upload failed");
+        alert("Upload failed: No secure URL returned");
         return null;
       }
     } catch (err) {
-      console.error(err);
-      alert("Upload error");
+      console.error("Upload error:", err);
+      alert(`Upload error: ${err.message}`);
       return null;
     } finally {
       setIsUploading(false);
@@ -443,60 +576,133 @@ const ProfileDropdown = ({
   };
 
   const saveProfileChanges = async () => {
-    if (!tempProfileData.profile_picture) {
-      alert("Please upload a profile image first.");
+    // Use the profile prop directly instead of localStorage
+    if (!profile) {
+      alert("User not found. Please login again.");
+      navigate("/");
       return;
     }
 
-    const userId = localStorage.getItem("userId");
-    const role = localStorage.getItem("userRole");
+    const userId = profile.id;
+    const userRole = profile.role;
     
-    if (!userId || !role) {
+    console.log("Debug - User data:", {
+      userId,
+      userRole,
+      profileData: profile,
+      adminData: admin
+    });
+    
+    if (!userId || !userRole) {
       alert("User not found. Please login again.");
+      navigate("/");
+      return;
+    }
+
+    // Validate required fields
+    if (!tempProfileData.full_name?.trim()) {
+      alert("Full name is required");
       return;
     }
 
     try {
+      // Get JWT token if it exists (from your auth system)
+      const token = localStorage.getItem("token");
+      
+      // Prepare request body based on user role
       let endpoint = "";
       let body = {};
 
-      if (role === "admin") {
+      if (userRole === "admin") {
         endpoint = `${API_URL}/api/auth/updateProfile/${userId}`;
         body = {
-          full_name: tempProfileData.full_name,
-          profile_picture: tempProfileData.profile_picture
+          full_name: tempProfileData.full_name.trim(),
+          profile_picture: tempProfileData.profile_picture || ""
         };
-      } else if (role === "office_head" || role === "mayor") {
-        endpoint = `${API_URL}/api/authAdmin/update/${userId}`;
+      } else if (userRole === "office_head" || userRole === "mayor") {
+        endpoint = `${API_URL}/api/authAdmin/updateProfile/${userId}`;
         body = {
-          full_name: tempProfileData.full_name,
-          profile_picture: tempProfileData.profile_picture,
-          department: tempProfileData.department
+          full_name: tempProfileData.full_name.trim(),
+          profile_picture: tempProfileData.profile_picture || "",
+          department: tempProfileData.department || ""
         };
+      } else {
+        alert("Invalid user role");
+        return;
+      }
+
+      console.log("Saving to endpoint:", endpoint);
+      console.log("Saving data:", body);
+      console.log("Token exists:", !!token);
+
+      const headers = {
+        "Content-Type": "application/json"
+      };
+
+      // Add Authorization header if token exists
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
       }
 
       const res = await fetch(endpoint, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: headers,
         body: JSON.stringify(body),
+        credentials: 'include'
       });
 
-      const result = await res.json();
+      console.log("Response status:", res.status);
+      console.log("Response headers:", res.headers);
+
+      const result = await res.json().catch(async () => {
+        const text = await res.text();
+        console.error("Non-JSON response:", text);
+        return { message: text || "Server error" };
+      });
+
+      console.log("Save response:", result);
 
       if (res.ok) {
         alert("✅ Profile updated successfully!");
-        setShowProfileModal(false);
-        // You might want to refresh the profile data in parent component
-        if (profileData && typeof profileData === 'object') {
-          // Update parent profile data if passed as mutable object
-          Object.assign(profileData, result);
+        
+        // Update parent component state
+        if (typeof setProfileData === 'function') {
+          setProfileData(prev => ({
+            ...prev,
+            ...body
+          }));
         }
+        
+        // Update admin state if exists
+        if (admin && typeof setAdmin === 'function') {
+          setAdmin(prev => ({
+            ...prev,
+            ...body
+          }));
+        }
+        
+        setShowProfileModal(false);
+        
+        // Optionally refresh after a delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+        
       } else {
-        alert(result.message || "Failed to update profile.");
+        console.error("Server error details:", result);
+        
+        if (res.status === 401) {
+          alert("Session expired. Please login again.");
+          window.location.href = "/";
+        } else if (res.status === 404) {
+          alert("User not found on server. Please contact support.");
+        } else {
+          alert(result.message || `Failed to update profile. Status: ${res.status}`);
+        }
       }
     } catch (err) {
-      console.error("❌ Error updating profile:", err);
-      alert("Error updating profile. See console.");
+      console.error("❌ Network error updating profile:", err);
+      alert("Network error. Please check your connection and try again.");
     }
   };
 
@@ -957,39 +1163,41 @@ const ProfileDropdown = ({
             </div>
           </div>
 
-          {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="notifications-dropdown">
-              <div className="notifications-header">
-                <h3>Notifications</h3>
-                {unreadCount > 0 && (
-                  <span className="unread-count">{unreadCount} unread</span>
-                )}
-              </div>
-              <div className="notifications-list">
-                {notifications.length > 0 ? (
-                  notifications.slice(0, 5).map(notification => (
-                    <div 
-                      key={notification.id} 
-                      className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
-                    >
-                      <div className="notification-message">{notification.message}</div>
-                      <div className="notification-time">
-                        {new Date(notification.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="no-notifications">No notifications</div>
-                )}
-              </div>
-              {notifications.length > 5 && (
-                <div className="view-all-notifications" onClick={() => setShowNotificationModal(true)}>
-                  View all notifications
-                </div>
-              )}
+  <div className="notifications-dropdown">
+    <div className="notifications-header">
+      <h3>Notifications</h3>
+      {unreadCount > 0 && (
+        <span className="unread-count">{unreadCount} unread</span>
+      )}
+    </div>
+    <div className="notifications-list">
+      {notifications.length > 0 ? (
+        notifications.slice(0, 5).map(notification => (
+          <div 
+            key={notification.id} 
+            className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
+          >
+            <div className="notification-message">{notification.message}</div>
+            <div className="notification-time">
+              {getTimeAgo(notification.createdAt)}
             </div>
-          )}
+          </div>
+        ))
+      ) : (
+        <div className="no-notifications">No notifications</div>
+      )}
+    </div>
+    {notifications.length > 5 && (
+      <div className="view-all-notifications" onClick={() => {
+        setShowNotificationModal(true);
+        setShowNotifications(false);
+      }}>
+        View all notifications
+      </div>
+    )}
+  </div>
+)}
 
           {/* Profile Dropdown */}
           {showProfileMenu && (
@@ -1045,62 +1253,68 @@ const ProfileDropdown = ({
             </h2>
 
             {/* Profile Picture Section */}
-            <div style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              marginBottom: "24px",
-              width: "100%",
-            }}>
-              <div style={{ position: "relative", textAlign: "center" }}>
-                <img
-                  src={tempProfileData.profile_picture || "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"}
-                  alt="Profile"
-                  style={{
-                    width: '140px',
-                    height: '140px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: '3px solid #6FCB5C',
-                    marginBottom: '10px',
-                  }}
-                />
-                <label 
-                  htmlFor="profileUpload" 
-                  style={{
-                    position: "absolute",
-                    bottom: "0",
-                    right: "0",
-                    background: "rgba(0, 0, 0, 0.7)",
-                    color: "white",
-                    padding: "5px 10px",
-                    borderRadius: "20px",
-                    fontSize: "12px",
-                    cursor: "pointer",
-                    border: "none",
-                  }}
-                >
-                  {isUploading ? "Uploading..." : "Change"}
-                </label>
-                <input
-                  id="profileUpload"
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={async (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      const imageUrl = await handleProfilePictureUpload(file);
-                      if (imageUrl) {
-                        setTempProfileData(prev => ({
-                          ...prev,
-                          profile_picture: imageUrl
-                        }));
-                      }
+            <div style={{ position: "relative", textAlign: "center" }}>
+              <img
+                src={tempProfileData.profile_picture || "https://res.cloudinary.com/demo/image/upload/v1690000000/default-avatar.png"}
+                alt="Profile"
+                style={{
+                  width: '140px',
+                  height: '140px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '3px solid #6FCB5C',
+                  marginBottom: '10px',
+                }}
+              />
+              <label 
+                htmlFor="profileUpload" 
+                style={{
+                  position: "absolute",
+                  bottom: "0",
+                  right: "0",
+                  background: "#007bff",
+                  color: "white",
+                  padding: "6px 12px",
+                  borderRadius: "20px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+              >
+                <FontAwesomeIcon icon={isUploading ? faSpinner : faCamera} spin={isUploading} />
+                {isUploading ? "Uploading..." : "Change"}
+              </label>
+              <input
+                id="profileUpload"
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    // Validate file size (max 5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                      alert("File size must be less than 5MB");
+                      return;
                     }
-                  }}
-                />
-              </div>
+                    
+                    // Validate file type
+                    if (!file.type.match('image.*')) {
+                      alert("Please select an image file");
+                      return;
+                    }
+                    
+                    const imageUrl = await handleProfilePictureUpload(file);
+                    if (imageUrl) {
+                      console.log("Upload successful:", imageUrl);
+                    }
+                  }
+                  e.target.value = ""; // Reset file input
+                }}
+              />
             </div>
 
             {/* Profile Details Form */}
@@ -1296,6 +1510,201 @@ const ProfileDropdown = ({
         </div>
       )}
 
+      {showNotificationModal && (
+  <div style={modalStyles.modalOverlay}>
+    <div style={{
+      ...modalStyles.modalContent,
+      width: '500px',
+      maxHeight: '90vh',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <div style={modalStyles.modalHeader}>
+        <h2 style={modalStyles.modalTitle}>
+          <FontAwesomeIcon icon={faBell} style={{marginRight: '10px'}} /> 
+          All Notifications
+        </h2>
+        <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+          {viewAllNotifications.filter(n => !n.isRead).length > 0 && (
+            <button 
+              onClick={markAllAsRead}
+              style={{
+                background: 'transparent',
+                color: '#ffff',
+                padding: '5px 10px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                border: 'none',
+                backgroundColor: '#009205',
+              }}
+            >
+              Mark all as read
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{
+        padding: '20px',
+        flex: 1,
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}>
+        {viewAllNotifications.length > 0 ? (
+          viewAllNotifications.map(notification => (
+            <div 
+              key={notification.id}
+              style={{
+                background: notification.isRead ? '#f8f9fa' : '#ffffff',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+                padding: '15px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                position: 'relative',
+                ':hover': {
+                  transform: 'translateX(-2px)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }
+              }}
+              onClick={() => markAsRead(notification.id)}
+            >
+              <div style={{display: 'flex', alignItems: 'flex-start', gap: '12px'}}>
+                <div style={{
+                  background: getNotificationColor(notification.type, notification.status),
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  flexShrink: 0
+                }}>
+                  <FontAwesomeIcon 
+                    icon={getNotificationIcon(notification.type, notification.status)} 
+                    size="sm"
+                  />
+                </div>
+                
+                <div style={{flex: 1}}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '5px'
+                  }}>
+                    <p style={{
+                      margin: 0,
+                      fontWeight: notification.isRead ? '400' : '600',
+                      color: notification.isRead ? '#495057' : '#212529',
+                      fontSize: '14px',
+                      lineHeight: '1.4'
+                    }}>
+                      {notification.message}
+                    </p>
+                    {!notification.isRead && (
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#009205',
+                        flexShrink: 0,
+                        marginLeft: '10px'
+                      }} />
+                    )}
+                  </div>
+                  
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '8px'
+                  }}>
+                    <span style={{
+                      fontSize: '12px',
+                      color: '#6c757d',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <FontAwesomeIcon icon={faClock} size="xs" />
+                      {getTimeAgo(notification.createdAt)}
+                    </span>
+                    
+                    {notification.leaveType && (
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        background: getNotificationColor(notification.type, notification.status) + '20',
+                        color: getNotificationColor(notification.type, notification.status),
+                        fontWeight: '500'
+                      }}>
+                        {notification.leaveType}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div style={{
+            textAlign: 'center',
+            padding: '40px 20px',
+            color: '#6c757d'
+          }}>
+            <FontAwesomeIcon 
+              icon={faBell} 
+              style={{fontSize: '48px', color: '#adb5bd', marginBottom: '15px'}}
+            />
+            <h4 style={{margin: '0 0 10px 0', color: '#495057'}}>
+              No notifications yet
+            </h4>
+            <p style={{margin: 0, fontSize: '14px'}}>
+              You're all caught up! Check back later for updates.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div style={{
+        padding: '15px 20px',
+        borderTop: '1px solid #eee',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: '#f8f9fa',
+        borderBottomLeftRadius: '12px',
+        borderBottomRightRadius: '12px'
+      }}>
+        <span style={{fontSize: '13px', color: '#6c757d'}}>
+          {viewAllNotifications.filter(n => !n.isRead).length} unread • {viewAllNotifications.length} total
+        </span>
+        <button 
+          onClick={() => setShowNotificationModal(false)}
+          style={{
+            background: '#009205',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+          }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
       {/* Settings Modal */}
       {showSettingsModal && (
         <div style={modalStyles.modalOverlay}>
@@ -1441,7 +1850,7 @@ const ProfileDropdown = ({
                         Created: {new Date(version.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <div style={{display: 'flex', gap: '5px'}}>
+                    <div style={{display: "flex", gap: "5px"}}>
                       {!version.is_active && (
                         <>
                           <button 
@@ -1451,7 +1860,7 @@ const ProfileDropdown = ({
                             Activate
                           </button>
                           <button 
-                            style={{...modalStyles.smallButton, background: '#dc3545'}}
+                            style={{...modalStyles.smallButton, background: "#dc3545"}}
                             onClick={() => deleteTermsVersion(version.id)}
                           >
                             <FontAwesomeIcon icon={faTrash} />
@@ -1473,14 +1882,14 @@ const ProfileDropdown = ({
           <div style={modalStyles.localHolidayModalContent}>
             <div style={modalStyles.modalHeader}>
               <h2 style={modalStyles.modalTitle}>
-                <FontAwesomeIcon icon={faCalendarDay} style={{marginRight: '10px'}} /> Local Holiday Settings
+                <FontAwesomeIcon icon={faCalendarDay} style={{marginRight: "10px"}} /> Local Holiday Settings
               </h2>
               <button 
                 style={modalStyles.closeButton}
                 onClick={() => {
                   setShowLocalHolidayModal(false);
                   setEditingHoliday(null);
-                  setNewHoliday({ date: '', name: '', description: '', is_recurring: false });
+                  setNewHoliday({ date: "", name: "", description: "", is_recurring: false });
                 }}
               >
                 <FontAwesomeIcon icon={faTimes} />
@@ -1491,7 +1900,7 @@ const ProfileDropdown = ({
               {/* Add/Edit Holiday Form */}
               <div style={modalStyles.holidayFormSection}>
                 <h4 style={modalStyles.sectionTitle}>
-                  {editingHoliday ? 'Edit Local Holiday' : 'Add Local Holiday'}
+                  {editingHoliday ? "Edit Local Holiday" : "Add Local Holiday"}
                 </h4>
                 
                 <div style={modalStyles.holidayForm}>
@@ -1544,7 +1953,7 @@ const ProfileDropdown = ({
                       style={modalStyles.saveButton}
                       onClick={saveHoliday}
                     >
-                      {editingHoliday ? 'Update Holiday' : 'Save Holiday'}
+                      {editingHoliday ? "Update Holiday" : "Save Holiday"}
                     </button>
                     
                     {editingHoliday && (
@@ -1552,7 +1961,7 @@ const ProfileDropdown = ({
                         style={modalStyles.cancelButton}
                         onClick={() => {
                           setEditingHoliday(null);
-                          setNewHoliday({ date: '', name: '', description: '', is_recurring: false });
+                          setNewHoliday({ date: "", name: "", description: "", is_recurring: false });
                         }}
                       >
                         Cancel Edit
@@ -1576,7 +1985,7 @@ const ProfileDropdown = ({
                       <div key={holiday.id || index} style={modalStyles.holidayItem}>
                         <div style={{flex: 1}}>
                           <div style={modalStyles.holidayDate}>
-                            <FontAwesomeIcon icon={faCalendarAlt} style={{marginRight: '8px'}} />
+                            <FontAwesomeIcon icon={faCalendarAlt} style={{marginRight: "8px"}} />
                             {holiday.date}
                             {holiday.is_recurring && (
                               <span style={modalStyles.recurringBadge}>
@@ -1610,7 +2019,7 @@ const ProfileDropdown = ({
                   <div style={modalStyles.noHolidays}>
                     <FontAwesomeIcon icon={faCalendarDay} style={modalStyles.noHolidaysIcon} />
                     <p>No local holidays added yet.</p>
-                    <p style={{fontSize: '14px', color: '#868e96', marginTop: '5px'}}>
+                    <p style={{fontSize: "14px", color: "#868e96", marginTop: "5px"}}>
                       Add local holidays to appear on the calendar.
                     </p>
                   </div>
