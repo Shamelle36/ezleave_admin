@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -6,17 +6,12 @@ import {
   faUsers,
   faCalendarCheck,
   faCalendarAlt,
-  faEnvelope,
   faBullhorn,
   faClipboardList,
   faUserCog,
-  faCog,
-  faSignOutAlt,
-  faBell,
   faPlus,
   faEye,
   faTrash,
-  faPen,
   faCircle,
   faDownload,
   faSearch,
@@ -25,20 +20,9 @@ import {
   faUser,
   faBars,
   faUpload,
-  faFileContract,
-  faClock,
-  faUserShield,
-  faEdit,
-  faSave,
-  faHistory,
-  faArrowRight,
-  faArrowLeft,
-  faArchive,
   faRedo,
   faSignature, // Add this
   faCheck, // Add this
-  faFolderOpen ,
-  faInfoCircle
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -47,16 +31,12 @@ import * as XLSX from "xlsx";
 import './employee-responsive.css';
 import ProfileDropdown from './profileDropdown';
 
-import * as tf from '@tensorflow/tfjs';
-
 function Employees() {
   const [employeeRecord, setEmployeeRecords] = useState([]);
   const [filterEmploymentType, setFilterEmploymentType] = useState('');
   const location = useLocation();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [employeesToUpload, setEmployeesToUpload] = useState([]);
-  const [employeeToDelete, setEmployeeToDelete] = useState(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -112,11 +92,11 @@ function Employees() {
   });
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [role, setRole] = useState(localStorage.getItem("role") || "admin");
+  const [role] = useState(localStorage.getItem("role") || "admin");
+  // eslint-disable-next-line no-unused-vars
   const [userDepartment, setUserDepartment] = useState(localStorage.getItem("department") || "");
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [admin, setAdmin] = useState(null);
   const [profileData, setProfileData] = useState({
     full_name: "",
@@ -125,18 +105,11 @@ function Employees() {
   });
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [termsContent, setTermsContent] = useState('');
+  // eslint-disable-next-line no-unused-vars
   const [isEditingTerms, setIsEditingTerms] = useState(false);
-  const [termsVersions, setTermsVersions] = useState([]);
-  const [activeTermsVersion, setActiveTermsVersion] = useState(null);
-  const [newTermsVersion, setNewTermsVersion] = useState('');
-  
-  const [attendanceTimeSettings, setAttendanceTimeSettings] = useState({});
-  const [showTimeSettingsModal, setShowTimeSettingsModal] = useState(false);
-  const [editingDay, setEditingDay] = useState(null);
-  const [isLoadingTimeSettings, setIsLoadingTimeSettings] = useState(false);
-
+  const [showTimeSettingsModal] = useState(false);
   // Add state for reactivate modal
   const [showReactivateModal, setShowReactivateModal] = useState(false);
   const [employeeToReactivate, setEmployeeToReactivate] = useState(null);
@@ -150,21 +123,6 @@ function Employees() {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [employeeToDeletePermanently, setEmployeeToDeletePermanently] = useState(null);
 
-  const [isVerifyingSignature, setIsVerifyingSignature] = useState(false);
-  const [verificationResult, setVerificationResult] = useState(null);
-  const [signatureCanvas, setSignatureCanvas] = useState(null);
-  const canvasRef = useRef(null);
-
- const [isTfLoaded, setIsTfLoaded] = useState(false);
-  const [signatureModel, setSignatureModel] = useState(null);
-  const [predictionScore, setPredictionScore] = useState(null);
-  const [tfModel, setTfModel] = useState(null);
-  const [isTraining, setIsTraining] = useState(false);
-  const [trainingProgress, setTrainingProgress] = useState(0);
-
-  
-  
-
   // Reasons for making employee inactive
   const inactiveReasons = [
     "Resigned",
@@ -176,15 +134,6 @@ function Employees() {
     "Retired",
     "Other"
   ];
-
-  // Add this function to your component
-  const getMinMaxDates = () => {
-    const today = new Date().toISOString().split('T')[0];
-    return {
-      maxDateHired: today, // Date hired cannot be in the future
-      minContractEnd: newEmployee.contract_start_date || today, // End date cannot be before start date
-    };
-  };
 
 
   // Function to determine if contract dates should be shown
@@ -201,11 +150,6 @@ function Employees() {
            coterminousTypes.includes(selectedType);
   };
 
-  useEffect(() => {
-    if (showTermsModal) {
-      fetchTermsAndConditions();
-    }
-  }, [showTermsModal]);
   
   useEffect(() => {
     localStorage.setItem('employeesView', view);
@@ -429,10 +373,6 @@ useEffect(() => {
   }
 }, [employeeRecord]); // Add employeeRecord as dependency
 
-  const canViewAllDepartments = () => {
-    const role = localStorage.getItem("role") || "admin";
-    return role === "admin" || role === "mayor";
-  };
 
   const canFilterAllDepartments = () => {
     const role = localStorage.getItem("role") || "admin";
@@ -1541,138 +1481,7 @@ const handleEditSave = async () => {
 
     fetchProfileData();
   }, [showProfileModal]);
-
-  useEffect(() => {
-    const fetchTimeSettings = async () => {
-      setIsLoadingTimeSettings(true);
-      try {
-        const response = await fetch(`${API_URL}/api/attendance/settings/time`);
-        if (response.ok) {
-          const data = await response.json();
-          setAttendanceTimeSettings(data);
-        } else {
-          console.warn('Failed to fetch time settings from server');
-          setAttendanceTimeSettings({});
-        }
-      } catch (error) {
-        console.error('Error fetching time settings:', error);
-        setAttendanceTimeSettings({});
-      } finally {
-        setIsLoadingTimeSettings(false);
-      }
-    };
   
-    fetchTimeSettings();
-  }, []);
-  
-  const fetchTermsAndConditions = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/terms/active`);
-      const data = await response.json();
-      
-      if (data && data.content) {
-        setTermsContent(data.content);
-        setActiveTermsVersion(data);
-      } else {
-        setTermsContent('');
-        setActiveTermsVersion(null);
-      }
-      
-      try {
-        const versionsRes = await fetch(`${API_URL}/api/terms`);
-        const versionsData = await versionsRes.json();
-        
-        if (Array.isArray(versionsData)) {
-          setTermsVersions(versionsData);
-        } else if (versionsData && Array.isArray(versionsData.data)) {
-          setTermsVersions(versionsData.data);
-        } else if (versionsData && versionsData.versions) {
-          setTermsVersions(versionsData.versions);
-        } else {
-          setTermsVersions([]);
-          console.warn('API returned non-array data:', versionsData);
-        }
-      } catch (versionsError) {
-        console.error('Error fetching versions:', versionsError);
-        setTermsVersions([]);
-      }
-    } catch (error) {
-      console.error('Error fetching active terms:', error);
-      setTermsContent('');
-      setActiveTermsVersion(null);
-      setTermsVersions([]);
-    }
-  };
-
-  const saveTermsAndConditions = async () => {
-    if (!termsContent.trim()) {
-      alert('Please enter Terms & Conditions content');
-      return;
-    }
-
-    const versionCount = Array.isArray(termsVersions) ? termsVersions.length : 0;
-    const version = newTermsVersion || `v${versionCount + 1}.0`;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/terms`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          version,
-          content: termsContent
-        })
-      });
-
-      if (response.ok) {
-        alert('Terms & Conditions saved successfully!');
-        setIsEditingTerms(false);
-        fetchTermsAndConditions();
-        setNewTermsVersion('');
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error saving terms:', error);
-      alert('Error saving Terms & Conditions. Check console.');
-    }
-  };
-
-  const activateTermsVersion = async (id) => {
-    try {
-      const response = await fetch(`${API_URL}/api/terms/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ is_active: true })
-      });
-
-      if (response.ok) {
-        fetchTermsAndConditions();
-      }
-    } catch (error) {
-      console.error('Error activating version:', error);
-    }
-  };
-
-  const deleteTermsVersion = async (id) => {
-    if (window.confirm('Are you sure you want to delete this version?')) {
-      try {
-        const response = await fetch(`${API_URL}/api/terms/${id}`, {
-          method: 'DELETE'
-        });
-
-        if (response.ok) {
-          fetchTermsAndConditions();
-        }
-      } catch (error) {
-        console.error('Error deleting version:', error);
-      }
-    }
-  };
 
   return (
     <div className="dashboard-container" style={styles.dashboardContainer}>

@@ -15,15 +15,6 @@ import {
   faCalendarAlt,
   faCheckCircle,
   faClock,
-  faUser,
-  faBuilding,
-  faCalendarPlus,
-  faCalendarMinus,
-  faFlag,
-  faStar,
-  faEnvelope,
-  faIdBadge,
-  faCalendar,
   faSpinner,
   faCamera
 } from "@fortawesome/free-solid-svg-icons";
@@ -47,7 +38,7 @@ const ProfileDropdown = ({
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [, setShowNotifications] = useState(false);
   
   // Modal states
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -505,31 +496,7 @@ useEffect(() => {
     return date.toLocaleDateString();
   };
 
-  const handleLogout = async () => {
-    try {
-      // Get user info from props instead of localStorage
-      const userId = profile?.id || admin?.id;
-      const userRole = profile?.role || admin?.role;
-      
-      if (userId && userRole) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, role: userRole }),
-        });
-      }
-      
-      // Clear any localStorage items if they exist
-      localStorage.removeItem("userId");
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("token");
-      
-      window.location.href = "/";
-    } catch (error) {
-      console.error("Logout error:", error);
-      window.location.href = "/";
-    }
-  };
+
 
   const handleProfileClick = () => { 
     setShowProfileModal(true); 
