@@ -2292,7 +2292,9 @@ const handleEditSave = async () => {
                                       padding: '4px 8px',
                                       borderRadius: '4px',
                                       marginLeft: '5px',
-                                      fontSize: '12px'
+                                      fontSize: '12px',
+                                      border: 'none',
+                                      marginRight: '10px'
                                     }}
                                     onClick={() => handleSignatureClick(record)}
                                   >
@@ -3874,7 +3876,7 @@ const handleEditSave = async () => {
                         backgroundColor: '#d4edda',
                         color: '#155724',
                         borderRadius: '20px',
-                        fontSize: '12px',
+                        fontSize: '10px',
                         fontWeight: '500'
                       }}>
                         <FontAwesomeIcon icon={faCheck} />
@@ -3889,11 +3891,11 @@ const handleEditSave = async () => {
                         backgroundColor: '#f8d7da',
                         color: '#721c24',
                         borderRadius: '20px',
-                        fontSize: '12px',
+                        fontSize: '10px',
                         fontWeight: '500'
                       }}>
                         <FontAwesomeIcon icon={faTimes} />
-                        Signature Required
+                        No Signature Attached
                       </div>
                     )}
                   </td>
@@ -3913,10 +3915,10 @@ const handleEditSave = async () => {
                           borderRadius: '4px',
                           cursor: 'pointer',
                           fontSize: '12px',
-                          display: 'flex',
                           alignItems: 'center',
-                          gap: '5px',
-                          transition: 'all 0.2s ease'
+                          gap: '10px',
+                          transition: 'all 0.2s ease',
+                          width: '150px'
                         }}
                         onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
                         onMouseOut={(e) => e.currentTarget.style.opacity = '1'}

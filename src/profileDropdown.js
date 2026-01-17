@@ -112,59 +112,155 @@ const ProfileDropdown = ({
   }, [profile, admin]);
 
   // Fetch notifications
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        const leaveRes = await fetch(`${API_URL}/api/leave-requests`);
-        const leaveData = await leaveRes.json();
-
-        const extractedNotifications = leaveData
-          .filter(item => item.notification)
-          .map(item => ({
-            id: item.notification.id || `notif-${item.id}`,
-            type: item.notification.type || "leave_filed",
-            message: item.notification.message || `${item.first_name} ${item.last_name} filed a ${item.leave_type} request`,
-            createdAt: item.notification.created_at || new Date().toISOString(),
-            isRead: item.notification.is_read || false,
-          }))
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-        setNotifications(extractedNotifications);
-      } catch (err) {
-        console.error("Error fetching notifications:", err);
+ // Update the fetchNotifications function with better debugging
+useEffect(() => {
+  const fetchNotifications = async () => {
+    try {
+      const leaveRes = await fetch(`${API_URL}/api/leave-requests`);
+      const leaveData = await leaveRes.json();
+      
+      // DEBUG: Log the actual API response structure
+      console.log('API Response for leave-requests:', leaveData);
+      
+      // Check if leaveData is an array
+      if (!Array.isArray(leaveData)) {
+        console.error('leaveData is not an array:', leaveData);
+        setNotifications([]);
+        return;
       }
-    };
 
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
-  }, []);
+      // Extract notifications properly
+      const extractedNotifications = [];
+      
+      leaveData.forEach((item, index) => {
+        console.log(`Item ${index}:`, {
+          id: item.id,
+          hasNotification: !!item.notification,
+          notificationType: typeof item.notification,
+          notificationValue: item.notification
+        });
+        
+        if (item.notification) {
+          // Handle different notification structures
+          if (Array.isArray(item.notification)) {
+            // If notification is an array
+            item.notification.forEach((notif, notifIndex) => {
+              extractedNotifications.push({
+                id: notif.id || `notif-${item.id}-${notifIndex}`,
+                type: notif.type || "leave_filed",
+                message: notif.message || `${item.first_name || ''} ${item.last_name || ''} filed a ${item.leave_type || ''} request`,
+                createdAt: notif.created_at || notif.createdAt || new Date().toISOString(),
+                isRead: notif.is_read || notif.isRead || false,
+                read: notif.read || false
+              });
+            });
+          } else if (typeof item.notification === 'object') {
+            // If notification is an object
+            extractedNotifications.push({
+              id: item.notification.id || `notif-${item.id}`,
+              type: item.notification.type || "leave_filed",
+              message: item.notification.message || `${item.first_name || ''} ${item.last_name || ''} filed a ${item.leave_type || ''} request`,
+              createdAt: item.notification.created_at || item.notification.createdAt || new Date().toISOString(),
+              isRead: item.notification.is_read || item.notification.isRead || false,
+              read: item.notification.read || false
+            });
+          }
+        }
+      });
+      
+      console.log('Extracted notifications:', extractedNotifications);
+      console.log('Unread count:', extractedNotifications.filter(n => !n.isRead && !n.read).length);
+      
+      // Sort by date (newest first)
+      const sortedNotifications = extractedNotifications.sort((a, b) => 
+        new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      
+      setNotifications(sortedNotifications);
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+      setNotifications([]);
+    }
+  };
 
-  useEffect(() => {
+  fetchNotifications();
+  const interval = setInterval(fetchNotifications, 60000);
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
   const fetchAllNotifications = async () => {
     if (showNotificationModal) {
       try {
         const leaveRes = await fetch(`${API_URL}/api/leave-requests`);
         const leaveData = await leaveRes.json();
+        
+        console.log('Fetching all notifications - API response:', leaveData);
 
-        const allNotifications = leaveData
-          .filter(item => item.notification)
-          .map(item => ({
-            id: item.notification.id || `notif-${item.id}`,
-            type: item.notification.type || "leave_filed",
-            message: item.notification.message || `${item.first_name} ${item.last_name} filed a ${item.leave_type} request`,
-            createdAt: item.notification.created_at || new Date().toISOString(),
-            isRead: item.notification.is_read || false,
-            leaveId: item.id,
-            leaveType: item.leave_type,
-            status: item.status,
-            employeeName: `${item.first_name} ${item.last_name}`
-          }))
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const allNotifications = [];
+        
+        if (Array.isArray(leaveData)) {
+          leaveData.forEach((item, index) => {
+            if (item.notification) {
+              if (Array.isArray(item.notification)) {
+                item.notification.forEach((n, notifIndex) => {
+                  // Check if this notification is already added
+                  const existingIndex = allNotifications.findIndex(
+                    existing => existing.id === n.id || 
+                               existing.notificationId === n.id
+                  );
+                  
+                  if (existingIndex === -1) {
+                    allNotifications.push({
+                      id: n.id || `notif-${item.id}-${notifIndex}`,
+                      notificationId: n.id,
+                      type: n.type || "leave_filed",
+                      message: n.message || `${item.first_name || ''} ${item.last_name || ''} filed a ${item.leave_type || ''} request`,
+                      createdAt: n.created_at || n.createdAt || new Date().toISOString(),
+                      isRead: n.is_read || n.isRead || false,
+                      read: n.read || false,
+                      leaveId: item.id,
+                      leaveType: n.leave_type || item.leave_type,
+                      status: item.status,
+                      employeeName: `${item.first_name || ''} ${item.last_name || ''}`,
+                      notification: n
+                    });
+                  }
+                });
+              } else if (typeof item.notification === 'object') {
+                // Handle single notification object
+                const n = item.notification;
+                allNotifications.push({
+                  id: n.id || `notif-${item.id}`,
+                  notificationId: n.id,
+                  type: n.type || "leave_filed",
+                  message: n.message || `${item.first_name || ''} ${item.last_name || ''} filed a ${item.leave_type || ''} request`,
+                  createdAt: n.created_at || n.createdAt || new Date().toISOString(),
+                  isRead: n.is_read || n.isRead || false,
+                  read: n.read || false,
+                  leaveId: item.id,
+                  leaveType: n.leave_type || item.leave_type,
+                  status: item.status,
+                  employeeName: `${item.first_name || ''} ${item.last_name || ''}`,
+                  notification: n
+                });
+              }
+            }
+          });
+        }
 
-        setViewAllNotifications(allNotifications);
+        // Sort by date (newest first)
+        const sortedNotifications = allNotifications.sort((a, b) => 
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        
+        console.log('All notifications (sorted):', sortedNotifications);
+        console.log('Total unread:', sortedNotifications.filter(n => !(n.isRead || n.read)).length);
+        
+        setViewAllNotifications(sortedNotifications);
       } catch (err) {
         console.error("Error fetching all notifications:", err);
+        setViewAllNotifications([]);
       }
     }
   };
@@ -172,93 +268,242 @@ const ProfileDropdown = ({
   fetchAllNotifications();
 }, [showNotificationModal]);
 
-const markAsRead = async (notificationId) => {
-  try {
-    // Update local state
+  const updateNotificationInState = (notificationId) => {
     setViewAllNotifications(prev => 
-      prev.map(notif => 
-        notif.id === notificationId ? { ...notif, isRead: true } : notif
-      )
+      prev.map(notif => {
+        const notifId = notif.id;
+        const notifNotificationId = notif.notificationId;
+        const targetId = String(notificationId);
+        
+        if (
+          String(notifId) === targetId ||
+          (notifNotificationId && String(notifNotificationId) === targetId) ||
+          (notif.notification?.id && String(notif.notification.id) === targetId)
+        ) {
+          return { 
+            ...notif, 
+            read: true, 
+            isRead: true,
+            ...(notif.notification && {
+              notification: { 
+                ...notif.notification, 
+                read: true, 
+                is_read: true 
+              }
+            })
+          };
+        }
+        return notif;
+      })
     );
     
-    // Also update the main notifications list
     setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === notificationId ? { ...notif, isRead: true } : notif
-      )
+      prev.map(notif => {
+        const notifId = notif.id;
+        const notifNotificationId = notif.notificationId;
+        const targetId = String(notificationId);
+        
+        if (
+          String(notifId) === targetId ||
+          (notifNotificationId && String(notifNotificationId) === targetId) ||
+          (notif.notification?.id && String(notif.notification.id) === targetId)
+        ) {
+          return { 
+            ...notif, 
+            read: true, 
+            isRead: true,
+            ...(notif.notification && {
+              notification: { 
+                ...notif.notification, 
+                read: true, 
+                is_read: true 
+              }
+            })
+          };
+        }
+        return notif;
+      })
     );
+  };
+
+  const markAsRead = async (notificationId) => {
+    try {
+      console.log('Marking notification as read:', notificationId);
+      console.log('Current notifications:', viewAllNotifications.map(n => ({ 
+        id: n.id, 
+        notificationId: n.notificationId,
+        notification: n.notification,
+        isRead: n.isRead, 
+        read: n.read 
+      })));
+      
+      // Get the notification object to verify it exists
+      const notificationToUpdate = viewAllNotifications.find(n => 
+        String(n.id) === String(notificationId) ||
+        (n.notificationId && String(n.notificationId) === String(notificationId)) ||
+        (n.notification && String(n.notification.id) === String(notificationId))
+      );
+      
+      if (!notificationToUpdate) {
+        console.warn('Notification not found:', notificationId);
+        return;
+      }
+      
+      // Check if already read
+      if (notificationToUpdate.isRead || notificationToUpdate.read) {
+        console.log('Notification already marked as read');
+        return;
+      }
+
+      // Extract the correct notification ID
+      let actualNotificationId;
+      
+      if (notificationToUpdate.notificationId) {
+        actualNotificationId = notificationToUpdate.notificationId;
+      } else if (notificationToUpdate.notification?.id) {
+        actualNotificationId = notificationToUpdate.notification.id;
+      } else if (notificationToUpdate.id && typeof notificationToUpdate.id === 'number') {
+        actualNotificationId = notificationToUpdate.id;
+      } else if (notificationToUpdate.id && notificationToUpdate.id.toString().includes('notif-')) {
+        actualNotificationId = notificationToUpdate.id.toString().replace('notif-', '');
+      } else {
+        actualNotificationId = notificationToUpdate.id;
+      }
+      
+      console.log('Actual notification ID to send:', actualNotificationId);
+      console.log('Notification object structure:', notificationToUpdate);
+
+      // Call the API to mark as read on server
+      const response = await fetch(`${API_URL}/api/leave-requests/notifications/${actualNotificationId}/read`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      console.log('Mark as read response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Mark as read response:', data);
+        
+        // Update local state
+        updateNotificationInState(notificationId);
+        
+        console.log('Successfully marked notification as read');
+      } else {
+        console.error('Failed to mark as read, status:', response.status);
+        // Still update UI for better user experience
+        updateNotificationInState(notificationId);
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      // Update UI even if API fails for better UX
+      updateNotificationInState(notificationId);
+    }
+  };
+
+  // // UPDATED markAllAsRead function
+  // const markAllAsRead = async () => {
+  //   try {
+  //     // Get user ID from profile or admin
+  //     const userId = profile?.id || admin?.id;
+      
+  //     if (!userId) {
+  //       alert("User not found. Please refresh the page.");
+  //       return;
+  //     }
+
+  //     console.log('Marking all notifications as read for user:', userId);
+
+  //     // Call the API to mark all as read
+  //     const response = await fetch(`${API_URL}/api/leave-requests/notifications/mark-all-read`, {
+  //       method: 'PUT',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({ userId })
+  //     });
+      
+  //     const data = await response.json();
+  //     console.log('Mark all as read response:', data);
+      
+  //     if (data.success) {
+  //       // Update local state - use both is_read and isRead for compatibility
+  //       setViewAllNotifications(prev => 
+  //         prev.map(notif => ({ ...notif, read: true, isRead: true }))
+  //       );
+        
+  //       // Also update the main notifications list
+  //       setNotifications(prev => 
+  //         prev.map(notif => ({ ...notif, read: true, isRead: true }))
+  //       );
+        
+  //       alert(data.message);
+  //     } else {
+  //       alert('Failed to mark all as read: ' + data.message);
+  //       // Still update UI for better UX
+  //       setViewAllNotifications(prev => 
+  //         prev.map(notif => ({ ...notif, read: true, isRead: true }))
+  //       );
+  //       setNotifications(prev => 
+  //         prev.map(notif => ({ ...notif, read: true, isRead: true }))
+  //       );
+  //     }
+  //   } catch (error) {
+  //     console.error('Error marking all notifications as read:', error);
+  //     // Update UI even if API fails
+  //     setViewAllNotifications(prev => 
+  //       prev.map(notif => ({ ...notif, read: true, isRead: true }))
+  //     );
+  //     setNotifications(prev => 
+  //       prev.map(notif => ({ ...notif, read: true, isRead: true }))
+  //     );
+  //     alert('Notifications marked as read locally. Please check your connection.');
+  //   }
+  // };
+
+  const getNotificationIcon = (type, status) => {
+    switch (type) {
+      case 'leave_filed':
+        return status === 'approved' ? faCheckCircle : 
+               status === 'rejected' ? faTimes : 
+               faClock;
+      case 'announcement':
+        return faBell;
+      case 'reminder':
+        return faClock;
+      default:
+        return faBell;
+    }
+  };
+
+  const getNotificationColor = (type, status) => {
+    switch (type) {
+      case 'leave_filed':
+        return status === 'approved' ? '#28a745' : 
+               status === 'rejected' ? '#dc3545' : 
+               '#009205';
+      case 'announcement':
+        return '#007bff';
+      case 'reminder':
+        return '#17a2b8';
+      default:
+        return '#6c757d';
+    }
+  };
+
+  const getTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
     
-    // You might want to call an API to mark as read on server
-    // await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
-    //   method: 'PUT'
-    // });
-  } catch (error) {
-    console.error('Error marking notification as read:', error);
-  }
-};
-
-const markAllAsRead = async () => {
-  try {
-    // Update local state
-    setViewAllNotifications(prev => 
-      prev.map(notif => ({ ...notif, isRead: true }))
-    );
-    
-    // Also update the main notifications list
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, isRead: true }))
-    );
-    
-    // You might want to call an API to mark all as read
-    // await fetch(`${API_URL}/api/notifications/mark-all-read`, {
-    //   method: 'PUT'
-    // });
-  } catch (error) {
-    console.error('Error marking all notifications as read:', error);
-  }
-};
-
-const getNotificationIcon = (type, status) => {
-  switch (type) {
-    case 'leave_filed':
-      return status === 'approved' ? faCheckCircle : 
-             status === 'rejected' ? faTimes : 
-             faClock;
-    case 'announcement':
-      return faBell;
-    case 'reminder':
-      return faClock;
-    default:
-      return faBell;
-  }
-};
-
-const getNotificationColor = (type, status) => {
-  switch (type) {
-    case 'leave_filed':
-      return status === 'approved' ? '#28a745' : 
-             status === 'rejected' ? '#dc3545' : 
-             '#009205';
-    case 'announcement':
-      return '#007bff';
-    case 'reminder':
-      return '#17a2b8';
-    default:
-      return '#6c757d';
-  }
-};
-
-const getTimeAgo = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now - date) / 1000);
-  
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  return date.toLocaleDateString();
-};
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
 
   const handleLogout = async () => {
     try {
@@ -301,10 +546,13 @@ const getTimeAgo = (dateString) => {
     setShowProfileMenu(false); 
   };
   
-  const handleNotificationClick = () => { 
-    setShowNotifications(!showNotifications); 
-    setShowProfileMenu(false);
-  };
+ const handleNotificationClick = () => { 
+  // Show the modal instead of the dropdown
+  setShowNotificationModal(true); 
+  setShowProfileMenu(false);
+  // Don't show the dropdown anymore
+  setShowNotifications(false);
+};
 
   // Modal handlers
   const openTermsModal = () => {
@@ -706,10 +954,16 @@ const getTimeAgo = (dateString) => {
     }
   };
 
-  // Count unread notifications
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Count unread notifications - check both isRead and is_read for compatibility
+// Count unread notifications - check both isRead and is_read for compatibility
+const unreadCount = notifications.filter(n => {
+  // Check if notification is unread
+  const isRead = n.isRead || n.read || n.notification?.is_read || n.notification?.read;
+  return !isRead;
+}).length;
 
-  // Modal Styles
+
+  // Modal Styles (unchanged)
   const modalStyles = {
     modalOverlay: {
       position: "fixed",
@@ -1163,41 +1417,6 @@ const getTimeAgo = (dateString) => {
             </div>
           </div>
 
-          {showNotifications && (
-  <div className="notifications-dropdown">
-    <div className="notifications-header">
-      <h3>Notifications</h3>
-      {unreadCount > 0 && (
-        <span className="unread-count">{unreadCount} unread</span>
-      )}
-    </div>
-    <div className="notifications-list">
-      {notifications.length > 0 ? (
-        notifications.slice(0, 5).map(notification => (
-          <div 
-            key={notification.id} 
-            className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
-          >
-            <div className="notification-message">{notification.message}</div>
-            <div className="notification-time">
-              {getTimeAgo(notification.createdAt)}
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="no-notifications">No notifications</div>
-      )}
-    </div>
-    {notifications.length > 5 && (
-      <div className="view-all-notifications" onClick={() => {
-        setShowNotificationModal(true);
-        setShowNotifications(false);
-      }}>
-        View all notifications
-      </div>
-    )}
-  </div>
-)}
 
           {/* Profile Dropdown */}
           {showProfileMenu && (
@@ -1511,199 +1730,193 @@ const getTimeAgo = (dateString) => {
       )}
 
       {showNotificationModal && (
-  <div style={modalStyles.modalOverlay}>
-    <div style={{
-      ...modalStyles.modalContent,
-      width: '500px',
-      maxHeight: '90vh',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      <div style={modalStyles.modalHeader}>
-        <h2 style={modalStyles.modalTitle}>
-          <FontAwesomeIcon icon={faBell} style={{marginRight: '10px'}} /> 
-          All Notifications
-        </h2>
-        <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-          {viewAllNotifications.filter(n => !n.isRead).length > 0 && (
-            <button 
-              onClick={markAllAsRead}
-              style={{
-                background: 'transparent',
-                color: '#ffff',
-                padding: '5px 10px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                border: 'none',
-                backgroundColor: '#009205',
-              }}
-            >
-              Mark all as read
-            </button>
-          )}
-        </div>
-      </div>
+        <div style={modalStyles.modalOverlay}>
+          <div style={{
+            ...modalStyles.modalContent,
+            width: '500px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <div style={modalStyles.modalHeader}>
+              <h2 style={modalStyles.modalTitle}>
+                <FontAwesomeIcon icon={faBell} style={{marginRight: '10px'}} /> 
+                All Notifications
+              </h2>
+            </div>
 
-      <div style={{
-        padding: '20px',
-        flex: 1,
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px'
-      }}>
-        {viewAllNotifications.length > 0 ? (
-          viewAllNotifications.map(notification => (
-            <div 
-              key={notification.id}
-              style={{
-                background: notification.isRead ? '#f8f9fa' : '#ffffff',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-                padding: '15px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                position: 'relative',
-                ':hover': {
-                  transform: 'translateX(-2px)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                }
-              }}
-              onClick={() => markAsRead(notification.id)}
-            >
-              <div style={{display: 'flex', alignItems: 'flex-start', gap: '12px'}}>
+            <div style={{
+              padding: '20px',
+              flex: 1,
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              {viewAllNotifications.length > 0 ? (
+                viewAllNotifications.map((notification, index) => {
+                  // Create a unique key for each notification
+                  const uniqueKey = `${notification.id}-${index}-${notification.createdAt}`;
+                  
+                  // Check if notification is unread
+                  const isUnread = !notification.isRead && !notification.read && 
+                                  !notification.notification?.is_read && 
+                                  !notification.notification?.read;
+                  
+                  return (
+                    <div 
+                      key={uniqueKey}
+                      style={{
+                        background: isUnread ? '#ffffff' : '#f8f9fa',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+                        padding: '15px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        position: 'relative',
+                        borderLeft: isUnread ? '4px solid #009205' : '4px solid transparent'
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Try to use notificationId first, then fall back to id
+                        const idToMark = notification.notificationId || notification.id;
+                        console.log('Clicking notification with ID:', idToMark, 'Full object:', notification);
+                        markAsRead(idToMark);
+                      }}
+                    >
+                      <div style={{display: 'flex', alignItems: 'flex-start', gap: '12px'}}>
+                        <div style={{
+                          background: getNotificationColor(notification.type, notification.status),
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          flexShrink: 0
+                        }}>
+                          <FontAwesomeIcon 
+                            icon={getNotificationIcon(notification.type, notification.status)} 
+                            size="sm"
+                          />
+                        </div>
+                        
+                        <div style={{flex: 1}}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            marginBottom: '5px'
+                          }}>
+                            <p style={{
+                              margin: 0,
+                              fontWeight: isUnread ? '600' : '400',
+                              color: isUnread ? '#212529' : '#495057',
+                              fontSize: '14px',
+                              lineHeight: '1.4'
+                            }}>
+                              {notification.message}
+                            </p>
+                            {isUnread && (
+                              <span style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: '#009205',
+                                flexShrink: 0,
+                                marginLeft: '10px'
+                              }} />
+                            )}
+                          </div>
+                          
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginTop: '8px'
+                          }}>
+                            <span style={{
+                              fontSize: '12px',
+                              color: '#6c757d',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <FontAwesomeIcon icon={faClock} size="xs" />
+                              {getTimeAgo(notification.createdAt)}
+                            </span>
+                            
+                            {notification.leaveType && (
+                              <span style={{
+                                fontSize: '11px',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                background: getNotificationColor(notification.type, notification.status) + '20',
+                                color: getNotificationColor(notification.type, notification.status),
+                                fontWeight: '500'
+                              }}>
+                                {notification.leaveType}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
                 <div style={{
-                  background: getNotificationColor(notification.type, notification.status),
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  flexShrink: 0
+                  textAlign: 'center',
+                  padding: '40px 20px',
+                  color: '#6c757d'
                 }}>
                   <FontAwesomeIcon 
-                    icon={getNotificationIcon(notification.type, notification.status)} 
-                    size="sm"
+                    icon={faBell} 
+                    style={{fontSize: '48px', color: '#adb5bd', marginBottom: '15px'}}
                   />
+                  <h4 style={{margin: '0 0 10px 0', color: '#495057'}}>
+                    No notifications yet
+                  </h4>
+                  <p style={{margin: 0, fontSize: '14px'}}>
+                    You're all caught up! Check back later for updates.
+                  </p>
                 </div>
-                
-                <div style={{flex: 1}}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: '5px'
-                  }}>
-                    <p style={{
-                      margin: 0,
-                      fontWeight: notification.isRead ? '400' : '600',
-                      color: notification.isRead ? '#495057' : '#212529',
-                      fontSize: '14px',
-                      lineHeight: '1.4'
-                    }}>
-                      {notification.message}
-                    </p>
-                    {!notification.isRead && (
-                      <span style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: '#009205',
-                        flexShrink: 0,
-                        marginLeft: '10px'
-                      }} />
-                    )}
-                  </div>
-                  
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginTop: '8px'
-                  }}>
-                    <span style={{
-                      fontSize: '12px',
-                      color: '#6c757d',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}>
-                      <FontAwesomeIcon icon={faClock} size="xs" />
-                      {getTimeAgo(notification.createdAt)}
-                    </span>
-                    
-                    {notification.leaveType && (
-                      <span style={{
-                        fontSize: '11px',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        background: getNotificationColor(notification.type, notification.status) + '20',
-                        color: getNotificationColor(notification.type, notification.status),
-                        fontWeight: '500'
-                      }}>
-                        {notification.leaveType}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
-          ))
-        ) : (
-          <div style={{
-            textAlign: 'center',
-            padding: '40px 20px',
-            color: '#6c757d'
-          }}>
-            <FontAwesomeIcon 
-              icon={faBell} 
-              style={{fontSize: '48px', color: '#adb5bd', marginBottom: '15px'}}
-            />
-            <h4 style={{margin: '0 0 10px 0', color: '#495057'}}>
-              No notifications yet
-            </h4>
-            <p style={{margin: 0, fontSize: '14px'}}>
-              You're all caught up! Check back later for updates.
-            </p>
-          </div>
-        )}
-      </div>
 
-      <div style={{
-        padding: '15px 20px',
-        borderTop: '1px solid #eee',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: '#f8f9fa',
-        borderBottomLeftRadius: '12px',
-        borderBottomRightRadius: '12px'
-      }}>
-        <span style={{fontSize: '13px', color: '#6c757d'}}>
-          {viewAllNotifications.filter(n => !n.isRead).length} unread • {viewAllNotifications.length} total
-        </span>
-        <button 
-          onClick={() => setShowNotificationModal(false)}
-          style={{
-            background: '#009205',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-          }}
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+            <div style={{
+              padding: '15px 20px',
+              borderTop: '1px solid #eee',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: '#f8f9fa',
+              borderBottomLeftRadius: '12px',
+              borderBottomRightRadius: '12px'
+            }}>
+              <span style={{fontSize: '13px', color: '#6c757d'}}>
+                {viewAllNotifications.filter(n => !n.isRead && !n.is_read).length} unread • {viewAllNotifications.length} total
+              </span>
+              <button 
+                onClick={() => setShowNotificationModal(false)}
+                style={{
+                  background: '#009205',
+                  color: 'white',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Settings Modal */}
       {showSettingsModal && (
