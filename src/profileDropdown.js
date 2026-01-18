@@ -16,7 +16,8 @@ import {
   faCheckCircle,
   faClock,
   faSpinner,
-  faCamera
+  faCamera,
+  faKey
 } from "@fortawesome/free-solid-svg-icons";
 import "./ProfileDropdown.css";
 
@@ -72,6 +73,17 @@ const ProfileDropdown = ({
 
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [viewAllNotifications, setViewAllNotifications] = useState([]);
+
+  // Add these states with your other modal states at the top of the component
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const profile = profileData || admin;
 
@@ -258,6 +270,88 @@ useEffect(() => {
 
   fetchAllNotifications();
 }, [showNotificationModal]);
+
+const handlePasswordChange = async () => {
+  // Validation
+  if (!passwordForm.currentPassword.trim()) {
+    setPasswordError('Current password is required');
+    return;
+  }
+  
+  if (!passwordForm.newPassword.trim()) {
+    setPasswordError('New password is required');
+    return;
+  }
+  
+  if (passwordForm.newPassword.length < 6) {
+    setPasswordError('New password must be at least 6 characters');
+    return;
+  }
+  
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    setPasswordError('New passwords do not match');
+    return;
+  }
+  
+  setIsChangingPassword(true);
+  setPasswordError('');
+  setPasswordSuccess('');
+  
+  try {
+    // Determine which endpoint to use based on user role
+    const userId = profile?.id || admin?.id;
+    const userRole = profile?.role || admin?.role;
+    
+    if (!userId || !userRole) {
+      throw new Error('User not found');
+    }
+    
+    let endpoint = '';
+    
+    if (userRole === 'admin') {
+      endpoint = `${API_URL}/api/auth/change-password/${userId}`;
+    } else if (userRole === 'office_head' || userRole === 'mayor') {
+      endpoint = `${API_URL}/api/authAdmin/change-password/${userId}`;
+    } else {
+      throw new Error('Invalid user role');
+    }
+    
+    const response = await fetch(endpoint, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      setPasswordSuccess('Password changed successfully!');
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      
+      // Auto close modal after 2 seconds
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setPasswordSuccess('');
+      }, 2000);
+    } else {
+      setPasswordError(data.message || 'Failed to change password');
+    }
+  } catch (error) {
+    console.error('Error changing password:', error);
+    setPasswordError('An error occurred. Please try again.');
+  } finally {
+    setIsChangingPassword(false);
+  }
+};
 
   const updateNotificationInState = (notificationId) => {
     setViewAllNotifications(prev => 
@@ -790,136 +884,172 @@ useEffect(() => {
     }
   };
 
-  const saveProfileChanges = async () => {
-    // Use the profile prop directly instead of localStorage
-    if (!profile) {
-      alert("User not found. Please login again.");
-      navigate("/");
-      return;
-    }
+const saveProfileChanges = async () => {
+  // Use the profile prop directly instead of localStorage
+  if (!profile) {
+    alert("User not found. Please login again.");
+    navigate("/");
+    return;
+  }
 
-    const userId = profile.id;
-    const userRole = profile.role;
+  const userId = profile.id;
+  const userRole = profile.role;
+  
+  console.log("Debug - User data:", {
+    userId,
+    userRole,
+    profileData: profile,
+    adminData: admin
+  });
+  
+  if (!userId || !userRole) {
+    alert("User not found. Please login again.");
+    navigate("/");
+    return;
+  }
+
+  // Validate required fields
+  if (!tempProfileData.full_name?.trim()) {
+    alert("Full name is required");
+    return;
+  }
+
+  try {
+    // Get JWT token if it exists (from your auth system)
+    const token = localStorage.getItem("token");
     
-    console.log("Debug - User data:", {
-      userId,
-      userRole,
-      profileData: profile,
-      adminData: admin
+    // Prepare request body based on user role
+    // Ensure all values are defined (not undefined)
+    let endpoint = "";
+    let body = {};
+
+    // Clean up data - ensure no undefined values
+    const cleanFullName = tempProfileData.full_name?.trim() || "";
+    const cleanEmail = tempProfileData.email || ""; // Get email from temp data
+    const cleanProfilePicture = tempProfileData.profile_picture || "";
+    const cleanDepartment = tempProfileData.department || "";
+
+    console.log("Cleaned data:", {
+      cleanFullName,
+      cleanEmail,
+      cleanProfilePicture,
+      cleanDepartment
     });
-    
-    if (!userId || !userRole) {
-      alert("User not found. Please login again.");
-      navigate("/");
-      return;
-    }
 
-    // Validate required fields
-    if (!tempProfileData.full_name?.trim()) {
-      alert("Full name is required");
-      return;
-    }
-
-    try {
-      // Get JWT token if it exists (from your auth system)
-      const token = localStorage.getItem("token");
-      
-      // Prepare request body based on user role
-      let endpoint = "";
-      let body = {};
-
-      if (userRole === "admin") {
-        endpoint = `${API_URL}/api/auth/updateProfile/${userId}`;
-        body = {
-          full_name: tempProfileData.full_name.trim(),
-          profile_picture: tempProfileData.profile_picture || ""
-        };
-      } else if (userRole === "office_head" || userRole === "mayor") {
-        endpoint = `${API_URL}/api/authAdmin/updateProfile/${userId}`;
-        body = {
-          full_name: tempProfileData.full_name.trim(),
-          profile_picture: tempProfileData.profile_picture || "",
-          department: tempProfileData.department || ""
-        };
-      } else {
-        alert("Invalid user role");
-        return;
-      }
-
-      console.log("Saving to endpoint:", endpoint);
-      console.log("Saving data:", body);
-      console.log("Token exists:", !!token);
-
-      const headers = {
-        "Content-Type": "application/json"
+    if (userRole === "admin") {
+      endpoint = `${API_URL}/api/auth/updateProfile/${userId}`;
+      body = {
+        full_name: cleanFullName,
+        email: cleanEmail, // Add email field
+        profile_picture: cleanProfilePicture
       };
-
-      // Add Authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(endpoint, {
-        method: "PUT",
-        headers: headers,
-        body: JSON.stringify(body),
-        credentials: 'include'
-      });
-
-      console.log("Response status:", res.status);
-      console.log("Response headers:", res.headers);
-
-      const result = await res.json().catch(async () => {
-        const text = await res.text();
-        console.error("Non-JSON response:", text);
-        return { message: text || "Server error" };
-      });
-
-      console.log("Save response:", result);
-
-      if (res.ok) {
-        alert("✅ Profile updated successfully!");
-        
-        // Update parent component state
-        if (typeof setProfileData === 'function') {
-          setProfileData(prev => ({
-            ...prev,
-            ...body
-          }));
-        }
-        
-        // Update admin state if exists
-        if (admin && typeof setAdmin === 'function') {
-          setAdmin(prev => ({
-            ...prev,
-            ...body
-          }));
-        }
-        
-        setShowProfileModal(false);
-        
-        // Optionally refresh after a delay
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-        
-      } else {
-        console.error("Server error details:", result);
-        
-        if (res.status === 401) {
-          alert("Session expired. Please login again.");
-          window.location.href = "/";
-        } else if (res.status === 404) {
-          alert("User not found on server. Please contact support.");
-        } else {
-          alert(result.message || `Failed to update profile. Status: ${res.status}`);
-        }
-      }
-    } catch (err) {
-      console.error("❌ Network error updating profile:", err);
-      alert("Network error. Please check your connection and try again.");
+    } else if (userRole === "office_head" || userRole === "mayor") {
+      endpoint = `${API_URL}/api/authAdmin/updateProfile/${userId}`;
+      body = {
+        full_name: cleanFullName,
+        email: cleanEmail, // Add email field
+        profile_picture: cleanProfilePicture,
+        department: cleanDepartment
+      };
+    } else {
+      alert("Invalid user role");
+      return;
     }
-  };
+
+    // Remove any undefined properties from the body
+    Object.keys(body).forEach(key => {
+      if (body[key] === undefined) {
+        delete body[key];
+      }
+    });
+
+    console.log("Saving to endpoint:", endpoint);
+    console.log("Sending data:", body);
+    console.log("JSON stringified:", JSON.stringify(body));
+    console.log("Token exists:", !!token);
+
+    const headers = {
+      "Content-Type": "application/json"
+    };
+
+    // Add Authorization header if token exists
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(endpoint, {
+      method: "PUT",
+      headers: headers,
+      body: JSON.stringify(body)
+    });
+
+    console.log("Response status:", res.status);
+
+    // Try to get the response text first
+    const responseText = await res.text();
+    let result;
+    
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Failed to parse JSON:", responseText);
+      result = { message: responseText || "Server error" };
+    }
+
+    console.log("Save response:", result);
+
+    if (res.ok) {
+      alert("✅ Profile updated successfully!");
+      
+      // Update parent component state
+      if (typeof setProfileData === 'function') {
+        setProfileData(prev => ({
+          ...prev,
+          full_name: cleanFullName,
+          email: cleanEmail,
+          profile_picture: cleanProfilePicture
+        }));
+      }
+      
+      // Update admin state if exists
+      if (admin && typeof setAdmin === 'function') {
+        setAdmin(prev => ({
+          ...prev,
+          full_name: cleanFullName,
+          email: cleanEmail,
+          profile_picture: cleanProfilePicture
+        }));
+      }
+      
+      setShowProfileModal(false);
+      
+      // Optionally refresh after a delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } else {
+      console.error("Server error details:", result);
+      
+      // More detailed error messages
+      if (res.status === 401) {
+        alert("Session expired. Please login again.");
+        window.location.href = "/";
+      } else if (res.status === 404) {
+        alert("User not found on server. Please contact support.");
+      } else if (res.status === 500) {
+        // Show backend error message
+        const errorMsg = result.error || result.message || "Internal server error";
+        alert(`Server error: ${errorMsg}\n\nPlease contact support if this continues.`);
+      } else {
+        alert(result.message || `Failed to update profile. Status: ${res.status}`);
+      }
+    }
+  } catch (err) {
+    console.error("❌ Network error updating profile:", err);
+    alert("Network error. Please check your connection and try again.");
+  }
+};
 
   // Count unread notifications - check both isRead and is_read for compatibility
 // Count unread notifications - check both isRead and is_read for compatibility
@@ -1357,6 +1487,28 @@ const unreadCount = notifications.filter(n => {
       fontWeight: "500",
       fontSize: "14px",
     },
+
+    formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '15px'
+  },
+  
+  formLabel: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#495057'
+  },
+  
+  textInput: {
+    padding: '10px',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    fontSize: '14px',
+    width: '100%',
+    boxSizing: 'border-box'
+  },
   };
 
   return (
@@ -1917,6 +2069,17 @@ const unreadCount = notifications.filter(n => {
                 <FontAwesomeIcon icon={faCalendarDay} style={{marginRight: '10px'}} />
                 Local Holiday Settings
               </button>
+
+              <button 
+                style={modalStyles.settingsSectionButton}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowPasswordModal(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faKey} style={{marginRight: '10px'}} />
+                Change Password
+              </button>
             </div>
           </div>
         </div>
@@ -2209,6 +2372,166 @@ const unreadCount = notifications.filter(n => {
           </div>
         </div>
       )}
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div style={modalStyles.modalOverlay}>
+          <div style={{
+            ...modalStyles.modalContent,
+            width: '450px'
+          }}>
+            <div style={modalStyles.modalHeader}>
+              <h2 style={modalStyles.modalTitle}>
+                <FontAwesomeIcon icon={faKey} style={{marginRight: '10px'}} /> 
+                Change Password
+              </h2>
+              <button 
+                style={modalStyles.closeButton}
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordForm({
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                  });
+                  setPasswordError('');
+                  setPasswordSuccess('');
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            <div style={{ padding: "20px" }}>
+              {passwordSuccess && (
+                <div style={{
+                  background: '#d4edda',
+                  color: '#155724',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  marginBottom: '20px',
+                  border: '1px solid #c3e6cb'
+                }}>
+                  {passwordSuccess}
+                </div>
+              )}
+
+              {passwordError && (
+                <div style={{
+                  background: '#f8d7da',
+                  color: '#721c24',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  marginBottom: '20px',
+                  border: '1px solid #f5c6cb'
+                }}>
+                  {passwordError}
+                </div>
+              )}
+
+              <div style={modalStyles.formGroup}>
+                <label style={modalStyles.formLabel}>Current Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    currentPassword: e.target.value
+                  })}
+                  style={modalStyles.textInput}
+                  placeholder="Enter current password"
+                />
+              </div>
+
+              <div style={modalStyles.formGroup}>
+                <label style={modalStyles.formLabel}>New Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    newPassword: e.target.value
+                  })}
+                  style={modalStyles.textInput}
+                  placeholder="Enter new password (min. 6 characters)"
+                />
+              </div>
+
+              <div style={modalStyles.formGroup}>
+                <label style={modalStyles.formLabel}>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    confirmPassword: e.target.value
+                  })}
+                  style={modalStyles.textInput}
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                marginTop: '20px'
+              }}>
+                <button 
+                  style={{
+                    flex: 1,
+                    background: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    opacity: isChangingPassword ? 0.7 : 1
+                  }}
+                  onClick={handlePasswordChange}
+                  disabled={isChangingPassword}
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} spin style={{marginRight: '8px'}} />
+                      Changing...
+                    </>
+                  ) : 'Change Password'}
+                </button>
+                
+                <button 
+                  style={{
+                    flex: 1,
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordForm({
+                      currentPassword: '',
+                      newPassword: '',
+                      confirmPassword: ''
+                    });
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                  }}
+                  disabled={isChangingPassword}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </>
   );
 };
