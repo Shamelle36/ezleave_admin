@@ -50,21 +50,18 @@ export const fetchInactiveAccounts = async (req, res) => {
   }
 };
 
+// 🟢 Create Account (plain password)
 export const createAccount = async (req, res) => {
   try {
-    let { full_name, email, role, department, password: tempPassword } = req.body; // get temp password from frontend
+    let { full_name, email, role, department, password } = req.body;
 
-    // Validate required fields
-    if (!full_name || !email || !role || !tempPassword) {
+    if (!full_name || !email || !role || !password) {
       return res.status(400).json({ 
         message: "Missing required fields: full_name, email, role, or password" 
       });
     }
 
-    // Normalize role for DB
     role = role.toLowerCase().replace(" ", "_");
-
-    console.log(`🔵 Creating account for: ${email}, Role: ${role}, Department: ${department}`);
 
     // Check if email already exists
     const existing = await sql`
@@ -81,36 +78,27 @@ export const createAccount = async (req, res) => {
       return res.status(400).json({ message: "Email already exists." });
     }
 
-    // Insert into DB with temporary password hashed
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
+    // INSERT into DB with plain password (same as Firebase password)
     const [user] = await sql`
       INSERT INTO admin_accounts (full_name, email, role, department, status, password_hash)
-      VALUES (${full_name}, ${email}, ${role}, ${department}, 'active', ${hashedPassword})
+      VALUES (${full_name}, ${email}, ${role}, ${department}, 'active', ${password})
       RETURNING *
     `;
 
-    console.log(`✅ DB record created: ${user.id}`);
-
     res.status(201).json({
-      message: "✅ Account created successfully!",
-      details: `User can login with temporary password sent via Firebase.`,
+      message: "✅ Account created successfully! Password stored in DB matches Firebase.",
       userId: user.id,
       email: user.email,
-      temporaryPassword: tempPassword, // optional to show in admin panel
-      note: "Please change password after first login",
     });
 
   } catch (err) {
     console.error("❌ Error creating account:", err);
-    res.status(500).json({ 
-      message: "Failed to create account",
-      error: err.message 
-    });
+    res.status(500).json({ message: "Failed to create account", error: err.message });
   }
 };
 
-// 🟢 Login for admin/head/mayor (Simplified - No Firebase)
+
+// 🟢 Login (plain password comparison)
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -131,14 +119,8 @@ export const login = async (req, res) => {
       });
     }
 
-    // Check if user has password set
-    if (!user.password_hash) {
-      return res.status(400).json({ message: "Password not yet set. Contact administrator." });
-    }
-
-    // Verify password
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
+    // Check password directly (no hashing)
+    if (password !== user.password_hash) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
@@ -168,6 +150,7 @@ export const login = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 export const getUserById = async (req, res) => {
   const { id } = req.params;

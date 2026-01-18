@@ -247,110 +247,63 @@ function UserManagement() {
     setFilteredAccounts(filtered);
   }, [accounts, inactiveAccounts, searchTerm, roleFilter, showInactive]);
 
-  // Create Account with Firebase
-  const handleCreateAccount = async () => {
-    if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "mayor" && !newAccount.department)) {
-      alert("Please complete all required fields before submission.");
-      return;
+const handleCreateAccount = async () => {
+  if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "mayor" && !newAccount.department)) {
+    alert("Please complete all required fields before submission.");
+    return;
+  }
+
+  setLoading(true);
+
+  // STEP 0: Generate a single temp password here
+  const tempPassword = Math.random().toString(36).slice(-10) + "A1@";
+
+  try {
+    // STEP 1: Create account in backend FIRST (send tempPassword)
+    const backendData = {
+      ...newAccount,
+      password: tempPassword, // send temp password to backend
+    };
+
+    const resBackend = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(backendData),
+    });
+
+    const dataBackend = await resBackend.json();
+
+    if (!resBackend.ok) {
+      throw new Error(dataBackend.message || "Backend account creation failed.");
     }
-    
-    setLoading(true);
-    try {
-      // Step 1: Create user in Firebase
-      console.log(`Creating Firebase user for: ${newAccount.email}`);
-      
-      // Generate a secure temporary password
-      const tempPassword = Math.random().toString(36).slice(-10) + "A1@";
-      
-      try {
-        // Create user in Firebase
-        const userCredential = await createUserWithEmailAndPassword(
-          firebaseAuth,
-          newAccount.email,
-          tempPassword
-        );
-        
-        const firebaseUser = userCredential.user;
-        console.log(`✅ Firebase user created: ${firebaseUser.uid}`);
-        
-        // Step 2: Send password reset email via Firebase
-        try {
-          await sendPasswordResetEmail(firebaseAuth, newAccount.email, {
-            url: `https://ezleave-admin.vercel.app/login`,
-            handleCodeInApp: false,
-          });
-          
-          console.log(`✅ Firebase password reset email sent to: ${newAccount.email}`);
-        } catch (emailError) {
-          console.error("❌ Firebase email error:", emailError.message);
-          // Continue with backend creation even if email fails
-        }
-        
-        // Step 3: Create account in backend database
-        const backendData = {
-          ...newAccount,
-          firebase_uid: firebaseUser.uid,
-          password: tempPassword,
-        };
-        
-        const res = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(backendData),
-        });
-        
-        const data = await res.json();
-        
-        if (res.ok) {
-          setMessage("✅ Account created successfully! Password setup email has been sent via Firebase.");
-          setNewAccount({ full_name: "", email: "", role: "", department: "" });
-          setShowModal(false);
-          fetchAccounts();
-          
-          // Clear message after 5 seconds
-          setTimeout(() => setMessage(""), 5000);
-        } else {
-          // If backend fails, delete Firebase user
-          try {
-            // Note: Firebase doesn't have a direct delete method in client SDK
-            // We'll just show an error
-            setMessage(`❌ ${data.message || "Backend creation failed. Firebase user was created but database entry failed."}`);
-          } catch (cleanupError) {
-            console.error("Cleanup error:", cleanupError);
-          }
-        }
-        
-      } catch (firebaseError) {
-        console.error("❌ Firebase error:", firebaseError.message);
-        
-        // Fallback: Create account only in backend without Firebase
-        const res = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newAccount),
-        });
-        
-        const data = await res.json();
-        
-        if (res.ok) {
-          setTemporaryPassword(data.temporaryPassword || tempPassword);
-          setShowPasswordModal(true);
-          setMessage("✅ Account created with temporary password!");
-          setNewAccount({ full_name: "", email: "", role: "", department: "" });
-          setShowModal(false);
-          fetchAccounts();
-        } else {
-          setMessage(`❌ ${data.message || "Account creation failed."}`);
-        }
-      }
-      
-    } catch (err) {
-      console.error(err);
-      setMessage("❌ System error occurred. Please contact IT support or try again later.");
-    } finally {
-      setLoading(false);
-    }
-  };
+
+    console.log(`✅ Backend account created: ${dataBackend.userId}`);
+
+    // STEP 2: Create Firebase user with the SAME temp password
+    const userCredential = await createUserWithEmailAndPassword(firebaseAuth, newAccount.email, tempPassword);
+    const firebaseUser = userCredential.user;
+    console.log(`✅ Firebase user created: ${firebaseUser.uid}`);
+
+    // STEP 3: Send password reset email via Firebase
+    await sendPasswordResetEmail(firebaseAuth, newAccount.email, {
+      url: `https://ezleave-admin.vercel.app/login`,
+      handleCodeInApp: false,
+    });
+    console.log(`✅ Firebase password reset email sent to: ${newAccount.email}`);
+
+    // SUCCESS: update frontend state
+    setMessage("✅ Account created successfully! Password setup email sent via Firebase.");
+    setNewAccount({ full_name: "", email: "", role: "", department: "" });
+    setShowModal(false);
+    fetchAccounts();
+
+  } catch (err) {
+    console.error("❌ Account creation error:", err.message);
+    setMessage(`❌ ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleViewAccount = (acc) => {
     setSelectedAccount(acc);
