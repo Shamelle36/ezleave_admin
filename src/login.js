@@ -78,50 +78,77 @@ function Login() {
     setLoading(false);
   };
 
-  // Forgot Password Function
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setMessage("Please enter your email address first.");
+const handleForgotPassword = async () => {
+  if (!email) {
+    setMessage("Please enter your email address first.");
+    return;
+  }
+
+  setMessage("");
+  setLoading(true);
+
+  console.log(`Forgot password attempt for: ${email}`);
+
+  // Create axios instance with timeout
+  const axiosWithTimeout = axios.create({
+    timeout: 10000, // 10 seconds timeout
+  });
+
+  // Try main admin endpoint
+  try {
+    console.log("Trying main admin endpoint...");
+    const res1 = await axiosWithTimeout.post(`${API_URL}/api/auth/forgot-password`, { email });
+    console.log("Main admin response:", res1.data);
+    
+    // Check if this is the "generic" response
+    if (res1.data.message && !res1.data.message.includes("If your email exists")) {
+      setMessage(res1.data.message);
+      setLoading(false);
       return;
     }
+  } catch (err1) {
+    console.log("Main admin error:", err1.message, err1.code);
+  }
 
-    setMessage("");
-    setLoading(true);
-
-    try {
-      // Try main admin forgot password first
-      let res = await axios.post(`${API_URL}/api/auth/forgot-password`, {
-        email,
-      });
-
-      if (res.status === 200) {
-        setMessage(res.data.message || "Password reset instructions sent to your email.");
-        setLoading(false);
-        return;
-      }
-    } catch (err) {
-      // If main admin fails, try department admin
-      try {
-        const res = await axios.post(`${API_URL}/api/authAdmin/forgot-password`, {
-          email,
-        });
-
-        if (res.status === 200) {
-          setMessage(res.data.message || "Password reset instructions sent to your email.");
-          setLoading(false);
-          return;
-        }
-      } catch (err2) {
-        console.error(err2);
-        setMessage(err2.response?.data?.message || "Error sending reset link. Please try again.");
-        setLoading(false);
-        return;
-      }
+  // Try department admin endpoint WITH timeout
+  try {
+    console.log("Trying department admin endpoint with timeout...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    
+    const res2 = await fetch(`${API_URL}/api/authAdmin/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (res2.ok) {
+      const data = await res2.json();
+      console.log("Department admin response:", data);
+      setMessage(data.message || "Password reset instructions sent.");
+      setLoading(false);
+      return;
+    } else {
+      console.log("Department admin HTTP error:", res2.status);
     }
+  } catch (err2) {
+    if (err2.name === 'AbortError') {
+      console.log("Department admin endpoint timed out after 8 seconds");
+    } else {
+      console.log("Department admin error:", err2.message);
+    }
+  }
 
-    setMessage("Error processing your request.");
-    setLoading(false);
-  };
+  // Show appropriate message
+  setMessage("Password reset request received. If you don't receive an email within 15 minutes, please check your spam folder or contact your administrator.");
+  setLoading(false);
+};
+
 
   // Initialize Google Sign-In
   useEffect(() => {
