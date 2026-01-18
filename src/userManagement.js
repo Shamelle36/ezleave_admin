@@ -33,15 +33,34 @@ import {
   faUserSlash,
   faUserCheck,
   faArchive,
-  faRedo
+  faRedo,
+  faFileExport
 } from "@fortawesome/free-solid-svg-icons";
 import ProfileDropdown from "./profileDropdown";
 import './user-management-responsive.css'; 
 
+// Firebase Configuration - Directly in the component file
+import { initializeApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+
+// Your Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyATHtZYzpJWI752_8EcFn1QCwxPavOJXEM",
+  authDomain: "ezleave-admin.firebaseapp.com",
+  projectId: "ezleave-admin",
+  storageBucket: "ezleave-admin.firebasestorage.app",
+  messagingSenderId: "1016228054768",
+  appId: "1:1016228054768:web:e0ec3759df6341ef0b2435"
+};
+
+// Initialize Firebase
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
+
 function UserManagement() {
   const [showModal, setShowModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
-  const [editModal, setEditModal] = useState(false); // Add edit modal state
+  const [editModal, setEditModal] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [inactiveAccounts, setInactiveAccounts] = useState([]);
   const [showInactive, setShowInactive] = useState(false);
@@ -51,7 +70,7 @@ function UserManagement() {
     role: "",
     department: "",
   });
-  const [editingAccount, setEditingAccount] = useState({ // Add state for editing
+  const [editingAccount, setEditingAccount] = useState({
     full_name: "",
     email: "",
     role: "",
@@ -63,6 +82,8 @@ function UserManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [filteredAccounts, setFilteredAccounts] = useState([]);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const [admin, setAdmin] = useState(JSON.parse(localStorage.getItem("admin")) || null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -72,7 +93,7 @@ function UserManagement() {
     role: "",
     profile_picture: "",
   });
-    const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   
@@ -206,10 +227,8 @@ function UserManagement() {
     
     // Add status filtering based on the view
     if (!showInactive) {
-      // When in Active Users view, only show active users
       filtered = filtered.filter(account => account.status === "active");
     } else {
-      // When in Inactive Users view, only show inactive users
       filtered = filtered.filter(account => account.status === "inactive");
     }
     
@@ -228,31 +247,103 @@ function UserManagement() {
     setFilteredAccounts(filtered);
   }, [accounts, inactiveAccounts, searchTerm, roleFilter, showInactive]);
 
+  // Create Account with Firebase
   const handleCreateAccount = async () => {
     if (!newAccount.full_name || !newAccount.email || !newAccount.role || (newAccount.role !== "mayor" && !newAccount.department)) {
       alert("Please complete all required fields before submission.");
       return;
     }
+    
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newAccount),
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        setMessage("✅ Account successfully created. Password setup instructions have been emailed to the user.");
-        setNewAccount({ full_name: "", email: "", role: "", department: "" });
-        setShowModal(false);
-        fetchAccounts();
+      // Step 1: Create user in Firebase
+      console.log(`Creating Firebase user for: ${newAccount.email}`);
+      
+      // Generate a secure temporary password
+      const tempPassword = Math.random().toString(36).slice(-10) + "A1@";
+      
+      try {
+        // Create user in Firebase
+        const userCredential = await createUserWithEmailAndPassword(
+          firebaseAuth,
+          newAccount.email,
+          tempPassword
+        );
         
-        // Clear message after 5 seconds
-        setTimeout(() => setMessage(""), 5000);
-      } else {
-        setMessage(`❌ ${data.message || "Account creation failed. Please verify the information and try again."}`);
+        const firebaseUser = userCredential.user;
+        console.log(`✅ Firebase user created: ${firebaseUser.uid}`);
+        
+        // Step 2: Send password reset email via Firebase
+        try {
+          await sendPasswordResetEmail(firebaseAuth, newAccount.email, {
+            url: `https://ezleave-admin.vercel.app/login`,
+            handleCodeInApp: false,
+          });
+          
+          console.log(`✅ Firebase password reset email sent to: ${newAccount.email}`);
+        } catch (emailError) {
+          console.error("❌ Firebase email error:", emailError.message);
+          // Continue with backend creation even if email fails
+        }
+        
+        // Step 3: Create account in backend database
+        const backendData = {
+          ...newAccount,
+          firebase_uid: firebaseUser.uid,
+          password: tempPassword,
+        };
+        
+        const res = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(backendData),
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+          setMessage("✅ Account created successfully! Password setup email has been sent via Firebase.");
+          setNewAccount({ full_name: "", email: "", role: "", department: "" });
+          setShowModal(false);
+          fetchAccounts();
+          
+          // Clear message after 5 seconds
+          setTimeout(() => setMessage(""), 5000);
+        } else {
+          // If backend fails, delete Firebase user
+          try {
+            // Note: Firebase doesn't have a direct delete method in client SDK
+            // We'll just show an error
+            setMessage(`❌ ${data.message || "Backend creation failed. Firebase user was created but database entry failed."}`);
+          } catch (cleanupError) {
+            console.error("Cleanup error:", cleanupError);
+          }
+        }
+        
+      } catch (firebaseError) {
+        console.error("❌ Firebase error:", firebaseError.message);
+        
+        // Fallback: Create account only in backend without Firebase
+        const res = await fetch(`${API_URL}/api/authAdmin/createAccount`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newAccount),
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+          setTemporaryPassword(data.temporaryPassword || tempPassword);
+          setShowPasswordModal(true);
+          setMessage("✅ Account created with temporary password!");
+          setNewAccount({ full_name: "", email: "", role: "", department: "" });
+          setShowModal(false);
+          fetchAccounts();
+        } else {
+          setMessage(`❌ ${data.message || "Account creation failed."}`);
+        }
       }
+      
     } catch (err) {
       console.error(err);
       setMessage("❌ System error occurred. Please contact IT support or try again later.");
@@ -267,7 +358,6 @@ function UserManagement() {
   };
 
   const handleEditAccount = (acc) => {
-    // Prevent editing if account is inactive
     if (acc.status === "inactive") {
       setMessage("⚠️ Inactive accounts cannot be edited. Please restore the account first.");
       setTimeout(() => setMessage(""), 5000);
@@ -311,7 +401,6 @@ function UserManagement() {
         setEditModal(false);
         setMessage("✅ Account information successfully updated.");
         
-        // Update the local state
         if (showInactive) {
           setInactiveAccounts(prevAccounts => 
             prevAccounts.map(acc => 
@@ -326,7 +415,6 @@ function UserManagement() {
           );
         }
         
-        // Clear message after 5 seconds
         setTimeout(() => setMessage(""), 5000);
       } else {
         setMessage(`❌ ${data.message || "Unable to update account. Please try again."}`);
@@ -339,21 +427,46 @@ function UserManagement() {
     }
   };
 
-  const handleResetPassword = async (accountId) => {
+  const handleResetPassword = async (accountId, accountEmail) => {
     if (window.confirm("Confirm password reset? The user will receive email instructions to create a new password.")) {
       try {
+        // Send password reset email via Firebase
+        await sendPasswordResetEmail(firebaseAuth, accountEmail, {
+          url: `https://ezleave-admin.vercel.app/login`,
+          handleCodeInApp: false,
+        });
+        
+        setMessage("✅ Password reset email sent successfully via Firebase.");
+        
+        // Also call backend to update password hash if needed
         const res = await fetch(`${API_URL}/api/authAdmin/reset-password/${accountId}`, {
           method: "POST",
         });
         
-        if (res.ok) {
-          setMessage("✅ Password reset instructions have been sent to the user's email.");
-        } else {
-          setMessage("❌ Password reset email could not be sent.");
+        if (!res.ok) {
+          console.warn("Backend password reset failed, but Firebase email was sent.");
         }
-      } catch (err) {
-        console.error(err);
-        setMessage("❌ System error occurred. Please contact IT support.");
+        
+      } catch (firebaseError) {
+        console.error("❌ Firebase error:", firebaseError.message);
+        
+        // Fallback to backend-only reset
+        try {
+          const res = await fetch(`${API_URL}/api/authAdmin/reset-password/${accountId}`, {
+            method: "POST",
+          });
+          
+          const data = await res.json();
+          
+          if (res.ok) {
+            setMessage("✅ Password reset instructions have been sent.");
+          } else {
+            setMessage(`❌ ${data.message || "Password reset failed."}`);
+          }
+        } catch (err) {
+          console.error(err);
+          setMessage("❌ System error occurred. Please contact IT support.");
+        }
       }
     }
   };
@@ -373,9 +486,8 @@ function UserManagement() {
         
         if (res.ok) {
           setMessage("✅ Account successfully deactivated.");
-          fetchAccounts(); // Refresh the list
+          fetchAccounts();
           
-          // Clear message after 5 seconds
           setTimeout(() => setMessage(""), 5000);
         } else {
           setMessage(`❌ ${data.message || "Unable to deactivate account."}`);
@@ -402,9 +514,8 @@ function UserManagement() {
         
         if (res.ok) {
           setMessage("✅ Account successfully restored.");
-          fetchAccounts(); // Refresh the list
+          fetchAccounts();
           
-          // Clear message after 5 seconds
           setTimeout(() => setMessage(""), 5000);
         } else {
           setMessage(`❌ ${data.message || "Unable to restore account."}`);
@@ -439,6 +550,43 @@ function UserManagement() {
 
   const activeAccountsCount = accounts.filter(acc => acc.status === "active").length;
   const inactiveAccountsCount = inactiveAccounts.filter(acc => acc.status === "inactive").length;
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        alert("Password copied to clipboard!");
+      })
+      .catch(err => {
+        console.error("Failed to copy: ", err);
+      });
+  };
+
+  const exportAccounts = () => {
+    const dataToExport = showInactive ? inactiveAccounts : accounts;
+    const csvContent = [
+      ["ID", "Full Name", "Email", "Role", "Department", "Status", "Created At", "Last Login"],
+      ...dataToExport.map(acc => [
+        acc.id,
+        acc.full_name,
+        acc.email,
+        acc.role,
+        acc.department,
+        acc.status,
+        acc.created_at,
+        acc.last_login
+      ])
+    ].map(row => row.join(",")).join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${showInactive ? 'inactive' : 'active'}_users_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="dashboard-container" style={styles.dashboardContainer}>
@@ -584,11 +732,25 @@ function UserManagement() {
         <div className="page-header" style={styles.pageHeader}>
           <div>
             <h2 className="page-title" style={styles.pageTitle}>User Account Management</h2>
+            <p className="page-subtitle" style={styles.pageSubtitle}>
+              Manage system access for municipal administrators and department heads
+            </p>
           </div>
-          <button className="add-btn" style={styles.addBtn} onClick={() => setShowModal(true)}>
-            <FontAwesomeIcon icon={faPlus} style={styles.btnIcon} />
-            Add New User
-          </button>
+          <div style={styles.headerActions}>
+            <button 
+              className="export-btn"
+              style={styles.exportBtn}
+              onClick={exportAccounts}
+              title="Export to CSV"
+            >
+              <FontAwesomeIcon icon={faFileExport} style={styles.btnIcon} />
+              Export
+            </button>
+            <button className="add-btn" style={styles.addBtn} onClick={() => setShowModal(true)}>
+              <FontAwesomeIcon icon={faPlus} style={styles.btnIcon} />
+              Add New User
+            </button>
+          </div>
         </div>
 
         {/* Statistics Overview */}
@@ -720,7 +882,7 @@ function UserManagement() {
                   <th className="th" style={styles.th}>USER PROFILE</th>
                   <th className="th" style={styles.th}>ACCESS LEVEL</th>
                   <th className="th" style={styles.th}>DEPARTMENT</th>
-                  <th className="th" style={styles.th}>Email Address</th>
+                  <th className="th" style={styles.th}>EMAIL ADDRESS</th>
                   <th className="th" style={styles.th}>STATUS</th>
                   <th className="th" style={styles.th}>ACTIONS</th>
                 </tr>
@@ -740,17 +902,17 @@ function UserManagement() {
                           </div>
                           <div className="user-info" style={styles.userInfo}>
                             <div className="user-name" style={styles.userName}>{acc.full_name}</div>
-                            <div className="user-id" style={styles.userId}>Employee ID: {acc.id}</div>
+                            <div className="user-id" style={styles.userId}>ID: {acc.id}</div>
                           </div>
                         </div>
                       </td>
                       <td className="td" style={styles.td}>
                         <span style={{
                           ...styles.roleBadge,
-                          ...(acc.role === "Mayor" ? styles.roleMayor : styles.roleOfficeHead),
+                          ...(acc.role === "mayor" ? styles.roleMayor : styles.roleOfficeHead),
                           opacity: acc.status === "inactive" ? 0.7 : 1
                         }}>
-                          {acc.role}
+                          {acc.role === "mayor" ? "Municipal Mayor" : "Department Head"}
                         </span>
                       </td>
                       <td className="td" style={styles.td}>
@@ -796,7 +958,7 @@ function UserManagement() {
                               <button 
                                 className="reset-btn"
                                 style={styles.resetBtn}
-                                onClick={() => handleResetPassword(acc.id)}
+                                onClick={() => handleResetPassword(acc.id, acc.email)}
                                 title="Reset Password"
                               >
                                 <FontAwesomeIcon icon={faKey} />
@@ -939,7 +1101,7 @@ function UserManagement() {
                     style={styles.formSelect}
                   >
                     <option value="">Select Access Privilege</option>
-                    <option value="mayor">Mayor</option>
+                    <option value="mayor">Municipal Mayor</option>
                     <option value="office_head">Department Head</option>
                   </select>
                 </div>
@@ -970,9 +1132,14 @@ function UserManagement() {
 
                 <div className="modal-info" style={styles.modalInfo}>
                   <FontAwesomeIcon icon={faInfoCircle} style={styles.infoIcon} />
-                  <p className="info-text" style={styles.infoText}>
-                    Upon creation, the user will receive automated email instructions for password setup and system access.
-                  </p>
+                  <div>
+                    <p className="info-text" style={styles.infoText}>
+                      <strong>Firebase Authentication:</strong> User will be created in Firebase authentication system.
+                    </p>
+                    <p className="info-text" style={styles.infoText}>
+                      <strong>Email Notification:</strong> Password setup instructions will be sent via Firebase email service.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -993,10 +1160,11 @@ function UserManagement() {
                   {loading ? (
                     <>
                       <div className="spinner" style={styles.spinner}></div>
-                      Processing Registration...
+                      Creating Account...
                     </>
                   ) : (
                     <>
+                      <FontAwesomeIcon icon={faSave} style={styles.saveIcon} />
                       Create User Account
                     </>
                   )}
@@ -1006,7 +1174,70 @@ function UserManagement() {
           </div>
         )}
 
-        {/* View Account Details Modal (Read-only) */}
+        {/* Password Display Modal */}
+        {showPasswordModal && (
+          <div style={styles.modalOverlay}>
+            <div className="modal" style={styles.modal}>
+              <div className="modal-header" style={styles.modalHeader}>
+                <h3 className="modal-title" style={styles.modalTitle}>Temporary Password</h3>
+                <button 
+                  className="close-btn"
+                  style={styles.closeBtn}
+                  onClick={() => setShowPasswordModal(false)}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="modal-body" style={styles.modalBody}>
+                <div className="password-warning" style={styles.passwordWarning}>
+                  <FontAwesomeIcon icon={faInfoCircle} style={styles.warningIcon} />
+                  <p className="warning-text" style={styles.warningText}>
+                    <strong>Important:</strong> Firebase email service is not available. Please share this temporary password with the user.
+                  </p>
+                </div>
+                
+                <div className="form-group" style={styles.formGroup}>
+                  <label className="form-label" style={styles.formLabel}>
+                    Temporary Password
+                  </label>
+                  <div className="password-display" style={styles.passwordDisplay}>
+                    <code style={styles.passwordCode}>{temporaryPassword}</code>
+                    <button 
+                      className="copy-btn"
+                      style={styles.copyBtn}
+                      onClick={() => copyToClipboard(temporaryPassword)}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="instructions" style={styles.instructions}>
+                  <h4 style={styles.instructionsTitle}>Instructions for User:</h4>
+                  <ol style={styles.instructionsList}>
+                    <li>Share this password securely with the user</li>
+                    <li>User should login with this password at the login page</li>
+                    <li>After first login, user should change their password immediately</li>
+                    <li>This password provides initial access only</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={styles.modalFooter}>
+                <button 
+                  onClick={() => setShowPasswordModal(false)} 
+                  className="modal-ok-btn"
+                  style={styles.modalOkBtn}
+                >
+                  I've Saved the Password
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Account Details Modal */}
         {viewModal && selectedAccount && (
           <div style={styles.modalOverlay}>
             <div className="modal" style={styles.modal}>
@@ -1060,7 +1291,7 @@ function UserManagement() {
                 <div className="form-group" style={styles.formGroup}>
                   <label className="form-label" style={styles.formLabel}>Access Level</label>
                   <div className="read-only-field" style={styles.readOnlyField}>
-                    {selectedAccount.role}
+                    {selectedAccount.role === "mayor" ? "Municipal Mayor" : "Department Head"}
                   </div>
                 </div>
                 
@@ -1070,6 +1301,31 @@ function UserManagement() {
                     {selectedAccount.department}
                   </div>
                 </div>
+
+                <div className="form-group" style={styles.formGroup}>
+                  <label className="form-label" style={styles.formLabel}>Account Created</label>
+                  <div className="read-only-field" style={styles.readOnlyField}>
+                    {new Date(selectedAccount.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+
+                {selectedAccount.last_login && (
+                  <div className="form-group" style={styles.formGroup}>
+                    <label className="form-label" style={styles.formLabel}>Last Login</label>
+                    <div className="read-only-field" style={styles.readOnlyField}>
+                      {new Date(selectedAccount.last_login).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+
+                {selectedAccount.status === "inactive" && selectedAccount.deactivated_at && (
+                  <div className="form-group" style={styles.formGroup}>
+                    <label className="form-label" style={styles.formLabel}>Deactivated On</label>
+                    <div className="read-only-field" style={styles.readOnlyField}>
+                      {new Date(selectedAccount.deactivated_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                )}
 
                 {selectedAccount.status === "inactive" ? (
                   <div className="modal-warning" style={styles.modalWarning}>
@@ -1175,7 +1431,7 @@ function UserManagement() {
                 <div className="form-group" style={styles.formGroup}>
                   <label className="form-label" style={styles.formLabel}>Access Level</label>
                   <div className="read-only-field" style={styles.readOnlyField}>
-                    {editingAccount.role}
+                    {editingAccount.role === "mayor" ? "Municipal Mayor" : "Department Head"}
                   </div>
                 </div>
                 
@@ -1314,7 +1570,7 @@ const styles = {
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
   },
   mainContent: { 
-    marginLeft: '300px', // Adjusted to account for the sidebar width
+    marginLeft: '300px',
     backgroundColor: '#F8F8F8',
     marginTop: '80px', 
     overflow: 'hidden',
@@ -1335,8 +1591,32 @@ const styles = {
     fontWeight: "700",
     margin: "0 0 5px 0",
   },
+  pageSubtitle: {
+    fontSize: "14px",
+    color: "#7f8c8d",
+    margin: "0"
+  },
+  headerActions: {
+    display: "flex",
+    gap: "15px",
+    alignItems: "center"
+  },
   addBtn: {
     backgroundColor: "#009205",
+    color: "#fff",
+    padding: "12px 24px",
+    borderRadius: "8px",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "15px",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    transition: "all 0.3s ease",
+  },
+  exportBtn: {
+    backgroundColor: "#3498db",
     color: "#fff",
     padding: "12px 24px",
     borderRadius: "8px",
@@ -1674,10 +1954,14 @@ const styles = {
     letterSpacing: "0.5px"
   },
   roleMayor: {
-    border: "1px solid rgba(229, 229, 229, 1)"
+    backgroundColor: "rgba(41, 128, 185, 0.1)",
+    color: "#2980b9",
+    border: "1px solid rgba(41, 128, 185, 0.2)"
   },
   roleOfficeHead: {
-    border: "1px solid rgba(229, 229, 229, 1)"
+    backgroundColor: "rgba(155, 89, 182, 0.1)",
+    color: "#9b59b6",
+    border: "1px solid rgba(155, 89, 182, 0.2)"
   },
 
   // Department Cell
@@ -2004,25 +2288,85 @@ const styles = {
     color: "#7f8c8d"
   },
 
-  // Information Panel
-  modalInfo: {
-    backgroundColor: "#ffffffff",
+  // Password Display
+  passwordWarning: {
+    backgroundColor: "#fff3cd",
     padding: "15px",
     borderRadius: "8px",
     display: "flex",
     alignItems: "center",
     gap: "12px",
+    marginBottom: "20px",
+    border: "1px solid #ffeaa7"
+  },
+  passwordDisplay: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    backgroundColor: "#f8f9fa",
+    padding: "12px 16px",
+    borderRadius: "8px",
+    border: "1px solid #e9ecef"
+  },
+  passwordCode: {
+    flex: 1,
+    fontFamily: "monospace",
+    fontSize: "16px",
+    color: "#212529"
+  },
+  copyBtn: {
+    padding: "8px 16px",
+    backgroundColor: "#6c757d",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "600",
+    transition: "all 0.3s ease",
+    ":hover": {
+      backgroundColor: "#5a6268"
+    }
+  },
+  instructions: {
+    marginTop: "20px",
+    padding: "15px",
+    backgroundColor: "#e8f4fd",
+    borderRadius: "8px",
+    border: "1px solid #b8daff"
+  },
+  instructionsTitle: {
+    fontSize: "16px",
+    fontWeight: "600",
+    color: "#004085",
+    margin: "0 0 10px 0"
+  },
+  instructionsList: {
+    margin: "0",
+    paddingLeft: "20px",
+    color: "#004085"
+  },
+
+  // Information Panel
+  modalInfo: {
+    backgroundColor: "#e8f5e9",
+    padding: "15px",
+    borderRadius: "8px",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "12px",
     marginTop: "20px",
     border: "1px solid #c8e6c9"
   },
   infoIcon: {
-    color: "#000000ff",
-    fontSize: "16px"
+    color: "#2e7d32",
+    fontSize: "16px",
+    marginTop: "2px"
   },
   infoText: {
     fontSize: "14px",
-    color: "#000000ff",
-    margin: "0"
+    color: "#1b5e20",
+    margin: "0 0 5px 0"
   },
 
   // Warning Panel for Inactive Accounts
@@ -2145,6 +2489,21 @@ const styles = {
       opacity: "0.6",
       cursor: "not-allowed",
       transform: "none"
+    }
+  },
+  modalOkBtn: {
+    padding: "12px 24px",
+    backgroundColor: "#009205",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "15px",
+    fontWeight: "600",
+    transition: "all 0.3s ease",
+    ":hover": {
+      backgroundColor: "#007a04",
+      transform: "translateY(-2px)"
     }
   },
   saveIcon: {

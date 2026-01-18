@@ -2,8 +2,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import sql from "../config/db.js"; // your Neon DB connection using postgres package
-import nodemailer from "nodemailer";
+import sql from "../config/db.js";
 
 // Utility: generate JWT token
 const generateToken = (user) => {
@@ -18,16 +17,7 @@ const generateToken = (user) => {
   );
 };
 
-// Setup NodeMailer transporter
-const transporter = nodemailer.createTransport({
-  service: "Gmail", // or any SMTP service
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-// 🟢 4. Fetch all admin accounts
+// 🟢 Fetch all admin accounts
 export const fetchAccounts = async (req, res) => {
   try {
     const accounts = await sql`
@@ -60,128 +50,67 @@ export const fetchInactiveAccounts = async (req, res) => {
   }
 };
 
-// 🟢 1. Admin creates new account for Head/Mayor
 export const createAccount = async (req, res) => {
   try {
-    let { full_name, email, role, department } = req.body;
+    let { full_name, email, role, department, password: tempPassword } = req.body; // get temp password from frontend
 
-    // Normalize role to match DB constraint
-    role = role.toLowerCase().replace(" ", "_"); // "Office Head" → "office_head"
+    // Validate required fields
+    if (!full_name || !email || !role || !tempPassword) {
+      return res.status(400).json({ 
+        message: "Missing required fields: full_name, email, role, or password" 
+      });
+    }
 
-    // Check if email already exists (including inactive accounts)
+    // Normalize role for DB
+    role = role.toLowerCase().replace(" ", "_");
+
+    console.log(`🔵 Creating account for: ${email}, Role: ${role}, Department: ${department}`);
+
+    // Check if email already exists
     const existing = await sql`
       SELECT * FROM admin_accounts WHERE email = ${email}
     `;
-
+    
     if (existing.length > 0) {
       const existingAccount = existing[0];
-      
-      // If account is inactive, offer to restore it instead
-      if (existingAccount.status === 'inactive') {
-        return res.status(400).json({ 
-          message: "This email belongs to an inactive account. Please restore the account instead of creating a new one." 
+      if (existingAccount.status === "inactive") {
+        return res.status(400).json({
+          message: "This email belongs to an inactive account. Please restore it instead.",
         });
       }
-      
       return res.status(400).json({ message: "Email already exists." });
     }
 
-    // Insert new account (no password yet) - default status is 'active'
+    // Insert into DB with temporary password hashed
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
     const [user] = await sql`
-      INSERT INTO admin_accounts (full_name, email, role, department, status)
-      VALUES (${full_name}, ${email}, ${role}, ${department}, 'active')
+      INSERT INTO admin_accounts (full_name, email, role, department, status, password_hash)
+      VALUES (${full_name}, ${email}, ${role}, ${department}, 'active', ${hashedPassword})
       RETURNING *
     `;
 
-    // Generate setup token
-    const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // valid for 24 hours
-
-    await sql`
-      INSERT INTO password_tokens (user_id, token, type, expires_at)
-      VALUES (${user.id}, ${token}, 'setup', ${expiresAt})
-    `;
-
-    // Setup password link
-    const setupLink = `https://ezleave-admin.vercel.app/setup-password?token=${token}`;
-
-    // Send email
-    await transporter.sendMail({
-      from: `"EZLeave Admin" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Set up your EZLeave password",
-      html: `<p>Hello ${full_name},</p>
-             <p>An admin has created an account for you. Please set your password by clicking the link below:</p>
-             <a href="${setupLink}">${setupLink}</a>
-             <p>This link is valid for 24 hours.</p>`,
-    });
+    console.log(`✅ DB record created: ${user.id}`);
 
     res.status(201).json({
-      message: "✅ Account created! Email sent for password setup.",
+      message: "✅ Account created successfully!",
+      details: `User can login with temporary password sent via Firebase.`,
+      userId: user.id,
+      email: user.email,
+      temporaryPassword: tempPassword, // optional to show in admin panel
+      note: "Please change password after first login",
     });
+
   } catch (err) {
     console.error("❌ Error creating account:", err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ 
+      message: "Failed to create account",
+      error: err.message 
+    });
   }
 };
 
-// 🟢 2. Setup password using token
-export const setupPassword = async (req, res) => {
-  try {
-    const { token } = req.params;
-    const { password } = req.body;
-
-    const tokens = await sql`
-      SELECT * FROM password_tokens
-      WHERE token = ${token} AND type = 'setup' AND used = false
-    `;
-
-    if (tokens.length === 0) {
-      return res.status(400).json({ message: "Invalid or expired token." });
-    }
-
-    const tokenData = tokens[0];
-    const now = new Date();
-
-    if (new Date(tokenData.expires_at) < now) {
-      return res.status(400).json({ message: "Token expired." });
-    }
-
-    // Check if account is active
-    const userCheck = await sql`
-      SELECT status FROM admin_accounts WHERE id = ${tokenData.user_id}
-    `;
-    
-    if (userCheck.length === 0) {
-      return res.status(400).json({ message: "Account not found." });
-    }
-    
-    if (userCheck[0].status === 'inactive') {
-      return res.status(400).json({ message: "Account is inactive. Please contact administrator." });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await sql`
-      UPDATE admin_accounts
-      SET password_hash = ${hashedPassword}
-      WHERE id = ${tokenData.user_id}
-    `;
-
-    await sql`
-      UPDATE password_tokens
-      SET used = true
-      WHERE id = ${tokenData.id}
-    `;
-
-    res.json({ message: "Password setup successful. You can now log in." });
-  } catch (err) {
-    console.error("❌ Error setting password:", err);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-// 🟢 3. Login for admin/head/mayor
+// 🟢 Login for admin/head/mayor (Simplified - No Firebase)
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -202,10 +131,12 @@ export const login = async (req, res) => {
       });
     }
 
+    // Check if user has password set
     if (!user.password_hash) {
-      return res.status(400).json({ message: "Password not yet set. Check your email for setup link." });
+      return res.status(400).json({ message: "Password not yet set. Contact administrator." });
     }
 
+    // Verify password
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ message: "Invalid credentials." });
@@ -258,7 +189,7 @@ export const getUserById = async (req, res) => {
   }
 };
 
-// 🟢 5. Update admin profile (name, email, department, profile picture)
+// 🟢 5. Update admin profile
 export const updateProfile = async (req, res) => {
   console.log("=== UPDATE OFFICE HEAD PROFILE REQUEST ===");
   console.log("Params:", req.params);
@@ -367,7 +298,7 @@ export const googleLogin = async (req, res) => {
         role: user.role,
         department: user.department,
         status: user.status,
-        profile_picture: user.profile_picture || picture, // Use Google picture if user doesn't have one
+        profile_picture: user.profile_picture || picture,
       },
     });
 
@@ -380,7 +311,7 @@ export const googleLogin = async (req, res) => {
   }
 };
 
-// 🟢 6. Update admin account (for admin to edit other accounts)
+// 🟢 6. Update admin account
 export const updateAccount = async (req, res) => {
   console.log("=== UPDATE ADMIN ACCOUNT REQUEST ===");
   console.log("Params:", req.params);
@@ -549,7 +480,7 @@ export const restoreAccount = async (req, res) => {
   }
 };
 
-// 🟢 9. Reset password for admin account
+// 🟢 9. Reset password for admin account (Simplified)
 export const resetPassword = async (req, res) => {
   console.log("=== RESET PASSWORD REQUEST ===");
   console.log("Params:", req.params);
@@ -575,41 +506,24 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // Generate reset token
-    const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // valid for 24 hours
-
-    // Delete any existing reset tokens for this user
+    // Generate a new temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    
     await sql`
-      DELETE FROM password_tokens
-      WHERE user_id = ${id} AND type = 'reset'
+      UPDATE admin_accounts
+      SET password_hash = ${hashedPassword}
+      WHERE id = ${user.id}
     `;
 
-    // Insert new reset token
-    await sql`
-      INSERT INTO password_tokens (user_id, token, type, expires_at)
-      VALUES (${user.id}, ${token}, 'reset', ${expiresAt})
-    `;
-
-    // Setup password reset link
-    const resetLink = `http://localhost:3001/reset-password?token=${token}`;
-
-    // Send email
-    await transporter.sendMail({
-      from: `"EZLeave Admin" <${process.env.EMAIL_USER}>`,
-      to: user.email,
-      subject: "Password Reset Request",
-      html: `<p>Hello ${user.full_name},</p>
-             <p>You have requested to reset your password. Please click the link below to set a new password:</p>
-             <a href="${resetLink}">${resetLink}</a>
-             <p>This link is valid for 24 hours.</p>
-             <p>If you didn't request this, please ignore this email.</p>`,
+    console.log(`✅ Password reset for account ${id}`);
+    
+    return res.json({ 
+      message: "✅ Password reset successfully!",
+      temporaryPassword: tempPassword,
+      note: "Share this temporary password with the user. They should change it after first login."
     });
 
-    console.log(`✅ Password reset email sent for account ${id}`);
-    res.json({ 
-      message: "✅ Password reset instructions sent to user's email.",
-    });
   } catch (err) {
     console.error("❌ Error resetting password:", err);
     res.status(500).json({ message: "Failed to reset password." });
@@ -734,7 +648,6 @@ export const forgotPassword = async (req, res) => {
 
     if (users.length === 0) {
       console.log(`❌ Email not found: ${email}`);
-      // For security, don't reveal if email exists or not
       return res.status(200).json({ 
         message: "If your email exists in our system, you will receive password reset instructions." 
       });
@@ -751,11 +664,12 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate reset token
+    // Generate a reset token
     const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+    const resetLink = `https://ezleave-admin.vercel.app/reset-password?token=${token}`;
 
-    // Delete any existing reset tokens for this user
+    // Delete any existing reset tokens
     await sql`
       DELETE FROM password_tokens 
       WHERE user_id = ${user.id} AND type = 'reset'
@@ -767,78 +681,14 @@ export const forgotPassword = async (req, res) => {
       VALUES (${user.id}, ${token}, 'reset', ${expiresAt})
     `;
 
-    // Create reset link - USE YOUR ACTUAL FRONTEND URL
-    const resetLink = `https://ezleave-admin.vercel.app/reset-password?token=${token}`;
-    // OR if you're on Render: 
-    // const resetLink = `https://ezleave-admin.onrender.com/reset-password?token=${token}`;
-
-    console.log(`📧 Sending reset email to: ${email}`);
-    console.log(`🔗 Reset link: ${resetLink}`);
-
-    // Send email - make sure transporter is configured
-    try {
-      // Check if email credentials are configured
-      if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.error("❌ Email credentials not configured in environment variables");
-        console.log(`📋 Manual reset link for ${user.full_name}: ${resetLink}`);
-        
-        // Return success but mention email wasn't sent
-        return res.status(200).json({ 
-          message: "Password reset initiated. Please contact administrator for reset link.",
-          debug_link: process.env.NODE_ENV === 'development' ? resetLink : undefined
-        });
-      }
-
-      // Send actual email
-      const mailOptions = {
-        from: `"EZLeave Admin" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "Password Reset Request - EZLeave Admin",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-            <h2 style="color: #4285f4; text-align: center;">EZLeave Admin Password Reset</h2>
-            <p>Hello <strong>${user.full_name}</strong>,</p>
-            <p>You have requested to reset your password for the EZLeave Admin system.</p>
-            <p>Please click the button below to set a new password:</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetLink}" style="background-color: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                Reset Password
-              </a>
-            </div>
-            <p>Or copy and paste this link in your browser:</p>
-            <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">
-              ${resetLink}
-            </p>
-            <p>This link will expire in <strong>1 hour</strong>.</p>
-            <p>If you didn't request this password reset, please ignore this email or contact your administrator.</p>
-            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
-            <p style="color: #666; font-size: 12px; text-align: center;">
-              This is an automated message from EZLeave Admin System.
-            </p>
-          </div>
-        `,
-        text: `Hello ${user.full_name},\n\nYou requested a password reset for EZLeave Admin.\n\nReset link: ${resetLink}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.`
-      };
-
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`✅ Email sent successfully to ${email}:`, info.messageId);
-
-      res.status(200).json({ 
-        message: "Password reset instructions have been sent to your email address." 
-      });
-
-    } catch (emailError) {
-      console.error("❌ Email sending failed:", emailError);
-      
-      // Log the reset link for debugging
-      console.log(`📋 Reset link that would have been sent: ${resetLink}`);
-      
-      // Still return success but mention email might fail
-      res.status(200).json({ 
-        message: "Password reset initiated. If you don't receive an email, please contact administrator.",
-        debug_note: process.env.NODE_ENV === 'development' ? 'Email service error: ' + emailError.message : undefined
-      });
-    }
+    console.log(`🔗 Reset token generated for: ${email}`);
+    
+    return res.status(200).json({ 
+      message: "Password reset token generated.",
+      resetToken: token,
+      resetLink: resetLink,
+      note: "Use this token/link for password reset"
+    });
 
   } catch (err) {
     console.error("❌ Forgot password error:", err);
