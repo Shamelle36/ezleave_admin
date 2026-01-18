@@ -189,107 +189,25 @@ const [deletingLeaveType, setDeletingLeaveType] = useState(null);
 const [showRequestModal, setShowRequestModal] = useState(false);
 const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
 
-const [employeeSignatureUrl, setEmployeeSignatureUrl] = useState(null);
-const [employeeSignatureLoading, setEmployeeSignatureLoading] = useState(false);
-
 // Add this function to close the modal
 const closeRequestModal = () => {
   setShowRequestModal(false);
   setSelectedRequestForModal(null);
 };
 
-const fetchEmployeeSignature = async (employeeIdentifier) => {
-  try {
-    setEmployeeSignatureLoading(true);
-    console.log("🔄 Fetching employee signature for ID:", employeeIdentifier);
-    
-    if (!employeeIdentifier) {
-      console.log("❌ No employee identifier provided");
-      setEmployeeSignatureUrl(null);
-      return;
-    }
-
-    // Use the employee ID directly (this should match the employee.id from your controller)
-    const signatureEndpoint = `${API_URL}/api/employees/${employeeIdentifier}/signature`;
-    console.log("🔍 Calling signature endpoint:", signatureEndpoint);
-    
-    const response = await fetch(signatureEndpoint, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    console.log("📥 Signature response status:", response.status);
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log("✅ Signature response data:", data);
-      
-      if (data.success && data.signature_url) {
-        // The controller returns the Cloudinary URL directly
-        const signatureUrl = data.signature_url;
-        console.log("✅ Found employee signature URL:", signatureUrl);
-        setEmployeeSignatureUrl(signatureUrl);
-        
-        // Also store it in the selectedRequest for later use
-        if (selectedRequest) {
-          setSelectedRequest(prev => ({
-            ...prev,
-            employee_signature_url: signatureUrl
-          }));
-        }
-      } else if (data.success === false) {
-        console.log("ℹ️ No signature found for employee:", data.message);
-        setEmployeeSignatureUrl(null);
-      }
-    } else if (response.status === 404) {
-      console.log(`ℹ️ No signature found for employee ID ${employeeIdentifier}`);
-      setEmployeeSignatureUrl(null);
-    } else {
-      console.error(`❌ Error fetching signature: ${response.status}`);
-      setEmployeeSignatureUrl(null);
-    }
-  } catch (error) {
-    console.error("❌ Error fetching employee signature:", error);
-    setEmployeeSignatureUrl(null);
-  } finally {
-    setEmployeeSignatureLoading(false);
-  }
-};
-
 // And update the openRequestModal function to use the correct identifier:
 const openRequestModal = async (request) => {
-  console.log("📋 Opening request modal for:", {
-    request_id: request.id,
-    user_id: request.user_id, // This is likely the employee ID
-    employee_id: request.employee_id,
-    id_number: request.id_number,
-    first_name: request.first_name,
-    last_name: request.last_name
+  console.log("📋 Opening request modal for leave request:", {
+    leave_request_id: request.id,
+    employee_name: `${request.first_name} ${request.last_name}`,
+    available_fields: Object.keys(request)
   });
   
   setSelectedRequestForModal(request);
   setShowRequestModal(true);
   setSelectedRequest(request);
-  
-  // Clear any previous signature
-  setEmployeeSignatureUrl(null);
-  setEmployeeSignatureLoading(true);
-  
-  // Try to fetch signature using the user_id from the request
-  // According to your controller, this should be the employee ID
-  let identifier = request.user_id; // This is the key field
-  
-  console.log("🔍 Using identifier (user_id) for signature fetch:", identifier);
-  
-  if (identifier) {
-    await fetchEmployeeSignature(identifier);
-  } else {
-    console.log("❌ No user_id found in request");
-    console.log("Available fields:", Object.keys(request));
-    setEmployeeSignatureLoading(false);
-  }
+    
+  console.log("✅ Using signature URL from request:", request.signature_url);
 };
 
 // Helper function to test image loading
@@ -1382,18 +1300,15 @@ const generateAndShowCSForm = async () => {
 
     const role = admin.role?.toLowerCase().replace(" ", "_");
 
-    // Prepare signature data
-    let finalSignatureData = null;
-    
-    if (signatureMethod === "upload") {
-      finalSignatureData = uploadedSignature || signatureData;
-      console.log("📤 Using uploaded signature for form generation");
-    } else if (signatureMethod === "e-sign") {
-      finalSignatureData = signatureData;
-      console.log("🖋️ Using e-signature for form generation");
-    }
+    // Use employee's signature directly from the request data
+    const employeeSignatureUrl = selectedRequest.signature_url;
 
-    // Build payload with BOTH employee and admin signature data
+    console.log("🖋️ Using employee signature from request data:", {
+      has_signature: !!employeeSignatureUrl,
+      signature_url: employeeSignatureUrl
+    });
+
+    // Build payload with employee's signature
     const payload = {
       leave_application_id: selectedRequest.id,
       days_with_pay: daysWithPay,
@@ -1412,11 +1327,8 @@ const generateAndShowCSForm = async () => {
         action_remarks: actionRemarks,
         days_with_pay: daysWithPay
       },
-      // Admin's signature for approval/rejection
-      signature_method: signatureMethod,
-      signature_data: finalSignatureData,
-      // Employee's signature from employee_list
-      employee_signature_url: employeeSignatureUrl || selectedRequest?.signature_url,
+      // Include employee's signature URL directly from the request data
+      employee_signature_url: employeeSignatureUrl,
       // Employee details for the form
       employee_details: {
         employee_id: selectedRequest.employee_id,
@@ -1425,15 +1337,14 @@ const generateAndShowCSForm = async () => {
         first_name: selectedRequest.first_name,
         last_name: selectedRequest.last_name,
         department: selectedRequest.department,
-        position: selectedRequest.position
+        position: selectedRequest.position,
+        signature_url: employeeSignatureUrl  // Add this too
       }
     };
 
     console.log("📦 Final payload for form generation:", {
-      has_employee_signature: !!payload.employee_signature_url,
-      employee_signature_url: payload.employee_signature_url,
-      signature_method: payload.signature_method,
-      has_admin_signature_data: !!payload.signature_data
+      has_employee_signature: !!employeeSignatureUrl,
+      employee_signature_url: employeeSignatureUrl
     });
 
     const res = await fetch(`${API_URL}/api/generate-cs-form`, {
@@ -1459,10 +1370,6 @@ const generateAndShowCSForm = async () => {
     });
 
     setShowActualCSForm(true);
-    
-    if (signatureMethod === "traditional") {
-      setShowSignatureChoice(true);
-    }
     
   } catch (err) {
     console.error("Error generating CS Form:", err);
@@ -3859,40 +3766,30 @@ const handleAddLeaveType = async () => {
               <FontAwesomeIcon icon={faSignature} style={{ marginRight: '8px' }} />
               Signature Verification
             </h4>
+            {/* Add this near your modal actions temporarily */}
             
+              {/* Employee Signature Display */}
             <div style={styles.signatureComparisonContainer} className="signatureComparisonContainer">
-              {/* Employee Signature from Employee List */}
               <div style={styles.signatureColumn} className="signatureColumn">
                 <h5 style={styles.signatureColumnTitle} className="signatureColumnTitle">
                   Employee's Registered Signature
                 </h5>
-                {employeeSignatureLoading ? (
-                  <div style={styles.signatureLoading} className="signatureLoading">
-                    <div style={styles.loadingSpinnerSmall}></div>
-                    <p>Loading employee signature...</p>
-                  </div>
-                ) : employeeSignatureUrl ? (
+                {selectedRequest?.signature_url ? (
                   <div style={styles.signatureDisplay} className="signatureDisplay">
                     <img 
-                      src={employeeSignatureUrl} 
+                      src={selectedRequest.signature_url} 
                       alt="Employee Signature" 
                       style={styles.signatureImage}
                       className="signatureImage"
                       onLoad={() => console.log("✅ Employee signature image loaded")}
                       onError={(e) => {
-                        console.error("❌ Failed to load employee signature image:", employeeSignatureUrl);
-                        // Try to force reload with cache busting
-                        e.target.src = `${employeeSignatureUrl}?t=${Date.now()}`;
-                        setTimeout(() => {
-                          if (!e.target.complete || e.target.naturalWidth === 0) {
-                            e.target.style.display = 'none';
-                            const parent = e.target.parentElement;
-                            const errorMsg = document.createElement('p');
-                            errorMsg.style.cssText = 'color: #dc3545; font-style: italic; text-align: center;';
-                            errorMsg.textContent = 'Signature image failed to load';
-                            parent.appendChild(errorMsg);
-                          }
-                        }, 100);
+                        console.error("❌ Failed to load employee signature image:", selectedRequest.signature_url);
+                        e.target.style.display = 'none';
+                        const parent = e.target.parentElement;
+                        const errorMsg = document.createElement('p');
+                        errorMsg.style.cssText = 'color: #dc3545; font-style: italic; text-align: center;';
+                        errorMsg.textContent = 'Signature image failed to load';
+                        parent.appendChild(errorMsg);
                       }}
                     />
                     <p style={styles.signatureCaption} className="signatureCaption">
@@ -3903,19 +3800,11 @@ const handleAddLeaveType = async () => {
                   <div style={styles.noSignature} className="noSignature">
                     <FontAwesomeIcon icon={faSignature} style={{ fontSize: '40px', color: '#ccc', marginBottom: '10px' }} />
                     <p style={{ color: '#999', fontStyle: 'italic', fontSize: '14px' }}>
-                      {employeeSignatureLoading === false ? "No signature on file" : "Signature not available"}
+                      No signature on file
                     </p>
                   </div>
                 )}
               </div>
-              
-              {/* VS Separator */}
-              <div style={styles.signatureSeparator} className="signatureSeparator">
-                <div style={styles.separatorLine}></div>
-                <span style={styles.separatorText}>VS</span>
-                <div style={styles.separatorLine}></div>
-              </div>
-              
             </div>
             
             {/* Verification Instructions */}
@@ -3926,26 +3815,7 @@ const handleAddLeaveType = async () => {
                 Ensure they match before proceeding with approval/rejection.
               </p>
             </div>
-            
-            {/* Verification Buttons */}
-            <div style={styles.verificationButtons} className="verificationButtons">
-              <button
-                style={styles.signatureMatchBtn}
-                onClick={() => {
-                  alert("✓ Signature verified as matching. You may proceed.");
-                }}
-              >
-                <FontAwesomeIcon icon={faCheck} /> Signatures Match
-              </button>
-              <button
-                style={styles.signatureMismatchBtn}
-                onClick={() => {
-                  alert("⚠️ Signatures don't match! Please verify carefully or contact the employee.");
-                }}
-              >
-                <FontAwesomeIcon icon={faExclamationTriangle} /> Doesn't Match
-              </button>
-            </div>
+          
           </div>
 
           {/* APPROVAL/REJECTION DETAILS SECTION */}
@@ -4144,11 +4014,6 @@ const handleAddLeaveType = async () => {
               action_remarks: "",
               days_with_pay: 0
             });
-            // Clear employee signature
-            setEmployeeSignatureUrl(null);
-            if (formGenerationTimeout) {
-              clearTimeout(formGenerationTimeout);
-            }
           }}
         >
           <FontAwesomeIcon icon={faTimes} /> Cancel

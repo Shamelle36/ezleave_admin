@@ -389,6 +389,7 @@ export const getEmployeeById = async (req, res) => {
   }
 };
 
+
 // 📌 Get employee signature
 export const getEmployeeSignature = async (req, res) => {
   const { id } = req.params;

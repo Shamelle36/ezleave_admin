@@ -78,6 +78,51 @@ function Login() {
     setLoading(false);
   };
 
+  // Forgot Password Function
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setMessage("Please enter your email address first.");
+      return;
+    }
+
+    setMessage("");
+    setLoading(true);
+
+    try {
+      // Try main admin forgot password first
+      let res = await axios.post(`${API_URL}/api/auth/forgot-password`, {
+        email,
+      });
+
+      if (res.status === 200) {
+        setMessage(res.data.message || "Password reset instructions sent to your email.");
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      // If main admin fails, try department admin
+      try {
+        const res = await axios.post(`${API_URL}/api/authAdmin/forgot-password`, {
+          email,
+        });
+
+        if (res.status === 200) {
+          setMessage(res.data.message || "Password reset instructions sent to your email.");
+          setLoading(false);
+          return;
+        }
+      } catch (err2) {
+        console.error(err2);
+        setMessage(err2.response?.data?.message || "Error sending reset link. Please try again.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    setMessage("Error processing your request.");
+    setLoading(false);
+  };
+
   // Initialize Google Sign-In
   useEffect(() => {
     // Load Google Identity Services script
@@ -233,6 +278,27 @@ function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            
+            {/* Forgot Password Text */}
+            <div style={{ textAlign: 'right', marginBottom: '20px', marginTop: '-10px' }}>
+              <button 
+                type="button" 
+                onClick={handleForgotPassword}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#4285f4',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  padding: '5px 0',
+                  fontFamily: 'inherit'
+                }}
+                disabled={loading}
+              >
+                Forgot Password?
+              </button>
+            </div>
+            
             <button type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </button>
@@ -240,14 +306,14 @@ function Login() {
 
           {loading && (
             <p style={{ marginTop: "1rem", color: "blue" }}>
-              Checking credentials...
+              Processing...
             </p>
           )}
           {message && (
             <p
               style={{
                 marginTop: "1rem",
-                color: message.includes("successful") ? "green" : "red",
+                color: message.includes("successful") || message.includes("sent") ? "green" : "red",
               }}
             >
               {message}
