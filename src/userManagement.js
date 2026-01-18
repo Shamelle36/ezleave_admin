@@ -932,19 +932,19 @@ function UserManagement() {
                       setNewAccount({
                         ...newAccount,
                         role,
-                        department: role === "Mayor" ? "Office of the Municipal Mayor" : "",
+                        department: role === "mayor" ? "Office of the Municipal Mayor" : "",
                       });
                     }}
                     className="form-select"
                     style={styles.formSelect}
                   >
                     <option value="">Select Access Privilege</option>
-                    <option value="Mayor">Mayor</option>
-                    <option value="Office Head">Department Head</option>
+                    <option value="mayor">Mayor</option>
+                    <option value="office_head">Department Head</option>
                   </select>
                 </div>
 
-                {newAccount.role !== "Mayor" && newAccount.role !== "" && (
+                {newAccount.role !== "mayor" && newAccount.role !== "" && (
                   <div className="form-group" style={styles.formGroup}>
                     <label className="form-label" style={styles.formLabel}>
                       <FontAwesomeIcon icon={faBuilding} style={styles.labelIcon} />
