@@ -654,20 +654,6 @@ useEffect(() => {
           </div>
 
           <div className="attendance-row2" style={styles.row2}>
-            <div style={{ position: "relative" }}>
-              <button onClick={() => setOpenExport(!openExport)} className="attendance-btn1" style={styles.btn1}>
-                <FontAwesomeIcon icon={faUpload} style={styles.iconBtn} />
-                Export
-              </button>
-
-              {openExport && (
-                <div className="attendance-dropdown" style={styles.dropdown}>
-                  <div style={styles.dropdownItem} onClick={() => handleExport("pdf")}>
-                    PDF (.pdf)
-                  </div>
-                </div>
-              )}
-            </div>
 
             <button onClick={handlePrint} className="attendance-btn2" style={styles.btn2}>
               <FontAwesomeIcon icon={faPrint} style={styles.iconBtn1} />
