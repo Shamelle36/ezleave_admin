@@ -662,12 +662,6 @@ useEffect(() => {
 
               {openExport && (
                 <div className="attendance-dropdown" style={styles.dropdown}>
-                  <div style={styles.dropdownItem} onClick={() => handleExport("excel")}>
-                    Excel (.xlsx)
-                  </div>
-                  <div style={styles.dropdownItem} onClick={() => handleExport("word")}>
-                    Word (.docx)
-                  </div>
                   <div style={styles.dropdownItem} onClick={() => handleExport("pdf")}>
                     PDF (.pdf)
                   </div>
