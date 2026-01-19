@@ -42,6 +42,14 @@ import './user-management-responsive.css';
 // Firebase Configuration - Directly in the component file
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  getDatabase,
+  ref,
+  set,
+  get,
+  child
+} from "firebase/database";
+
 
 // Your Firebase configuration
 const firebaseConfig = {
@@ -56,6 +64,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const firebaseApp = initializeApp(firebaseConfig);
 const firebaseAuth = getAuth(firebaseApp);
+const realtimeDB = getDatabase(firebaseApp);
 
 function UserManagement() {
   const [showModal, setShowModal] = useState(false);
@@ -100,6 +109,7 @@ function UserManagement() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
+  
 
   const departments = [
     "Office of the Municipal Mayor",
@@ -255,7 +265,7 @@ const handleCreateAccount = async () => {
 
   setLoading(true);
 
-  // STEP 0: Generate a single temp password here
+  // STEP 0: Generate a single temp password
   const tempPassword = Math.random().toString(36).slice(-10) + "A1@";
 
   try {
@@ -284,6 +294,18 @@ const handleCreateAccount = async () => {
     const firebaseUser = userCredential.user;
     console.log(`✅ Firebase user created: ${firebaseUser.uid}`);
 
+    // STEP 2.5: Save role & department in Realtime Database
+    await set(ref(realtimeDB, `users/${firebaseUser.uid}`), {
+      uid: firebaseUser.uid,
+      email: newAccount.email,
+      full_name: newAccount.full_name,
+      role: newAccount.role,
+      department: newAccount.role === "mayor" ? null : newAccount.department,
+      status: "active",
+      createdAt: Date.now(),
+    });
+    console.log("✅ Role & department saved in Realtime DB");
+
     // STEP 3: Send password reset email via Firebase
     await sendPasswordResetEmail(firebaseAuth, newAccount.email, {
       url: `https://ezleave-admin.vercel.app/login`,
@@ -304,6 +326,7 @@ const handleCreateAccount = async () => {
     setLoading(false);
   }
 };
+
 
   const handleViewAccount = (acc) => {
     setSelectedAccount(acc);

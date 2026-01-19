@@ -5,6 +5,25 @@ import axios from "axios";
 import "./App.css";
 import { FcGoogle } from "react-icons/fc";
 
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  signInWithEmailAndPassword
+} from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyATHtZYzpJWI752_8EcFn1QCwxPavOJXEM",
+  authDomain: "ezleave-admin.firebaseapp.com",
+  projectId: "ezleave-admin",
+  storageBucket: "ezleave-admin.firebasestorage.app",
+  messagingSenderId: "1016228054768",
+  appId: "1:1016228054768:web:e0ec3759df6341ef0b2435",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
+
+
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,52 +50,73 @@ function Login() {
     }
   }, [navigate]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setMessage("");
-    setLoading(true);
+const handleLogin = async (e) => {
+  e.preventDefault();
+  setMessage("");
+  setLoading(true);
 
-    try {
-      // First try the main admin login
-      let res = await axios.post(`${API_URL}/api/auth/login`, {
-        email,
-        password,
-      });
+  // 1️⃣ TRY MAIN ADMIN LOGIN (BACKEND) — DO NOT CHANGE
+  try {
+    const res = await axios.post(`${API_URL}/api/auth/login`, {
+      email,
+      password,
+    });
 
-      // ✅ Admin login success
-      if (res.status === 200) {
-        localStorage.setItem("admin", JSON.stringify(res.data.user));
-        localStorage.setItem("role", res.data.user.role);
-        navigate("/dashboard");
-        return;
-      }
-    } catch (err) {
-      // If admin login fails, try the department account login
-      try {
-        const res = await axios.post(`${API_URL}/api/authAdmin/login`, {
-          email,
-          password,
-        });
-
-        if (res.status === 200) {
-          localStorage.setItem("admin", JSON.stringify(res.data.user));
-          localStorage.setItem("token", res.data.token);
-          localStorage.setItem("role", res.data.user.role);
-          localStorage.setItem("department", res.data.user.department);
-          navigate("/dashboard");
-          return;
-        }
-      } catch (err2) {
-        console.error(err2);
-        setMessage(err2.response?.data?.message || "Invalid credentials.");
-        setLoading(false);
-        return;
-      }
+    if (res.status === 200) {
+      localStorage.setItem("admin", JSON.stringify(res.data.user));
+      localStorage.setItem("role", res.data.user.role);
+      localStorage.setItem("token", res.data.token);
+      navigate("/dashboard");
+      return;
     }
+  } catch (err) {
+    console.log("Main admin login failed, trying Firebase...");
+  }
 
-    setMessage("Invalid credentials.");
+  // 2️⃣ FALLBACK: FIREBASE AUTH (Department / Admin accounts)
+  try {
+    const userCredential = await signInWithEmailAndPassword(
+      firebaseAuth,
+      email,
+      password
+    );
+
+    const user = userCredential.user;
+    const firebaseToken = await user.getIdToken();
+
+    // ✅ Store Firebase-authenticated user
+    localStorage.setItem(
+      "admin",
+      JSON.stringify({
+        uid: user.uid,
+        email: user.email,
+      })
+    );
+
+    localStorage.setItem("token", firebaseToken);
+    localStorage.setItem("role", "department"); // or "admin"
+    // optional
+    // localStorage.setItem("department", "HR");
+
+    navigate("/dashboard");
+  } catch (firebaseErr) {
+    console.error(firebaseErr);
+
+    switch (firebaseErr.code) {
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+        setMessage("Invalid credentials.");
+        break;
+      case "auth/too-many-requests":
+        setMessage("Too many attempts. Try again later.");
+        break;
+      default:
+        setMessage("Login failed.");
+    }
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
 const handleForgotPassword = async () => {
   if (!email) {
