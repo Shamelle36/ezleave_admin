@@ -55,8 +55,8 @@ const handleLogin = async (e) => {
   setMessage("");
   setLoading(true);
 
-  // 1️⃣ TRY MAIN ADMIN LOGIN (BACKEND) — DO NOT CHANGE
   try {
+    // 1️⃣ TRY MAIN ADMIN LOGIN (BACKEND)
     const res = await axios.post(`${API_URL}/api/auth/login`, {
       email,
       password,
@@ -73,50 +73,58 @@ const handleLogin = async (e) => {
     console.log("Main admin login failed, trying Firebase...");
   }
 
-  // 2️⃣ FALLBACK: FIREBASE AUTH (Department / Admin accounts)
   try {
-    const userCredential = await signInWithEmailAndPassword(
-      firebaseAuth,
-      email,
-      password
-    );
-
+    // 2️⃣ FALLBACK: Firebase Auth
+    const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
     const user = userCredential.user;
     const firebaseToken = await user.getIdToken();
 
-    // ✅ Store Firebase-authenticated user
-    localStorage.setItem(
-      "admin",
-      JSON.stringify({
-        uid: user.uid,
-        email: user.email,
-      })
-    );
+    // 3️⃣ FETCH USER INFO FROM DATABASE BY EMAIL
+    const resDb = await fetch(`${API_URL}/api/authAdmin/user-email/${email}`);
+    if (!resDb.ok) {
+      throw new Error("Failed to fetch user info from database");
+    }
+    const userData = await resDb.json();
 
+    // 4️⃣ Check if account is inactive
+    if (userData.status === "inactive") {
+      setMessage("Account is inactive. Please contact administrator.");
+      setLoading(false);
+      return;
+    }
+
+    // 5️⃣ Store user info in localStorage
+    localStorage.setItem("admin", JSON.stringify(userData));
+    localStorage.setItem("role", userData.role);
     localStorage.setItem("token", firebaseToken);
-    localStorage.setItem("role", "department"); // or "admin"
-    // optional
-    // localStorage.setItem("department", "HR");
 
     navigate("/dashboard");
   } catch (firebaseErr) {
-    console.error(firebaseErr);
+    console.error("Firebase login error:", firebaseErr);
 
-    switch (firebaseErr.code) {
-      case "auth/user-not-found":
-      case "auth/wrong-password":
-        setMessage("Invalid credentials.");
-        break;
-      case "auth/too-many-requests":
-        setMessage("Too many attempts. Try again later.");
-        break;
-      default:
-        setMessage("Login failed.");
+    if (firebaseErr.code) {
+      switch (firebaseErr.code) {
+        case "auth/user-not-found":
+        case "auth/wrong-password":
+          setMessage("Invalid credentials.");
+          break;
+        case "auth/too-many-requests":
+          setMessage("Too many attempts. Try again later.");
+          break;
+        case "auth/network-request-failed":
+          setMessage("Network error. Check your internet connection.");
+          break;
+        default:
+          setMessage("Login failed.");
+      }
+    } else {
+      setMessage(firebaseErr.message || "Login failed.");
     }
   } finally {
     setLoading(false);
   }
 };
+
 
 const handleForgotPassword = async () => {
   if (!email) {
