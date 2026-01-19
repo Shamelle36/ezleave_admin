@@ -944,7 +944,7 @@ const saveProfileChanges = async () => {
         profile_picture: cleanProfilePicture
       };
     } else if (userRole === "office_head" || userRole === "mayor") {
-      endpoint = `${API_URL}/api/authAdmin/updateProfile/${userId}`;
+      endpoint = `${API_URL}/api/authAdmin/update/${userId}`;
       body = {
         full_name: cleanFullName,
         email: cleanEmail, // Add email field
