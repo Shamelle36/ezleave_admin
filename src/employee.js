@@ -150,6 +150,12 @@ function Employees() {
            coterminousTypes.includes(selectedType);
   };
 
+  // Add this function after the canAddEmployees function
+const canUploadSignature = () => {
+  const role = localStorage.getItem("role") || "admin";
+  return role !== "mayor" && role !== "office_head";
+};
+
   
   useEffect(() => {
     localStorage.setItem('employeesView', view);
@@ -688,6 +694,8 @@ const renderSignatureModal = () => {
   useEffect(() => {
     loadEmployees();
   }, []);
+
+  
 
   useEffect(() => {
     const fetchInitialProfile = async () => {
@@ -3619,22 +3627,24 @@ const handleEditSave = async () => {
           borderCollapse: 'collapse',
           fontFamily: 'Arial, sans-serif'
         }}>
-          <thead>
-            <tr style={{
-              backgroundColor: '#6FCB5C',
-              color: '#fff',
-              textAlign: 'left'
-            }}>
-              <th className="column-no" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>No.</th>
-              <th className="column-name" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Employee Name</th>
-              <th className="column-id" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>ID Number</th>
-              <th className="column-department" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Department</th>
-              <th className="column-position" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Position</th>
-              <th className="column-status" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>E-Signature Status</th>
-              <th className="column-updated" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Last Updated</th>
+         <thead>
+          <tr style={{
+            backgroundColor: '#6FCB5C',
+            color: '#fff',
+            textAlign: 'left'
+          }}>
+            <th className="column-no" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>No.</th>
+            <th className="column-name" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Employee Name</th>
+            <th className="column-id" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>ID Number</th>
+            <th className="column-department" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Department</th>
+            <th className="column-position" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Position</th>
+            <th className="column-status" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>E-Signature Status</th>
+            <th className="column-updated" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Last Updated</th>
+            {canUploadSignature() && (
               <th className="column-actions" style={{ padding: '15px', fontWeight: '600', fontSize: '14px' }}>Actions</th>
-            </tr>
-          </thead>
+            )}
+          </tr>
+        </thead>
           <tbody>
             {employeeRecord
               .filter(emp => emp.status === 'active')
@@ -3708,9 +3718,10 @@ const handleEditSave = async () => {
                       </div>
                     )}
                   </td>
-                  <td className="cell-updated" style={{ padding: '15px', fontSize: '12px', color: '#666' }}>
-                    {employeeSignatures[emp.id] ? 'Recently uploaded' : 'Never'}
-                  </td>
+                <td className="cell-updated" style={{ padding: '15px', fontSize: '12px', color: '#666' }}>
+                  {employeeSignatures[emp.id] ? 'Recently uploaded' : 'Never'}
+                </td>
+                {canUploadSignature() && (
                   <td className="cell-actions" style={{ padding: '15px' }}>
                     <div className="action-buttons" style={{ display: 'flex', gap: '8px' }}>
                       <button
@@ -3737,6 +3748,7 @@ const handleEditSave = async () => {
                       </button>
                     </div>
                   </td>
+                )}
                 </tr>
               ))}
           </tbody>

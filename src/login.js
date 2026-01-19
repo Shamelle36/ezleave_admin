@@ -354,26 +354,6 @@ const handleForgotPassword = async () => {
               onChange={(e) => setPassword(e.target.value)}
             />
             
-            {/* Forgot Password Text */}
-            <div style={{ textAlign: 'right', marginBottom: '20px', marginTop: '-10px' }}>
-              <button 
-                type="button" 
-                onClick={handleForgotPassword}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#4285f4',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  padding: '5px 0',
-                  fontFamily: 'inherit'
-                }}
-                disabled={loading}
-              >
-                Forgot Password?
-              </button>
-            </div>
-            
             <button type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </button>

@@ -2665,13 +2665,15 @@ const handleAddLeaveType = async () => {
                 >
                     Leave Requests
                 </button>
-                <button
-                    style={tabButtonStyle(activeTab === 'leaveSettings')}
-                    onClick={() => setActiveTab('leaveSettings')}
-                >
-                    Leave Settings
-                </button>
-              
+                  {(role === "admin") && (
+                    <button
+                        style={tabButtonStyle(activeTab === 'leaveSettings')}
+                        onClick={() => setActiveTab('leaveSettings')}
+                    >
+                        Leave Settings
+                    </button>
+                )}
+          
             </div>
 
 
