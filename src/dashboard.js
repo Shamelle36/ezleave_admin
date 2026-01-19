@@ -607,7 +607,7 @@ const fetchLocalHolidays = async () => {
   };
 
   // Fetch attendance statistics
-  useEffect(() => {
+useEffect(() => {
   const fetchAttendanceStats = async () => {
     try {
       const today = new Date().toISOString().split("T")[0];
@@ -618,26 +618,23 @@ const fetchLocalHolidays = async () => {
       }
 
       const data = await response.json();
-      
-      const todayDate = new Date();
-      const dayOfWeek = todayDate.getDay();
 
       let present = 0;
       let absent = 0;
-      let late = 0;
-      
+      let late = 0; // Optional, remove if not needed
+
       data.forEach(log => {
-        const hasAttendance = log.am_checkin || log.pm_checkin;
-        
-        if (hasAttendance) {
+        // ✅ Count as present if the record exists (regardless of check-ins)
+        if (log.present || log.status === "Present" || log.am_checkin || log.pm_checkin) {
           present++;
-          
-          if (log.am_checkin && checkIfLate(log.am_checkin, dayOfWeek)) {
-            late++;
-          }
-          else if (!log.am_checkin && log.pm_checkin && checkIfLate(log.pm_checkin, dayOfWeek)) {
-            late++;
-          }
+
+          // Optional late logic
+          // const todayDate = new Date();
+          // const dayOfWeek = todayDate.getDay();
+          // if ((log.am_checkin && checkIfLate(log.am_checkin, dayOfWeek)) ||
+          //     (!log.am_checkin && log.pm_checkin && checkIfLate(log.pm_checkin, dayOfWeek))) {
+          //   late++;
+          // }
         } else {
           absent++;
         }
@@ -655,7 +652,8 @@ const fetchLocalHolidays = async () => {
   };
 
   fetchAttendanceStats();
-}, [attendanceTimeSettings]); 
+}, [attendanceTimeSettings]);
+
 
   useEffect(() => {
     const counts = leaveRequests.reduce(
@@ -837,18 +835,18 @@ const fetchLocalHolidays = async () => {
     }
   };
 
-  const pieData =
-    attendanceStats.present +
-    attendanceStats.absent +
-    attendanceStats.late +
-    attendanceStats.leave === 0
-      ? [{ name: "No Data", value: 1 }]
-      : [
-          { name: "Present", value: attendanceStats.present },
-          { name: "Absent", value: attendanceStats.absent },
-          { name: "Late", value: attendanceStats.late },
-          { name: "Leave", value: attendanceStats.leave }
-        ];
+ const pieData = 
+  attendanceStats.present === 0 && 
+  attendanceStats.absent === 0 && 
+  attendanceStats.late === 0 && 
+  attendanceStats.leave === 0
+    ? [{ name: "No Data", value: 1 }]
+    : [
+        { name: "Present", value: attendanceStats.present },
+        { name: "Absent", value: attendanceStats.absent },
+        { name: "Late", value: attendanceStats.late },
+        { name: "Leave", value: attendanceStats.leave }
+      ].filter(item => item.value > 0);
 
   const COLORS = ['#005EFF', '#FF0042', '#FFCC00', '#FF0599', '#ccc'];
 
