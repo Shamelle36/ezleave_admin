@@ -884,7 +884,7 @@ const handleCreateAccount = async () => {
                       </td>
                       <td className="td" style={styles.td}>
                         <span style={{
-                          ...styles.roleBadge,
+                          ...styles.roleBadge, fontSize: '10px', backgroundColor: 'none',
                           ...(acc.role === "mayor" ? styles.roleMayor : styles.roleOfficeHead),
                           opacity: acc.status === "inactive" ? 0.7 : 1
                         }}>

@@ -2782,10 +2782,6 @@ const handleAddLeaveType = async () => {
                 </div> 
                 
                 <div className='row2' style={styles.row2}>
-                    <button className='btn1' style={styles.btn1}>
-                        <FontAwesomeIcon icon={faUpload} style={styles.iconBtn}/>
-                        Export
-                    </button>
                     <button onClick={() => window.printTable('printable-table')} className='btn2' style={styles.btn2}>
                       <FontAwesomeIcon icon={faPrint} style={styles.iconBtn1}/>
                       Print
