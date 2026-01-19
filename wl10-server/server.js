@@ -59,24 +59,30 @@ const determineAttendanceSlot = async (dateTime, user_id, attendanceDate) => {
   const scan = moment(dateTime).tz("Asia/Manila");
   const mins = scan.hours() * 60 + scan.minutes();
 
-  // Check if morning checkout already exists
-  const morningCheckout = await pool.query(
-    `SELECT am_checkout FROM attendance_logs WHERE attendance_date=$1 AND user_id=$2`,
+  // Fetch existing attendance for the day
+  const existing = await pool.query(
+    `SELECT am_checkin, am_checkout, pm_checkin, pm_checkout FROM attendance_logs WHERE attendance_date=$1 AND user_id=$2`,
     [attendanceDate, user_id]
   );
 
-  if (morningCheckout.rows.length && morningCheckout.rows[0].am_checkout) {
-    if (mins >= 12 * 60 && mins < 17 * 60) return { slot: "pm_checkin", type: "Afternoon check-in" }; // 12:00 PM - 5:00 PM
+  const record = existing.rows[0] || {};
+
+  // Morning slots
+  if (mins < 12 * 60) {
+    if (!record.am_checkin) return { slot: "am_checkin", type: "Morning check-in" };
+    if (!record.am_checkout) return { slot: "am_checkout", type: "Morning check-out" };
+    // If AM done, any extra scan before 12 PM → just keep it as AM checkout
+    return { slot: "am_checkout", type: "Morning check-out" };
+  }
+
+  // Afternoon slots (PM only between 12:00 – 17:00)
+  if (mins >= 12 * 60 && mins < 17 * 60) {
+    if (!record.pm_checkin) return { slot: "pm_checkin", type: "Afternoon check-in" };
     return { slot: "pm_checkout", type: "Afternoon check-out" };
   }
 
-  // Morning slots
-  if (mins >= 4 * 60 && mins < 12 * 60) return { slot: "am_checkin", type: "Morning check-in" };
-  if (mins >= 11 * 60 && mins < 14 * 60) return { slot: "am_checkout", type: "Morning check-out" };
-
-  // Default PM slots
-  if (mins >= 12 * 60 && mins < 17 * 60) return { slot: "pm_checkin", type: "Afternoon check-in" };
-  return { slot: "pm_checkout", type: "Afternoon check-out" };
+  // Outside working hours → default to last recorded slot
+  return { slot: "am_checkout", type: "Morning check-out" };
 };
 
 /* ===================== LATE CHECK ===================== */

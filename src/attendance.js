@@ -650,18 +650,6 @@ useEffect(() => {
                 <option value="Absent">Absent</option>
                 <option value="On-Leave">On-Leave</option>
               </select>
-
-              <select 
-                className="attendance-filter" 
-                style={styles.filter}
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-              >
-                <option value="">All Departments</option>
-                {departments.map((dept, index) => (
-                  <option key={index} value={dept}>{dept}</option>
-                ))}
-              </select>
             </div>
           </div>
 
