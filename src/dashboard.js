@@ -804,11 +804,7 @@ const fetchLocalHolidays = async () => {
     value: attendanceStats.absent,
     background: styles.card2,
   },
-  {
-    title: 'Late Employees',
-    value: attendanceStats.late,
-    background: styles.card3,
-  },
+ 
 ];
 
   const getNotificationStyle = (type) => {
@@ -2382,7 +2378,7 @@ const styles = {
     padding: '30px',
     margin: '10px 0',
     textAlign: 'left',
-    width: 'calc(50% - 10px)',
+    width: '100%',
     boxSizing: 'border-box',
     flexShrink: 0,
      display: 'flex',
