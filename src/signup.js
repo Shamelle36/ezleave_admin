@@ -73,7 +73,7 @@ function Signup() {
         <div className="col1">
           <div className="circle">
             <div className="circle-inner">
-              <img src={require("./images/logo_ez.png")} alt="Logo" />
+              <img src={require("./images/new_logo.png")} alt="Logo" />
             </div>
           </div>
         </div>

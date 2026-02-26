@@ -46,6 +46,7 @@ import './dashboard-responsive.css';
 import './App.css';
 import ProfileDropdown from './profileDropdown.js';
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import {API_URL} from './config.js';
 
 function Dashboard() {
   const [date, setDate] = useState(new Date());
@@ -122,7 +123,6 @@ const [showNotificationModal, setShowNotificationModal] = useState(false);
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
     { name: "Employees", icon: faUsers, to: "/employee" },
-    { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
@@ -507,7 +507,6 @@ const fetchApiHolidays = async (year) => {
     setIsOpen(false);
   };
 
-  const API_URL = "https://ezleave-admin-api.onrender.com";
 
 const fetchLocalHolidays = async () => {
   setIsLoadingHolidays(true);

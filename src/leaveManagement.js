@@ -674,7 +674,6 @@ useEffect(() => {
     const menuItems = [
       { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
       { name: "Employees", icon: faUsers, to: "/employee" },
-      { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
       { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
       { name: "Announcement", icon: faBullhorn, to: "/announcement" },
       { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },

@@ -661,15 +661,6 @@ const handleCreateAccount = async () => {
           <li>
             <Link 
               style={styles.sb} 
-              to="/attendance"
-              onClick={() => setIsSidebarOpen(false)}
-            >
-              <FontAwesomeIcon icon={faCalendarCheck} style={styles.icon} /> Attendance
-            </Link>
-          </li>
-          <li>
-            <Link 
-              style={styles.sb} 
               to="/leaveManagement"
               onClick={() => setIsSidebarOpen(false)}
             >

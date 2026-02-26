@@ -23,6 +23,9 @@ import {
   faRedo,
   faSignature, // Add this
   faCheck, // Add this
+  faKey, // Add this for login code icon
+  faClock, // Add this for expiration icon
+  faCopy,
 } from '@fortawesome/free-solid-svg-icons';
 import 'react-calendar/dist/Calendar.css';
 import './dashboardCalendar.css';
@@ -123,6 +126,13 @@ function Employees() {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [employeeToDeletePermanently, setEmployeeToDeletePermanently] = useState(null);
 
+  const [selectedCodeEmployee, setSelectedCodeEmployee] = useState(null);
+  const [generatedCode, setGeneratedCode] = useState(null);
+  const [codeExpiration, setCodeExpiration] = useState('');
+  const [showLoginCodeModal, setShowLoginCodeModal] = useState(false);
+
+  const [loginCodes, setLoginCodes] = useState([]);
+
   // Reasons for making employee inactive
   const inactiveReasons = [
     "Resigned",
@@ -156,6 +166,121 @@ const canUploadSignature = () => {
   return role !== "mayor" && role !== "office_head";
 };
 
+const handleGenerateLoginCode = async (employee) => {
+  if (!employee) {
+    alert('Please select an employee');
+    return;
+  }
+  
+  setSelectedCodeEmployee(employee);
+  
+  // Check if there are existing active codes
+  const existingActiveCodes = loginCodes.filter(
+    code => code.employee_id === employee.id && 
+    !code.is_used && 
+    new Date(code.expires_at) > new Date()
+  );
+  
+  if (existingActiveCodes.length > 0) {
+    // Show the most recent active code
+    const mostRecentCode = existingActiveCodes.sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    )[0];
+    
+    setGeneratedCode(mostRecentCode);
+    setShowLoginCodeModal(true);
+  } else {
+    // No active codes, generate a new one
+    setGeneratedCode(null);
+    setShowLoginCodeModal(true);
+  }
+};
+
+// Add this useEffect to handle code generation when modal opens
+useEffect(() => {
+  if (showLoginCodeModal && selectedCodeEmployee && !generatedCode) {
+    // Only generate if no code is already shown
+    generateAndSaveCode();
+  }
+}, [showLoginCodeModal, selectedCodeEmployee, generatedCode]);
+
+const generateAndSaveCode = async () => {
+  if (!selectedCodeEmployee) {
+    alert('Please select an employee');
+    return;
+  }
+
+  // Calculate expiration date (15 minutes from now)
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes in milliseconds
+
+  const codeData = {
+    employee_id: selectedCodeEmployee.id,
+    employee_name: `${selectedCodeEmployee.first_name} ${selectedCodeEmployee.last_name}`,
+    expires_at: expiresAt.toISOString()
+  };
+
+  try {
+    const response = await fetch(`${API_URL}/api/login-codes/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(codeData)
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      setGeneratedCode(result.data);
+      
+      // Check if email was sent
+      if (result.email_sent) {
+        console.log('✅ Email sent successfully');
+      } else {
+        console.warn('⚠️ Code generated but email not sent:', result.email_error);
+        // You might want to show a warning to the user
+        alert(`Code generated but email not sent: ${result.email_error || 'Unknown error'}`);
+      }
+      
+      // Refresh codes list
+      await loadLoginCodes();
+      
+      // Update active codes display
+      const updatedActiveCodes = await fetchActiveCodes(selectedCodeEmployee.id);
+    } else {
+      throw new Error(result.error || 'Failed to generate code');
+    }
+  } catch (error) {
+    console.error('Error generating code:', error);
+    alert(`Error: ${error.message}`);
+  }
+};
+
+// Helper function to fetch active codes
+const fetchActiveCodes = async (employeeId) => {
+  try {
+    const response = await fetch(`${API_URL}/api/login-codes/employee/${employeeId}`);
+    if (response.ok) {
+      const data = await response.json();
+      return data.data || [];
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching active codes:', error);
+    return [];
+  }
+};
+
+const loadLoginCodes = async () => {
+  try {
+    const response = await fetch(`${API_URL}/api/login-codes`);
+    if (response.ok) {
+      const data = await response.json();
+      setLoginCodes(data.data || []);
+    }
+  } catch (error) {
+    console.error('Error loading login codes:', error);
+  }
+};
   
   useEffect(() => {
     localStorage.setItem('employeesView', view);
@@ -164,7 +289,6 @@ const canUploadSignature = () => {
   const menuItems = [
     { name: "Dashboard", icon: faTachometerAlt, to: "/dashboard" },
     { name: "Employees", icon: faUsers, to: "/employee" },
-    { name: "Attendance", icon: faCalendarCheck, to: "/attendance" },
     { name: "Leave Management", icon: faCalendarAlt, to: "/leaveManagement" },
     { name: "Announcement", icon: faBullhorn, to: "/announcement" },
     { name: "Audit Logs", icon: faClipboardList, to: "/audit_logs" },
@@ -177,7 +301,7 @@ useEffect(() => {
       showBulkDeleteModal || showInactiveModal || showDeleteConfirmModal || 
       showReactivateModal || showSettingsModal || showTermsModal || 
       showTimeSettingsModal || showAddModal || showEditModal || 
-      showViewModal || showProfileModal || showLogoutModal) {
+      showViewModal || showProfileModal || showLogoutModal || showLoginCodeModal) {
     document.body.style.overflow = 'hidden';
   } else {
     document.body.style.overflow = 'auto';
@@ -192,7 +316,7 @@ useEffect(() => {
   showBulkDeleteModal, showInactiveModal, showDeleteConfirmModal, 
   showReactivateModal, showSettingsModal, showTermsModal, 
   showTimeSettingsModal, showAddModal, showEditModal, 
-  showViewModal, showProfileModal, showLogoutModal
+  showViewModal, showProfileModal, showLogoutModal, showLoginCodeModal
 ]);
 
 
@@ -671,6 +795,269 @@ const renderSignatureModal = () => {
   );
 };
 
+const renderLoginCodeModal = () => {
+  if (!selectedCodeEmployee) {
+    return null;
+  }
+  
+  // Check if there are active codes
+  const activeCodes = loginCodes.filter(
+    code => code.employee_id === selectedCodeEmployee.id && 
+    !code.is_used && 
+    new Date(code.expires_at) > new Date()
+  );
+  
+  return (
+    <div className="modal-overlay login-code-modal-overlay" style={styles.modalOverlay}>
+      <div className="modal-content login-code-modal-content" style={{
+        ...styles.modalContent,
+        maxWidth: '600px',
+        backgroundColor: '#fff',
+        borderRadius: '10px',
+        padding: '25px'
+      }}>
+        <div className="login-code-modal-header" style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          borderBottom: '1px solid #eee',
+          paddingBottom: '15px'
+        }}>
+          <h3 className="login-code-modal-title" style={{ margin: 0, color: '#2C3E50' }}>
+            <FontAwesomeIcon icon={faKey} style={{ marginRight: '10px' }} />
+            {generatedCode ? 'Login Code' : 'Generate Login Code'}
+          </h3>
+          <button
+            className="modal-close-btn"
+            onClick={() => {
+              setShowLoginCodeModal(false);
+              setSelectedCodeEmployee(null);
+              setGeneratedCode(null);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              cursor: 'pointer',
+              color: '#666'
+            }}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+        </div>
+
+        {/* Employee Info */}
+        <div className="login-code-employee-info" style={{
+          backgroundColor: '#f8f9fa',
+          padding: '15px',
+          borderRadius: '8px',
+          marginBottom: '20px'
+        }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>
+            {selectedCodeEmployee?.first_name} {selectedCodeEmployee?.last_name}
+          </h4>
+          <div className="employee-meta" style={{ display: 'flex', gap: '15px', fontSize: '13px', color: '#6c757d' }}>
+            <span><strong>ID:</strong> {selectedCodeEmployee?.id_number}</span>
+            <span><strong>Department:</strong> {selectedCodeEmployee?.department}</span>
+          </div>
+        </div>
+
+        {/* Generated Code Display */}
+        {generatedCode ? (
+          <div className="generated-code-display" style={{
+            marginTop: '20px',
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #dee2e6'
+          }}>
+            <h4 style={{ margin: '0 0 15px 0', color: '#28a745', textAlign: 'center' }}>
+              {activeCodes.length > 1 ? 'Active Login Code' : 'Login Code Generated Successfully!'}
+            </h4>
+            
+            <div className="code-info" style={{ textAlign: 'center' }}>
+              <div className="code-display" style={{
+                fontSize: '24px',
+                fontWeight: 'bold',
+                letterSpacing: '2px',
+                color: '#2C3E50',
+                backgroundColor: '#fff',
+                padding: '15px',
+                borderRadius: '6px',
+                border: '2px dashed #28a745',
+                marginBottom: '15px',
+                fontFamily: 'monospace'
+              }}>
+                {generatedCode.code}
+              </div>
+              
+              <div className="code-details" style={{ fontSize: '13px', color: '#495057' }}>
+                <p style={{ margin: '5px 0' }}>
+                  <strong>Expires in:</strong> {Math.max(0, Math.floor((new Date(generatedCode.expires_at) - new Date()) / (1000 * 60)))} minutes
+                </p>
+                <p style={{ margin: '5px 0' }}>
+                  <strong>Expires at:</strong> {new Date(generatedCode.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '15px' }}>
+                <button
+                  className="copy-code-btn"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedCode.code);
+                    alert('Code copied to clipboard!');
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#17a2b8',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <FontAwesomeIcon icon={faCopy} />
+                  Copy Code
+                </button>
+                
+                <button
+                  className="regenerate-code-btn"
+                  onClick={() => generateAndSaveCode()}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <FontAwesomeIcon icon={faRedo} />
+                  Generate New Code
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="generating-code" style={{
+            marginTop: '20px',
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #dee2e6',
+            textAlign: 'center'
+          }}>
+            <div className="spinner" style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid #ccc',
+              borderTop: '4px solid #28a745',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto 15px auto'
+            }} />
+            <p style={{ margin: 0, color: '#495057' }}>
+              Generating login code...
+            </p>
+            <style>
+              {`@keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }`}
+            </style>
+          </div>
+        )}
+
+        {/* Active Codes List - Show other active codes */}
+        <div className="active-codes-list" style={{ marginTop: '25px' }}>
+          <h5 style={{ margin: '0 0 10px 0', color: '#495057', fontSize: '14px' }}>
+            All Active Login Codes:
+          </h5>
+          
+          {activeCodes.length > 0 ? (
+            <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+              {activeCodes.map(code => {
+                const expiresAt = new Date(code.expires_at);
+                const now = new Date();
+                const minutesLeft = Math.max(0, Math.floor((expiresAt - now) / (1000 * 60)));
+                
+                return (
+                  <div key={code.id} style={{
+                    padding: '10px',
+                    marginBottom: '8px',
+                    backgroundColor: code.id === generatedCode?.id ? '#e8f5e8' : '#fff',
+                    border: code.id === generatedCode?.id ? '2px solid #28a745' : '1px solid #dee2e6',
+                    borderRadius: '6px',
+                    fontSize: '13px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: '500' }}>{code.code}</span>
+                      <span style={{ 
+                        color: minutesLeft > 5 ? '#28a745' : '#dc3545', 
+                        fontSize: '12px',
+                        fontWeight: '500'
+                      }}>
+                        {minutesLeft}m left
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#6c757d', marginTop: '5px' }}>
+                      Expires: {expiresAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ textAlign: 'center', color: '#6c757d', fontSize: '13px', fontStyle: 'italic' }}>
+              No active login codes
+            </p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="login-code-modal-actions" style={{ 
+          marginTop: '20px',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          borderTop: '1px solid #eee',
+          paddingTop: '20px'
+        }}>
+          <button
+            className="close-modal-btn"
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+            onClick={() => {
+              setShowLoginCodeModal(false);
+              setSelectedCodeEmployee(null);
+              setGeneratedCode(null);
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+
   const departments = [
     "Office of the Municipal Mayor",
     "Human Resource Management Division",
@@ -693,6 +1080,7 @@ const renderSignatureModal = () => {
 
   useEffect(() => {
     loadEmployees();
+     loadLoginCodes();
   }, []);
 
   
@@ -2094,12 +2482,29 @@ const handleEditSave = async () => {
 
                               )}
                             </td>
-                            <td className="row-actions" style={styles.rowName}>
+                           <td className="row-actions" style={styles.rowName}>
                               <button className="view-btn" style={styles.viewBtn} onClick={() => handleViewClick(record)}>
                                 <FontAwesomeIcon icon={faEye} />
                               </button>
                               {canPerformActions(record.department) && (
                                 <>
+                                  <button 
+                                    className="login-code-btn" 
+                                    style={{
+                                      ...styles.viewBtn1,
+                                      backgroundColor: '#6f42c1',
+                                      color: 'white',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      marginLeft: '5px',
+                                      fontSize: '12px',
+                                      border: 'none',
+                                      marginRight: '10px'
+                                    }}
+                                    onClick={() => handleGenerateLoginCode(record)}
+                                  >
+                                    <FontAwesomeIcon icon={faKey} /> Code
+                                  </button>
                                   <button 
                                     className="signature-btn" 
                                     style={{
@@ -2222,6 +2627,7 @@ const handleEditSave = async () => {
             </div>
 
             {showSignatureModal && selectedSignatureEmployee && renderSignatureModal()}
+            {showLoginCodeModal && selectedCodeEmployee && renderLoginCodeModal()}
 
 
             {showUploadBalancesModal && (

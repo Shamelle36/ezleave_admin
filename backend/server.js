@@ -19,6 +19,7 @@ import adminMessagesRoute from "./routes/adminMessagesRoute.js";
 import holidaysRoutes from './routes/holidaysRoute.js';
 import testRoute from './routes/testRoute.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import loginCodeRoutes from './routes/loginCodeRoutes.js';
 
 import './cron.js';
 import path from "path";
@@ -40,6 +41,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+app.use(express.static(path.join(process.cwd(), "public")));
+
 app.use("/api/auth", authRoute);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/announcements", announcementRoute);
@@ -59,6 +63,7 @@ app.use("/api/push", pushRoutes);
 app.use("/api/admin/messages", adminMessagesRoute);
 app.use('/api/holidays', holidaysRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/login-codes', loginCodeRoutes);
 
 app.use("/api", testRoute);
 
